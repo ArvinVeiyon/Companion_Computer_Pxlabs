@@ -43,9 +43,9 @@ change_summary="$(run_as_roz "git diff --cached --name-status" | sed 's/^/- /')"
 timestamp="$(date '+%Y-%m-%d %H:%M')"
 
 if ! run_as_roz "grep -q '^## Auto Sync Log' \"$md_file\""; then
-  run_as_roz "cat <<'EOF' >> \"$md_file\"\n\n## Auto Sync Log\nEOF"
+  run_as_roz "printf '\\n## Auto Sync Log\\n' >> \"$md_file\""
 fi
-run_as_roz "cat <<'EOF' >> \"$md_file\"\n**${timestamp}**\n${change_summary}\nEOF"
+run_as_roz "printf '**%s**\\n%s\\n' \"$timestamp\" \"$change_summary\" >> \"$md_file\""
 
 run_as_roz "git add \"$md_file\"" >> "$log" 2>&1 || true
 
