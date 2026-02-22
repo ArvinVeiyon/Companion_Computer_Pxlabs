@@ -24,6 +24,13 @@ rsync -rlptD --relative --ignore-missing-args \
   --chown=roz:roz \
   --files-from="$list" / "$dest" >> "$log" 2>&1
 
+# ROS2 workspace goes under System_files/ros2_ws (not /home/roz/...)
+rsync -rlptD --ignore-missing-args \
+  --chown=roz:roz \
+  --exclude '.git' --exclude 'build' --exclude 'install' --exclude 'log' \
+  /home/roz/ros2_ws/src /home/roz/ros2_ws/.gitignore /home/roz/ros2_ws/fake_vo.py \
+  "$dest/ros2_ws/" >> "$log" 2>&1
+
 cd "$repo_root"
 
 run_as_roz "git add -A" >> "$log" 2>&1 || true

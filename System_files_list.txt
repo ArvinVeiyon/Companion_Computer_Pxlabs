@@ -27,6 +27,3 @@ etc/logrotate.d/wifibroadcast
 etc/gnutls/config
 usr/local/bin/block-traffic.sh
 boot/firmware/config.txt
-home/roz/ros2_ws/src
-home/roz/ros2_ws/.gitignore
-home/roz/ros2_ws/fake_vo.py
