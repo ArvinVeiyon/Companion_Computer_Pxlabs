@@ -156,3 +156,14 @@ All backup files are stored under `System_files` in the Codex repo and mirror th
 **Not yet copied (need sudo if required)**
 - `System_files/etc/netplan/50-cloud-init.yaml`
 - `System_files/etc/ssh/sshd_config.d/50-cloud-init.conf`
+
+## 12) Auto Sync (Boot + Daily)
+Auto sync uses:
+- File list: `System_files_list.txt`
+- Script: `scripts/system_files_sync.sh`
+- Log: `logs/system_files_sync.log`
+
+Behavior:
+- On boot and once per day, syncs originals into `System_files`.
+- If changes exist, appends a change summary to this file and creates a git commit.
+- Creates an annotated tag `sync-YYYYMMDD-HHMM` with the same change summary.

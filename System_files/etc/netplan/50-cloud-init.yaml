@@ -1,0 +1,31 @@
+# This file is generated from information provided by the datasource.  Changes
+# to it will not persist across an instance reboot.  To disable cloud-init's
+# network configuration capabilities, write a file
+# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:
+# network: {config: disabled}
+ network:
+     version: 2
+     renderer: networkd
+
+#    ethernets:
+#        eth0:
+#            addresses:
+#                - 10.41.10.1/24  # Static IP for the companion computer
+#            nameservers:
+#                addresses: [8.8.8.8, 8.8.4.4]  # Public DNS servers
+            #routes:
+            #    - to: 0.0.0.0/0
+            #      via: 10.41.10.2  # Default route via the flight controller
+            #      metric: 100  # Ensure no conflict with other routesa
+
+     wifis:
+
+         wlan0:
+              access-points:
+                   Nilan:
+            #   OnePlus:
+#             #   OpenWrt_2.4:
+                    password: 6ab183855b00d5acd59eabd12437edb1caae60016c58bc41391cb1a9b0948124
+#                    password: 12345678
+              dhcp4: true
+              optional: true
