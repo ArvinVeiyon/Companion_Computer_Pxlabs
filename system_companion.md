@@ -118,9 +118,7 @@ Use this as a baseline; fill in the specifics for each build.
 All backup files are stored under `System_files` in the Codex repo and mirror their original paths.
 
 **ROS2 workspace**
-- `System_files/ros2_ws/src`
-- `System_files/ros2_ws/.gitignore`
-- `System_files/ros2_ws/fake_vo.py`
+- Managed in its own repo (`~/ros2_ws`) and not backed up under `System_files`.
 
 **Systemd services**
 - `System_files/etc/systemd/system/mavlink.router.service`
