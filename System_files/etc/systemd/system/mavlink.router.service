@@ -1,0 +1,12 @@
+[Unit]
+Description=MAVLink Router
+After=network.target
+Wants=network.target
+
+[Service]
+ExecStart=/usr/local/bin/usr/bin/mavlink-routerd
+Restart=always
+User=roz
+
+[Install]
+WantedBy=multi-user.target

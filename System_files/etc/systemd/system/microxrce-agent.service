@@ -1,0 +1,13 @@
+[Unit]
+Description=Micro XRCE-DDS Agent
+After=network.target mavlink-router.service
+Wants=mavlink-router.service
+
+[Service]
+ExecStart=/usr/local/bin/MicroXRCEAgent serial --dev /dev/ttyAMA4 -b 921600
+Restart=always
+User=roz
+Environment="LD_LIBRARY_PATH=/opt/ros/jazzy/lib:/usr/local/lib:/usr/lib:/lib"
+
+[Install]
+WantedBy=multi-user.target

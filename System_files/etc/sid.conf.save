@@ -1,0 +1,8 @@
+sys version = 1.3	
+Date = 22/02/2025
+Description = "Distance sensor ros2 node configured and working freq 50hz
+ , version control added "
+#Vision_camera manager updated with new camera configuration function from remote 
+#git pulled localy and created with git remote 
+#All the Mavlinl
+
