@@ -1,0 +1,4 @@
+ Cmnd_Alias CODEX_AIDE = /usr/bin/aide, /usr/sbin/aideinit
+  Cmnd_Alias CODEX_SYS  = /usr/bin/systemctl, /usr/bin/journalctl, /usr/bin/tee, /usr/bin/cp
+  Cmnd_Alias CODEX_APT  = /usr/bin/apt, /usr/bin/apt-get
+  roz ALL=(root) NOPASSWD: CODEX_AIDE, CODEX_SYS, CODEX_APT

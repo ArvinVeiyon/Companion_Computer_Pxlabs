@@ -172,3 +172,121 @@ Behavior:
 - M	logs/system_files_sync.log
 - M	scripts/system_files_sync.sh
 - A	system_companion.mdnn##
+
+## 13) AIDE Integrity Monitoring
+Status captured on **2026-02-22**:
+- `aide` installed (`AIDE 0.18.6`).
+- `dailyaidecheck.timer` is enabled and active.
+- Timer next trigger: **2026-02-23 02:35:19 IST**.
+- Manual start was executed: `sudo systemctl start dailyaidecheck.service`.
+- `dailyaidecheck.service` entered `activating (start)` and ran `aide --update`.
+
+Observed files:
+- `/var/log/aide/first-check-2026-02-22_17-59.log` (0 bytes)
+- `/var/log/aide/first-check-2026-02-22_17-51.log` (0 bytes)
+- `/var/log/aide/first-check-2026-02-22_17-49.log` (0 bytes)
+- `/var/log/aide/first-check-2026-02-22_17-48.log` (0 bytes)
+- `/var/log/aide/first-check-2026-02-22_17-40.log` (0 bytes)
+
+Notes:
+- Reading root-owned AIDE logs may require sudo password (`sudo -n` can fail depending on session).
+- To re-check quickly:
+  - `sudo systemctl status dailyaidecheck.timer --no-pager`
+  - `sudo systemctl status dailyaidecheck.service --no-pager`
+  - `sudo ls -lt /var/log/aide/first-check-*.log`
+
+### AIDE Run Log
+Use this block format for each new run:
+
+**YYYY-MM-DD HH:MM TZ**
+- Trigger: manual (`systemctl start dailyaidecheck.service`) / timer
+- Service result: success / failed / timeout
+- Database action: update / check / init
+- Log file: `/var/log/aide/<file>.log`
+- Findings summary: no changes / expected changes / unexpected changes
+- Follow-up action: none / reviewed / fixed / pending
+
+First recorded entry:
+
+**2026-02-22 18:21 IST**
+- Trigger: manual (`sudo systemctl start dailyaidecheck.service`)
+- Service result: in progress at capture time (`activating (start)`)
+- Database action: `aide --update`
+- Log file(s): `/var/log/aide/first-check-2026-02-22_17-59.log` and earlier same-day files
+- Findings summary: pending (log content requires sudo access)
+- Follow-up action: re-check after service completes
+
+## 14) Relay Station (vind-rly) Install + Recovery Runbook
+Current known access path:
+- Relay reachable via WFB tunnel IP `10.5.5.77` (from drone side).
+- Relay direct LAN/Wi-Fi management IP may change during WPA/P2P setup.
+- When relay uses the same adapter for WPA/P2P and other links, temporary disconnect can happen.
+
+Target behavior:
+- Relay acts as GS bridge for WFB-NG.
+- Ground systems (QGC or any OS) connect to relay management SSH on `:22`.
+- Ground systems connect to drone SSH through relay on `:2222`.
+
+Critical rule:
+- In `/etc/wifibroadcast.cfg` keep `[gs_tunnel] default_route = False`.
+- Do not set tunnel default route to true on relay in this mixed-network setup.
+
+### Safe implementation order
+1. Prepare base packages:
+   - `sudo apt-get update`
+   - `sudo apt-get install -y wpasupplicant wireless-tools net-tools dnsmasq openssh-server autossh socat`
+2. Configure WFB first and verify tunnel still works:
+   - Relay tunnel interface IP should be `10.5.5.77/24`.
+   - Drone side tunnel interface should be `10.5.5.87/24`.
+3. Configure relay management network (LAN/Wi-Fi) with static plan.
+4. Configure WPA/P2P only after confirming fallback access path.
+5. Add boot services (`ssh`, WFB services, relay P2P service, tunnel service).
+6. Reboot once and validate all paths.
+
+### WPA/P2P baseline
+`/etc/wpa_supplicant/wpa_supplicant.conf`
+- `ctrl_interface=/var/run/wpa_supplicant GROUP=netdev`
+- `update_config=1`
+- `device_name=VIND_RLY_P2P`
+- Optional P2P network block as required by field pairing.
+
+P2P startup commands:
+- `wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf -C /var/run/wpa_supplicant`
+- `wpa_cli -i wlan0 p2p_group_add persistent=0`
+- `ifconfig p2p-wlan0-0 10.5.6.101 netmask 255.255.255.0 up`
+- `wpa_cli -i p2p-wlan0-0 wps_pin any 1987`
+
+### Drone SSH bridge through relay
+Use service to expose relay port `2222` to drone SSH:
+- Listen: relay management IP `:2222`
+- Target: `10.5.5.87:22` (drone over WFB tunnel)
+- Recommended backend: `socat` or `autossh` systemd service with restart policy.
+
+### Validation checklist after each change
+1. `ip -br a` shows tunnel interface with `10.5.5.77/24`.
+2. `ping 10.5.5.87` succeeds from relay.
+3. `systemctl status wifibroadcast@gs.service` is active.
+4. `ss -tulpen | rg 2222` shows listener on relay.
+5. Ground station can:
+   - SSH relay: `ssh <user>@<relay_mgmt_ip> -p 22`
+   - SSH drone via relay: `ssh <user>@<relay_mgmt_ip> -p 2222`
+
+### Recovery when relay disconnects mid-setup
+1. Re-enter relay through tunnel path (current known: `10.5.5.77`).
+2. Stop temporary P2P flow if needed:
+   - `sudo pkill -f \"wpa_supplicant.*wlan0\"`
+   - `sudo ip link set p2p-wlan0-0 down || true`
+3. Restore known-good WFB config:
+   - Ensure `[gs_tunnel] default_route = False`
+   - Restart WFB:
+     - `sudo systemctl restart wifibroadcast.service wifibroadcast@gs.service`
+4. Confirm tunnel ping to drone (`10.5.5.87`) before reattempting WPA/P2P.
+
+### Notes for future Codex sessions
+- Always confirm current reachable relay IP before making network changes.
+- Prefer applying one network subsystem at a time (WFB -> management LAN/Wi-Fi -> P2P -> bridge).
+- Avoid enabling competing managers on same interface during bring-up (NetworkManager vs manual wpa_supplicant).
+**2026-02-23 18:24**
+- A	Setup_Procedure_for_Relay_Station.docx
+- A	System_files/etc/sudoers.d/roz-codex
+- M	system_companion.md
