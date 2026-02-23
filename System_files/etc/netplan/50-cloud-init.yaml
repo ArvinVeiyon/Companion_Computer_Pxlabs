@@ -3,9 +3,9 @@
 # network configuration capabilities, write a file
 # /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:
 # network: {config: disabled}
- network:
-     version: 2
-     renderer: networkd
+# network:
+#     version: 2
+#     renderer: networkd
 
 #    ethernets:
 #        eth0:
@@ -18,14 +18,14 @@
             #      via: 10.41.10.2  # Default route via the flight controller
             #      metric: 100  # Ensure no conflict with other routesa
 
-     wifis:
+#     wifis:
 
-         wlan0:
-              access-points:
-                   Nilan:
+#         wlan0:
+#              access-points:
+#                   Nilan:
             #   OnePlus:
 #             #   OpenWrt_2.4:
-                    password: 6ab183855b00d5acd59eabd12437edb1caae60016c58bc41391cb1a9b0948124
+#                    password: 6ab183855b00d5acd59eabd12437edb1caae60016c58bc41391cb1a9b0948124
 #                    password: 12345678
-              dhcp4: true
-              optional: true
+#              dhcp4: true
+#              optional: true

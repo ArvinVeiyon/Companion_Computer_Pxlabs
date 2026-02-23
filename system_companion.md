@@ -290,3 +290,5 @@ Use service to expose relay port `2222` to drone SSH:
 - A	Setup_Procedure_for_Relay_Station.docx
 - A	System_files/etc/sudoers.d/roz-codex
 - M	system_companion.md
+**2026-02-23 22:55**
+- M	System_files/etc/netplan/50-cloud-init.yaml
