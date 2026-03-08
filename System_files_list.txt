@@ -26,4 +26,6 @@ etc/wifibroadcast.cfg
 etc/logrotate.d/wifibroadcast
 etc/gnutls/config
 usr/local/bin/block-traffic.sh
+etc/systemd/system/block-traffic.service
 boot/firmware/config.txt
+home/roz/mavlink.sh

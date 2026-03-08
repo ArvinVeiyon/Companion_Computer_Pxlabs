@@ -1,88 +1,102 @@
-# Rover / Drone / Marine Reference (PX4 Companion)
+# Vind-Roz — Aerial Drone PX4 Companion Computer
 
-This document is a living reference for companion-computer setups used with PX4-based vehicles including:
-- ground rovers
-- aerial drones
-- surface ships
-- submarines / ROVs
-
-Use this as a baseline; fill in the specifics for each build.
+This document is the living reference for the **Vind-Roz** drone companion computer.
+Hostname: `Vind-Roz` | Platform: PX4 aerial drone
 
 ## 1) System Overview
-**Vehicle Type:** rover / drone / ship / submarine (circle one)
-**Primary Goal:** navigation / autonomy / mapping / inspection / research / other
+**Vehicle Type:** Aerial drone
+**Primary Goal:** Autonomy / offboard control / vision / ROV-style manual modes
 
 ## 2) Hardware
 **Flight Controller (FC):**
-- Model:
-- MCU family (e.g., NXP RT6xx / RT11xx):
-- PX4 support status:
+- Model: (document FC model here — e.g., Pixhawk 6C / Holybro / Cube)
+- MCU family: (e.g., STM32H7)
+- PX4 support status: supported
 
 **Companion Computer:**
-- Board model:
-- CPU/SoC:
-- RAM/Storage:
-- OS image and version:
+- Board model: Raspberry Pi 5 Model B Rev 1.0
+- CPU/SoC: Broadcom BCM2712, ARM Cortex-A76 quad-core, aarch64
+- RAM: 8 GB LPDDR4X
+- Storage: ~64 GB SD card (`/dev/mmcblk0p2` 58 G, 63% used as of 2026-03-08)
+- OS: Ubuntu 24.04.1 LTS (Noble Numbat), kernel 6.8.0-1018-raspi
 
 **Sensors:**
-- GNSS:
-- IMU (if external):
-- Camera(s):
-- Lidar/sonar:
-- Other:
+- GNSS: (document port/model)
+- IMU (if external): (document)
+- Camera(s): CSI auto-detect enabled (`camera_auto_detect=1` in config.txt)
+- Lidar/sonar: TFmini (ROS2 node: `tfmini.service`)
+- Other: Optical flow node in ros2_ws
 
 **Power:**
-- Battery and voltage:
-- Power distribution:
-- FC power input:
-- Companion power input:
+- Battery and voltage: (document)
+- Power distribution: (document)
+- FC power input: (document)
+- Companion power input: (document)
 
 ## 3) Firmware / Software Versions
 **PX4:**
-- Version (e.g., v1.16.0):
-- Build type: release / custom
-- Git commit (if custom):
+- Version: v1.16.0-rc1
+- Build type: custom pre-release
+- Git commit: c5b8445ffc (586 commits past v1.16.0-rc1 tag)
 
 **Companion Software:**
-- OS version:
-- ROS/ROS2:
-- MAVLink toolchain:
-- Other services:
+- OS: Ubuntu 24.04.1 LTS, kernel 6.8.0-1018-raspi
+- ROS2: Jazzy (ros-jazzy-*)
+- Python: 3.12.3
+- MAVLink toolchain: mavlink-router (custom build, `/usr/local/bin/usr/bin/mavlink-routerd`)
+- Micro-XRCE-DDS Agent: `/usr/local/bin/MicroXRCEAgent` (source build in `~/Micro-XRCE-DDS-Agent`)
+- WFB-NG: `~/wfb-ng` (WiFi broadcast link)
+- AIDE: 0.18.6 (integrity monitoring)
+
+**ROS2 Workspace packages** (`~/ros2_ws/src/`):
+- arm_drone, collision_manual_mode, obstacle_distance, optical_flow
+- px4_msgs, px4-ros2-interface-lib, px4_ros_com
+- rc_control, rov_collision_stop, rov_ext, rov_manual
+- tfmini_sensor, vision_streaming
 
 ## 4) Connections
-**FC <-> Companion Link:**
-- Interface: UART / USB / Ethernet
-- Port names:
-- Baud rate (UART):
-- MAVLink instance:
+**FC <-> Companion Links (two serial connections):**
+- MAVLink: `/dev/ttyAMA0` @ 921600 baud → mavlink-router
+- uXRCE-DDS: `/dev/ttyAMA4` @ 921600 baud → MicroXRCEAgent
 
 **Peripheral Connections:**
-- GNSS:
-- Radio/Telemetry:
-- Camera:
-- Sonar/Lidar:
+- GNSS: (document)
+- Radio/Telemetry: WFB-NG via WiFi adapter (wfb-ng)
+- Camera: CSI (auto-detect)
+- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node)
 
 ## 5) PX4 Configuration
-**MAVLink:**
-- Instance and port:
-- Mode: normal / onboard / gimbal
+**MAVLink (via mavlink-router `/etc/mavlink-router/main.conf`):**
+- TCP server: port 5760 (GCS)
+- UART endpoint: `/dev/ttyAMA0` @ 921600
+- UDP endpoint local2: `192.168.1.100:14550`
+- UDP endpoint WFB-NG: `127.0.0.1:14550`
 
-**Serial Ports:**
-- TELEM1/TELEM2 settings:
-- GPS settings:
+**uXRCE-DDS:**
+- Serial: `/dev/ttyAMA4` @ 921600 → connects PX4 uORB topics to ROS2
 
 **Autonomy / Offboard:**
-- Offboard enabled: yes/no
-- Safety and failsafe:
+- Offboard: enabled (ros2_px4_translation_node + rc_control_node)
+- DDS multicast blocked on drone-wfb interface (`block-traffic.service`)
 
 ## 6) Companion Setup
-**Services:**
-- MAVLink router / MAVSDK / MAVROS:
-- Startup method (systemd, docker, etc.):
+**Active Systemd Services:**
+| Service | Description |
+|---|---|
+| `mavlink.router.service` | MAVLink routing FC ↔ GCS/network |
+| `microxrce-agent.service` | uXRCE-DDS bridge FC ↔ ROS2 |
+| `ros2_px4_translation_node.service` | ROS2/PX4 message translation |
+| `rc_control_node.service` | RC input handling |
+| `ros2_external_node_reg.service` | External ROS2 node registration |
+| `tfmini.service` | TFmini lidar ROS2 node |
+| `vision_streaming.service` | Camera/vision streaming ROS2 node |
+| `block-traffic.service` | Firewall: block DDS multicast on WFB iface |
 
 **Network:**
-- IPs and interfaces:
-- ROS2 DDS settings (if applicable):
+- WFB tunnel drone side: `10.5.5.87/24`
+- WFB tunnel relay side: `10.5.5.77/24`
+- Local LAN (mavlink UDP): `192.168.1.100`
+- ROS2 DDS: multicast blocked on WFB interface (block-traffic.service)
 
 ## 7) Testing Checklist
 1. FC boots and PX4 console accessible
@@ -150,10 +164,8 @@ All backup files are stored under `System_files` in the Codex repo and mirror th
 **Boot and runtime tools**
 - `System_files/boot/firmware/config.txt`
 - `System_files/usr/local/bin/block-traffic.sh`
-
-**Not yet copied (need sudo if required)**
-- `System_files/etc/netplan/50-cloud-init.yaml`
-- `System_files/etc/ssh/sshd_config.d/50-cloud-init.conf`
+- `System_files/etc/systemd/system/block-traffic.service`
+- `System_files/home/roz/mavlink.sh`
 
 ## 12) Auto Sync (Boot + Daily)
 Auto sync uses:
