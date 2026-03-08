@@ -651,3 +651,10 @@ Use service to expose relay port `2222` to drone SSH:
 **2026-03-08 11:14**
 - A	System_files/etc/systemd/system/block-traffic.service
 - A	System_files/home/roz/mavlink.sh
+**2026-03-08 12:36**
+- A	System_files/etc/hostname
+- A	System_files/etc/hosts
+- A	System_files/etc/udev/rules.d/99-usb-cameras.rules
+- A	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+- A	System_files/usr/local/bin/vision_config_manager
+- M	System_files_list.txt

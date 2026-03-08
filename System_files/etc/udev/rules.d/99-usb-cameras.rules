@@ -1,0 +1,11 @@
+# /etc/udev/rules.d/99-usb-cameras.rules
+
+# Waveshare AF -> /dev/video0 (capture node only)
+SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*", ACTION=="add", \
+  ATTR{index}=="0", ATTRS{idVendor}=="0ede", ATTRS{idProduct}=="8093", \
+  SYMLINK+="video0"
+
+# See3CAM_CU135 -> /dev/video2 (capture node only)
+SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*", ACTION=="add", \
+  ATTR{index}=="0", ATTRS{idVendor}=="2560", ATTRS{idProduct}=="c1d1", \
+  SYMLINK+="video2"
