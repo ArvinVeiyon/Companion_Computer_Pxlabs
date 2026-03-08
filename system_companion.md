@@ -106,6 +106,17 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Encoder: `libx264 ultrafast`, output format `yuv420p`
 - RTP destination: `127.0.0.1:5602` → picked up by WFB-NG `drone_video` stream
 
+**Micro XRCE-DDS Agent:**
+- Binary: `/usr/local/bin/MicroXRCEAgent` (installed from source build in `~/Micro-XRCE-DDS-Agent`)
+- Version: v3.0.0-2-gb9d84ac (2 commits past v3.0.0 tag)
+- Transport: `serial --dev /dev/ttyAMA4 -b 921600`
+- Role: bridges PX4 uORB topics ↔ ROS2 DDS middleware
+- Depends on: `mavlink-router.service` (After + Wants in unit file)
+- LD_LIBRARY_PATH: `/opt/ros/jazzy/lib:/usr/local/lib:/usr/lib:/lib`
+- Available UART ports on this board: `ttyAMA0`, `ttyAMA2`, `ttyAMA4`, `ttyAMA10`
+  - `ttyAMA0` → MAVLink (mavlink-router)
+  - `ttyAMA4` → uXRCE-DDS (microxrce-agent)
+
 **MAVLink Router (`/etc/mavlink-router/main.conf`):**
 - Binary: `/usr/local/bin/usr/bin/mavlink-routerd` (unusual path — installed with bad `--prefix`, but correct and working as-is)
 - UART endpoint: `/dev/ttyAMA0` @ 921600 baud (FC MAVLink)
