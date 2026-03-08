@@ -55,3 +55,19 @@ Relay (`vind-rly`) bridges WFB-NG to the ground station:
 - WFB tunnel: `gs-wfb` @ `10.5.5.77/24`
 - SSH port forward: relay `:2222` → drone `10.5.5.87:22`
 - See `system_companion.md` §14 and `Setup_Procedure_for_Relay_Station.docx`
+
+## PX4 MAVLink Utility
+
+Script: `scripts/px4_mavlink.py`
+
+Connects via mavlink-router TCP:5760 — no conflict with mavlink-router or WFB-NG.
+
+```bash
+python3 ~/codex-work/scripts/px4_mavlink.py monitor       # live STATUSTEXT / SYS_STATUS logs
+python3 ~/codex-work/scripts/px4_mavlink.py ls            # list SD card (/fs/microsd)
+python3 ~/codex-work/scripts/px4_mavlink.py ls <path>     # list specific path
+python3 ~/codex-work/scripts/px4_mavlink.py rm-faults     # delete all fault_*.log from SD
+python3 ~/codex-work/scripts/px4_mavlink.py shell <cmd>   # run NuttShell command on FC
+```
+
+Requires: `pymavlink` (already installed)
