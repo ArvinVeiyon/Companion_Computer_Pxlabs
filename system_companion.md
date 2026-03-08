@@ -24,7 +24,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 **Sensors:**
 - GNSS: (document port/model)
 - IMU (if external): (document)
-- Camera(s): CSI auto-detect enabled (`camera_auto_detect=1` in config.txt)
+- Camera(s): Primary `/dev/video0` (1280×720, MJPEG), Secondary `/dev/video2` (1280×720, MJPEG, PiP)
 - Lidar/sonar: TFmini (ROS2 node: `tfmini.service`)
 - Other: Optical flow node in ros2_ws
 
@@ -93,6 +93,26 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 | `vision_streaming.service` | Camera/vision streaming ROS2 node |
 | `block-traffic.service` | Firewall: block DDS multicast on WFB iface |
 
+**Video Pipeline:**
+```
+/dev/video0 (primary, MJPEG)  ─┐
+                                ├─► FFmpeg (libx264 ultrafast) ─► RTP → 127.0.0.1:5602 ─► WFB-NG ─► GS 10.5.6.50:5600
+/dev/video2 (secondary, MJPEG)─┘    PiP overlay bottom-right
+```
+- ROS2 node: `vision_streaming_node` (Python, package `vision_streaming`)
+- Config file: `/etc/vision_streaming.conf`
+- Primary: `/dev/video0`, 1280×720, 3000K bitrate
+- Secondary: `/dev/video2`, 1280×720, 2000K bitrate, PiP 240×180 bottom-right
+- Encoder: `libx264 ultrafast`, output format `yuv420p`
+- RTP destination: `127.0.0.1:5602` → picked up by WFB-NG `drone_video` stream
+
+**MAVLink Router (`/etc/mavlink-router/main.conf`):**
+- Binary: `/usr/local/bin/usr/bin/mavlink-routerd` ⚠️ note the double path — confirm binary location
+- UART endpoint: `/dev/ttyAMA0` @ 921600 baud (FC MAVLink)
+- TCP server: port 5760 (GCS)
+- UDP → `192.168.1.100:14550` (local net)
+- UDP → `127.0.0.1:14550` (WFB-NG mavlink stream)
+
 **Network:**
 - WFB tunnel drone side: `10.5.5.87/24`
 - WFB tunnel relay side: `10.5.5.77/24`
@@ -117,8 +137,8 @@ Config file: `/etc/wifibroadcast.cfg`
 **Streams (drone side):**
 | Stream | Direction | Stream ID | Service type | Peer |
 |---|---|---|---|---|
-| video | TX only | 0x00 | udp_direct_tx | listen `127.0.0.1:5602` |
-| mavlink | RX 0x10 / TX 0x90 | — | mavlink | listen `0.0.0.0:14550` |
+| video | TX only | 0x00 | udp_direct_tx | listen `127.0.0.1:5602` ← fed by vision_streaming ROS2 node |
+| mavlink | RX 0x10 / TX 0x90 | — | mavlink | listen `0.0.0.0:14550` ← fed by mavlink-router |
 | tunnel | RX 0xa0 / TX 0x20 | — | tunnel | peer `10.5.5.77/24` |
 
 **FEC settings:**
