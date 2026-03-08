@@ -107,7 +107,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - RTP destination: `127.0.0.1:5602` → picked up by WFB-NG `drone_video` stream
 
 **MAVLink Router (`/etc/mavlink-router/main.conf`):**
-- Binary: `/usr/local/bin/usr/bin/mavlink-routerd` ⚠️ note the double path — confirm binary location
+- Binary: `/usr/local/bin/usr/bin/mavlink-routerd` (unusual path — installed with bad `--prefix`, but correct and working as-is)
 - UART endpoint: `/dev/ttyAMA0` @ 921600 baud (FC MAVLink)
 - TCP server: port 5760 (GCS)
 - UDP → `192.168.1.100:14550` (local net)
