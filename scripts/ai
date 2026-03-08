@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# ai — Vind-Roz AI Router
+# Automatically routes to Claude (online) or Ollama/Phi-3 (offline)
+# Usage: ai [prompt]   or just: ai   (interactive mode)
+# ─────────────────────────────────────────────────────────────────────────────
+
+OFFLINE_MODEL="phi3:mini"
+OLLAMA_BIN="$HOME/.local/bin/ollama"
+ONLINE_CHECK_HOST="api.anthropic.com"
+ONLINE_CHECK_TIMEOUT=3
+
+# ── Check internet ────────────────────────────────────────────────────────────
+check_online() {
+    curl -s --max-time "$ONLINE_CHECK_TIMEOUT" --head "https://$ONLINE_CHECK_HOST" > /dev/null 2>&1
+}
+
+# ── Check offline model ready ─────────────────────────────────────────────────
+check_offline_ready() {
+    systemctl is-active --quiet ollama && \
+    "$OLLAMA_BIN" list 2>/dev/null | grep -q "$OFFLINE_MODEL"
+}
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+print_mode() {
+    echo ""
+    if [ "$1" = "online" ]; then
+        echo "  ◉ Online mode  — Claude API (full features)"
+    else
+        echo "  ◎ Offline mode — Phi-3 Mini (local, no internet needed)"
+        echo "    For full features: connect to internet and restart"
+    fi
+    echo ""
+}
+
+# ── Offline prompt via Ollama ─────────────────────────────────────────────────
+run_offline() {
+    if ! check_offline_ready; then
+        echo "  [!] Offline model not ready. Starting Ollama..."
+        systemctl start ollama 2>/dev/null
+        sleep 3
+        if ! check_offline_ready; then
+            echo "  [!] Model '$OFFLINE_MODEL' not found. Pull it with:"
+            echo "      ollama pull $OFFLINE_MODEL"
+            exit 1
+        fi
+    fi
+    if [ -n "$1" ]; then
+        "$OLLAMA_BIN" run "$OFFLINE_MODEL" "$1"
+    else
+        "$OLLAMA_BIN" run "$OFFLINE_MODEL"
+    fi
+}
+
+# ── Online mode via Claude CLI ────────────────────────────────────────────────
+run_online() {
+    if [ -n "$1" ]; then
+        echo "$1" | claude --print 2>/dev/null || claude
+    else
+        claude
+    fi
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+PROMPT="$*"
+
+# Allow forcing a mode
+if [ "$1" = "--offline" ]; then
+    shift; PROMPT="$*"
+    print_mode offline
+    run_offline "$PROMPT"
+    exit 0
+elif [ "$1" = "--online" ]; then
+    shift; PROMPT="$*"
+    print_mode online
+    run_online "$PROMPT"
+    exit 0
+fi
+
+# Auto-detect
+if check_online; then
+    print_mode online
+    run_online "$PROMPT"
+else
+    print_mode offline
+    run_offline "$PROMPT"
+fi

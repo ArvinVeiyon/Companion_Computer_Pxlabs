@@ -28,4 +28,5 @@ usr/local/bin/vision_config_manager
 usr/local/bin/block-traffic.sh
 etc/systemd/system/block-traffic.service
 boot/firmware/config.txt
+etc/systemd/system/ollama.service
 home/roz/.claude/projects/-home-roz/memory/MEMORY.md

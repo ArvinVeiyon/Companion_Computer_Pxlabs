@@ -52,5 +52,17 @@ echo "  Branch: $(git branch --show-current) | Unpushed commits: $unpushed"
 echo "  Last commit: $(git log --oneline -1)"
 
 echo ""
+echo "[ AI Mode ]"
+if curl -s --max-time 3 --head https://api.anthropic.com > /dev/null 2>&1; then
+    echo "  ◉ Online  — Claude API available (type: ai)"
+else
+    if systemctl is-active --quiet ollama && ollama list 2>/dev/null | grep -q "phi3"; then
+        echo "  ◎ Offline — Phi-3 Mini ready (type: ai)"
+    else
+        echo "  ✘ Offline — Phi-3 Mini not ready (run: ollama pull phi3:mini)"
+    fi
+fi
+
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
