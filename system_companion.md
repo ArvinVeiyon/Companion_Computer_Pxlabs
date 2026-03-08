@@ -1,17 +1,18 @@
-# Vind-Roz — Aerial Drone PX4 Companion Computer
+# Vind-Roz — PX4 Companion Computer (Drone + Rover)
 
-This document is the living reference for the **Vind-Roz** drone companion computer.
-Hostname: `Vind-Roz` | Platform: PX4 aerial drone
+This document is the living reference for the **Vind-Roz** companion computer.
+Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rover builds.
 
 ## 1) System Overview
-**Vehicle Type:** Aerial drone
-**Primary Goal:** Autonomy / offboard control / vision / ROV-style manual modes
+**Vehicle Types:** Aerial drone / Ground rover (same companion, vehicle-specific PX4 airframe config)
+**Primary Goal:** Autonomy / offboard control / vision / manual RC modes
 
 ## 2) Hardware
 **Flight Controller (FC):**
-- Model: (document FC model here — e.g., Pixhawk 6C / Holybro / Cube)
-- MCU family: (e.g., STM32H7)
-- PX4 support status: supported
+- Model: Custom board based on Pixhawk 6X-RT reference design (NXP)
+- MCU family: NXP i.MX RT1176 (RT11xx, dual-core Cortex-M7 + M4)
+- PX4 support status: supported (px4_fmu-v6xrt target)
+- Note: custom in-house PCB — not the off-the-shelf Holybro unit
 
 **Companion Computer:**
 - Board model: Raspberry Pi 5 Model B Rev 1.0
