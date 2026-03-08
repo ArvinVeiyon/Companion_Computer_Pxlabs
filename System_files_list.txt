@@ -24,6 +24,7 @@ etc/default/wifibroadcast
 etc/wifibroadcast.cfg
 etc/logrotate.d/wifibroadcast
 etc/gnutls/config
+usr/local/bin/vision_config_manager
 usr/local/bin/block-traffic.sh
 etc/systemd/system/block-traffic.service
 boot/firmware/config.txt

@@ -266,6 +266,134 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
   - **Not yet synced (require sudo):** `/etc/ssh/sshd_config`, `/etc/netplan/50-cloud-init.yaml`
 - **On change:** auto-commits to git with tag `sync-YYYYMMDD-HHMM` and appends summary to this doc
 
+## 6e) Rebuild & Setup Guide
+> Follow this section to reconstruct the companion computer from scratch after OS loss.
+
+### Base OS
+- **Image:** Ubuntu 24.04 LTS for Raspberry Pi 5 (ARM64)
+- **Kernel:** `6.8.0-1018-raspi`
+- **Hostname:** `Vind-Roz`
+- Flash with Raspberry Pi Imager → Ubuntu Server 24.04 LTS (64-bit)
+
+### Step 1 — Restore Config Files
+Clone this repo and run the sync script in reverse (copy `System_files/` back to `/`):
+```bash
+git clone https://github.com/ArvinVeiyon/Companion_Computer_Pxlabs.git ~/codex-work
+sudo rsync -rlptD ~/codex-work/System_files/ /
+sudo systemctl daemon-reload
+```
+
+### Step 2 — Install ROS2 Jazzy
+Follow official ROS2 Jazzy install guide for Ubuntu 24.04:
+```bash
+# Add ROS2 apt repo, then:
+sudo apt install ros-jazzy-desktop python3-colcon-common-extensions
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+```
+
+### Step 3 — Build mavlink-router
+```bash
+git clone https://github.com/mavlink-router/mavlink-router.git ~/mavlink-router
+cd ~/mavlink-router
+# Pinned commit: c20337b
+git checkout c20337b
+git submodule update --init --recursive
+sudo apt install meson ninja-build pkg-config
+meson setup build .
+ninja -C build
+sudo ninja -C build install
+# Binary installs to: /usr/local/bin/usr/bin/mavlink-routerd
+```
+
+### Step 4 — Build Micro-XRCE-DDS-Agent
+```bash
+git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git ~/Micro-XRCE-DDS-Agent
+cd ~/Micro-XRCE-DDS-Agent
+# Pinned commit: b9d84ac
+git checkout b9d84ac
+git submodule update --init --recursive
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+# Binary: /usr/local/bin/MicroXRCEAgent
+```
+
+### Step 5 — Build & Install WFB-NG
+```bash
+git clone https://github.com/svpcom/wfb-ng.git ~/wfb-ng
+cd ~/wfb-ng
+# Pinned commit: 1b88185
+git checkout 1b88185
+sudo apt install libsodium-dev python3-all python3-twisted
+sudo make install
+sudo systemctl enable wifibroadcast
+# Restore keys from codex-work:
+sudo cp ~/codex-work/System_files/etc/drone.key /etc/drone.key
+sudo cp ~/codex-work/System_files/etc/gs.key /etc/gs.key
+```
+
+### Step 6 — Build ROS2 Workspace
+```bash
+git clone <ros2_ws_repo> ~/ros2_ws   # or restore from backup
+cd ~/ros2_ws
+source /opt/ros/jazzy/setup.bash
+sudo apt install ros-jazzy-px4-msgs  # if available, else build from src
+colcon build --symlink-install
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+```
+
+### Step 7 — Install vision_config_manager
+```bash
+sudo cp ~/codex-work/System_files/usr/local/bin/vision_config_manager /usr/local/bin/
+sudo chmod +x /usr/local/bin/vision_config_manager
+# Requires v4l2-ctl:
+sudo apt install v4l-utils
+```
+
+### Step 8 — Install Python Dependencies
+```bash
+pip3 install pyserial smbus2 numpy
+# opencv-python if optical_flow_node is used:
+pip3 install opencv-python
+```
+
+### Step 9 — Enable Systemd Services
+```bash
+sudo systemctl enable mavlink.router.service microxrce-agent.service \
+  rc_control_node.service tfmini.service vision_streaming.service \
+  ros2_px4_translation_node.service block-traffic.service \
+  system_files_sync.timer wifibroadcast@drone.service
+sudo systemctl start mavlink.router.service microxrce-agent.service
+```
+
+### Step 10 — Validate
+```bash
+# Check FC link
+mavlink-routerd --version
+systemctl status mavlink.router.service
+
+# Check DDS bridge
+systemctl status microxrce-agent.service
+
+# Check ROS2 topics (should show /fmu/out/*)
+source ~/ros2_ws/install/setup.bash
+ros2 topic list
+
+# Check WFB-NG
+systemctl status wifibroadcast@drone.service
+```
+
+### Key Source Versions (pinned commits)
+| Component | Repo | Commit |
+|---|---|---|
+| PX4-Autopilot | github.com/PX4/PX4-Autopilot | `c5b8445ffc` |
+| mavlink-router | github.com/mavlink-router/mavlink-router | `c20337b` |
+| Micro-XRCE-DDS-Agent | github.com/eProsima/Micro-XRCE-DDS-Agent | `b9d84ac` |
+| wfb-ng | github.com/svpcom/wfb-ng | `1b88185` |
+
+---
+
 ## 7) WFB-NG (WiFi Broadcast) Configuration
 Config file: `/etc/wifibroadcast.cfg`
 
