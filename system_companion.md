@@ -55,6 +55,8 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - rc_control, rov_collision_stop, rov_ext, rov_manual
 - tfmini_sensor, vision_streaming
 
+> See Section 6b for detailed per-package documentation.
+
 ## 4) Connections
 **FC <-> Companion Links (two serial connections):**
 - MAVLink: `/dev/ttyAMA0` @ 921600 baud → mavlink-router
@@ -129,6 +131,140 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - WFB tunnel relay side: `10.5.5.77/24`
 - Local LAN (mavlink UDP): `192.168.1.100`
 - ROS2 DDS: multicast blocked on WFB interface (block-traffic.service)
+
+## 6b) ROS2 Node Details
+
+### rc_control_node (`rc_control` package)
+- **Service:** `rc_control_node.service`
+- **Node name:** `rc_control_node`
+- **Source:** `ros2_ws/src/rc_control/rc_control/rc_control_node.py`
+- **Config:** `ros2_ws/src/rc_control/config/rc_mapping.yaml` (master config, loaded at startup from installed share dir)
+- **Subscribes:** `/fmu/out/input_rc` (px4_msgs/InputRc, BEST_EFFORT QoS)
+- **Function 1 — Camera switching:**
+  - RC channel: CH9 (index 8, 0-based), tolerance ±50 PWM
+  - Calls `/usr/local/bin/vision_config_manager` with device path args
+  - PWM positions: front=1012 (`/dev/video0`), bottom=1514 (`/dev/video2`), split=2014 (both cameras, PiP)
+  - Camera config is **remotely configurable** by editing `rc_mapping.yaml` and restarting the node
+- **Function 2 — Shutdown/reboot via RC:**
+  - RC channel: CH10 (index 9), tolerance ±100 PWM, hold_time 2.0 s
+  - PWM: 1514 → shutdown, 2014 → reboot (must hold for 2 s)
+
+### vision_streaming_node (`vision_streaming` package)
+- **Service:** `vision_streaming.service`
+- **Node name:** `vision_streaming_node`
+- **Source:** `ros2_ws/src/vision_streaming/vision_streaming/vision_streaming_node.py`
+- **Config:** `/etc/vision_streaming.conf` (INI format, **remotely configurable**)
+  - `[general]`: `rtp_ip`, `rtp_port`
+  - `[primary]`: `camera_name`, `resolution`, `bitrate`, `fps`, `format`
+  - `[secondary]` (optional): `camera_name`, `resolution`, `bitrate`, `pip_position`, `pip_size`
+- **Function:** Launches FFmpeg to encode and RTP-stream camera(s) to WFB-NG
+- **Camera switch integration:** `vision_config_manager` binary rewrites `/etc/vision_streaming.conf` and restarts this service when RC switch fires
+- **PiP positions supported:** `bottom-right`, `bottom-left`, `top-right`, `top-left`, `center`
+
+### tfmini_node (`tfmini_sensor` package)
+- **Service:** `tfmini.service`
+- **Node name:** `tfmini_node`
+- **Source:** `ros2_ws/src/tfmini_sensor/tfmini_sensor/tfmini_node.py`
+- **Hardware:** TFmini lidar on `/dev/ttyAMA2` @ 115200 baud
+- **Publishes:** `/fmu/in/distance_sensor` (px4_msgs/DistanceSensor) @ 50 Hz
+- **Sensor params:** range 0.3–12.0 m, downward-facing, FOV 3.6°, device_id=1987
+
+### optical_flow_node (`optical_flow` package)
+- **Node name:** `optical_flow_node`
+- **Source:** `ros2_ws/src/optical_flow/optical_flow/optical_flow_node.py`
+- **Hardware:** Camera at `/dev/video3` (640×480)
+- **Subscribes:** `/fmu/in/distance_sensor` (TFmini altitude), `/fmu/out/sensor_combined` (gyro)
+- **Publishes:** `/fmu/in/sensor_optical_flow` (px4_msgs/SensorOpticalFlow) @ 10 Hz
+- **Algorithm:** OpenCV Farneback dense optical flow
+- **Note:** Not managed by a systemd service — may be launched manually or via launch file
+
+### obstacle_distance_publisher (`obstacle_distance` package)
+- **Node name:** `obstacle_distance_publisher`
+- **Source:** `ros2_ws/src/obstacle_distance/obstacle_distance/obstacle_distance_node.py`
+- **Hardware:** VL53L1X ToF sensor (I2C bus 1, addr 0x29), long-distance mode (mode 3)
+- **Publishes:** `/fmu/in/obstacle_distance` (px4_msgs/ObstacleDistance) @ 10 Hz
+- **Coverage:** Front sector (indices 0–5 of 72-element array), 5° increment, 20–400 cm range
+
+### rov_collision_stop (`rov_collision_stop` package)
+- **Source:** `ros2_ws/src/rov_collision_stop/src/main.cpp` (C++ node)
+- **Function:** Emergency collision stop for rover mode
+
+### Other packages (no active service, reference/example)
+- `arm_drone` — arm/disarm utilities
+- `collision_manual_mode` — C++ manual mode with collision avoidance
+- `rov_ext`, `rov_manual` — rover external/manual control C++ nodes
+- `px4_ros_com` — PX4 ROS2 example nodes and frame transform lib
+- `px4-ros2-interface-lib` — PX4 ROS2 interface library (modes, navigation)
+- `px4_msgs` — PX4 uORB message definitions for ROS2
+
+## 6c) Live ROS2 Topics (as of 2026-03-08)
+> Captured while MicroXRCEAgent + PX4 DDS bridge was active.
+
+**FMU → Companion (subscriptions from PX4):**
+- `/fmu/out/input_rc` — RC channel values (used by rc_control_node)
+- `/fmu/out/vehicle_attitude` — quaternion attitude
+- `/fmu/out/vehicle_local_position` / `/fmu/out/vehicle_local_position_v1`
+- `/fmu/out/vehicle_global_position`
+- `/fmu/out/vehicle_gps_position`
+- `/fmu/out/vehicle_status` / `/fmu/out/vehicle_status_v1`
+- `/fmu/out/vehicle_control_mode`
+- `/fmu/out/vehicle_land_detected`
+- `/fmu/out/vehicle_odometry`
+- `/fmu/out/sensor_combined` — IMU gyro/accel data
+- `/fmu/out/battery_status`
+- `/fmu/out/home_position` / `/fmu/out/home_position_v1`
+- `/fmu/out/estimator_status_flags`
+- `/fmu/out/failsafe_flags`
+- `/fmu/out/collision_constraints`
+- `/fmu/out/manual_control_setpoint`
+- `/fmu/out/timesync_status`
+- `/fmu/out/airspeed_validated`
+- `/fmu/out/position_setpoint_triplet`
+- `/fmu/out/vtol_vehicle_status`
+- `/fmu/out/event`
+
+**Companion → FMU (published to PX4):**
+- `/fmu/in/distance_sensor` — TFmini altitude lidar
+- `/fmu/in/obstacle_distance` — VL53L1X front obstacle
+- `/fmu/in/sensor_optical_flow` — camera optical flow
+- `/fmu/in/vehicle_command` — arm/mode commands
+- `/fmu/in/offboard_control_mode` — offboard enable
+- `/fmu/in/trajectory_setpoint` — position/velocity targets
+- `/fmu/in/manual_control_input` — RC override
+- `/fmu/in/vehicle_attitude_setpoint` / `/fmu/in/vehicle_rates_setpoint`
+- `/fmu/in/vehicle_thrust_setpoint` / `/fmu/in/vehicle_torque_setpoint`
+- `/fmu/in/actuator_motors` / `/fmu/in/actuator_servos`
+- `/fmu/in/onboard_computer_status`
+- `/fmu/in/goto_setpoint`
+- `/fmu/in/rover_attitude_setpoint`, `rover_position_setpoint`, `rover_rate_setpoint`, `rover_steering_setpoint`, `rover_throttle_setpoint`
+- `/fmu/in/arming_check_reply` / `/fmu/in/arming_check_request`
+- `/fmu/in/register_ext_component_request` / `/fmu/in/unregister_ext_component`
+- `/fmu/in/config_overrides_request`
+- `/fmu/in/mode_completed`
+- `/fmu/in/vehicle_visual_odometry` / `/fmu/in/vehicle_mocap_odometry`
+- `/fmu/in/telemetry_status`
+- `/parameter_events`, `/rosout`
+
+## 6d) System Files Auto-Backup
+- **Script:** `codex-work/scripts/system_files_sync.sh`
+- **Timer:** `system_files_sync.timer` — enabled, runs on boot + once daily (24 h)
+- **Last run:** 2026-03-08 10:41 IST (exit code 0, success)
+- **Next run:** 2026-03-09 10:41 IST
+- **Crontab:** No user crontab entries (`crontab -l` → no crontab for roz)
+- **What is backed up:** Files listed in `System_files_list.txt`:
+  - All active systemd service files (mavlink-router, microxrce-agent, rc_control, tfmini, vision_streaming, ros2 nodes, block-traffic)
+  - `/etc/mavlink-router/main.conf`
+  - `/etc/vision_streaming.conf` + `.bak`
+  - `/etc/wifibroadcast.cfg` + defaults
+  - `/etc/sid.conf`, `/etc/gnutls/config`
+  - `/etc/pam.d/sshd`
+  - `/etc/drone.key`, `/etc/gs.key`
+  - `/etc/sudoers`
+  - `/boot/firmware/config.txt`
+  - `/usr/local/bin/block-traffic.sh`
+  - `/home/roz/mavlink.sh`
+  - **Not yet synced (require sudo):** `/etc/ssh/sshd_config`, `/etc/netplan/50-cloud-init.yaml`
+- **On change:** auto-commits to git with tag `sync-YYYYMMDD-HHMM` and appends summary to this doc
 
 ## 7) WFB-NG (WiFi Broadcast) Configuration
 Config file: `/etc/wifibroadcast.cfg`
