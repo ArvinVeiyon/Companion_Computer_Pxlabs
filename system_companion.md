@@ -29,8 +29,8 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Other: Optical flow node in ros2_ws
 
 **Power:**
-- Battery and voltage: (document)
-- Power distribution: (document)
+- Battery: LiPo 4S (14.8 V nominal) or 6S (22.2 V nominal) depending on build
+- Power distribution: (document PDB/ESC setup per vehicle)
 - FC power input: (document)
 - Companion power input: (document)
 
