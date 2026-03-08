@@ -1,0 +1,18 @@
+[Unit]
+Description=Block DDS multicast (239.255.0.1:7400-7500) on drone-wfb
+Wants=network-online.target
+After=network-online.target
+# If you have a WFB service, also add:
+# After=wfb-ng.service
+# Requires=wfb-ng.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/block-traffic.sh
+RemainAfterExit=yes
+ExecReload=/usr/local/bin/block-traffic.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
