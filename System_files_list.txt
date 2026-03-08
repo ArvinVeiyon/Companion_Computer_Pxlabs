@@ -11,17 +11,12 @@ etc/systemd/system/microxrce-agent.service
 etc/systemd/system/ros2_external_node_reg.service
 etc/systemd/system/vision_streaming.service
 etc/vision_streaming.conf
-etc/vision_streaming.conf.bak
 etc/sid.conf
-etc/sid.conf.save
 etc/sudoers
 etc/sudoers.d
 etc/gs.key
 etc/drone.key
 etc/default/wifibroadcast
-etc/default/wifibroadcast.dpkg-old
-etc/default/wifibroadcast.drone_bind
-etc/default/wifibroadcast.gs_bind
 etc/wifibroadcast.cfg
 etc/logrotate.d/wifibroadcast
 etc/gnutls/config
