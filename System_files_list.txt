@@ -29,4 +29,5 @@ usr/local/bin/block-traffic.sh
 etc/systemd/system/block-traffic.service
 boot/firmware/config.txt
 etc/systemd/system/ollama.service
+home/roz/.bashrc
 home/roz/.claude/projects/-home-roz/memory/MEMORY.md
