@@ -9,6 +9,8 @@ OFFLINE_MODEL="phi3:mini"
 OLLAMA_BIN="$HOME/.local/bin/ollama"
 ONLINE_CHECK_HOST="api.anthropic.com"
 ONLINE_CHECK_TIMEOUT=3
+MEMORY_FILE="$HOME/.claude/projects/-home-roz/memory/MEMORY.md"
+SYSTEM_PROMPT="You are the onboard AI assistant for the Vind-Roz drone/rover platform running on a Raspberry Pi 5. You have deep knowledge of this specific system. Here is the complete system memory:\n\n$(cat "$MEMORY_FILE" 2>/dev/null)\n\nAnswer questions about this platform accurately using the above context. Be concise and technical."
 
 # ── Check internet ────────────────────────────────────────────────────────────
 check_online() {
@@ -46,9 +48,9 @@ run_offline() {
         fi
     fi
     if [ -n "$1" ]; then
-        "$OLLAMA_BIN" run "$OFFLINE_MODEL" "$1"
+        "$OLLAMA_BIN" run "$OFFLINE_MODEL" --system "$SYSTEM_PROMPT" "$1"
     else
-        "$OLLAMA_BIN" run "$OFFLINE_MODEL"
+        "$OLLAMA_BIN" run "$OFFLINE_MODEL" --system "$SYSTEM_PROMPT"
     fi
 }
 
