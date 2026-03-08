@@ -99,7 +99,51 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Local LAN (mavlink UDP): `192.168.1.100`
 - ROS2 DDS: multicast blocked on WFB interface (block-traffic.service)
 
-## 7) Testing Checklist
+## 7) WFB-NG (WiFi Broadcast) Configuration
+Config file: `/etc/wifibroadcast.cfg`
+
+**RF Settings:**
+| Parameter | Value |
+|---|---|
+| WiFi channel | 157 (5 GHz) |
+| Region | BO |
+| TX power | 3000 (30 dBm × 100, for rtl8812eu) |
+| Bandwidth | 20 MHz |
+| MCS index | 1 |
+| STBC | 1 |
+| LDPC | 1 |
+| Short GI | disabled |
+
+**Streams (drone side):**
+| Stream | Direction | Stream ID | Service type | Peer |
+|---|---|---|---|---|
+| video | TX only | 0x00 | udp_direct_tx | listen `127.0.0.1:5602` |
+| mavlink | RX 0x10 / TX 0x90 | — | mavlink | listen `0.0.0.0:14550` |
+| tunnel | RX 0xa0 / TX 0x20 | — | tunnel | peer `10.5.5.77/24` |
+
+**FEC settings:**
+| Stream | fec_k | fec_n |
+|---|---|---|
+| video | 8 | 12 |
+| mavlink | 1 | 2 |
+| tunnel | 2 | 4 |
+
+**Tunnel (WFB IP layer):**
+- Drone interface: `drone-wfb` @ `10.5.5.87/24`
+- GS/relay interface: `gs-wfb` @ `10.5.5.77/24`
+- `default_route = False` on both sides (critical — do not change)
+
+**GS side endpoints:**
+- Video → `connect://10.5.6.50:5600`
+- MAVLink → `connect://10.5.6.50:14550`
+
+**Keys:** `drone.key` / `gs.key` (tracked in `System_files/etc/`)
+
+**Stats/API ports:**
+- Drone: stats `8002`, API `8102`
+- GS: stats `8003`, API `8103`
+
+## 8) Testing Checklist
 1. FC boots and PX4 console accessible
 2. Companion boots and services start
 3. MAVLink link stable
