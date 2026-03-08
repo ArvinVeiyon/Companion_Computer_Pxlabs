@@ -26,7 +26,7 @@ rsync -rlptD --relative --ignore-missing-args \
 
 cd "$repo_root"
 
-run_as_roz "git add System_files/ System_files_list.txt" >> "$log" 2>&1 || true
+run_as_roz "git add System_files/ System_files_list.txt scripts/px4_mavlink.py" >> "$log" 2>&1 || true
 if run_as_roz "git diff --cached --quiet"; then
   echo "[$(ts)] no changes" >> "$log"
   exit 0
