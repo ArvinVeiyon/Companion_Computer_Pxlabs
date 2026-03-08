@@ -197,6 +197,15 @@ ros2_ws: ~/ros2_ws | branch: main_dev | release: release/2026-02-22
 
 ---
 
+## [TODOS]
+→ See memory/todos.md | DO AFTER FULL OS BACKUP
+  1. Fix GS NTP clock (relay 14 days behind)
+  2. Disable drone wlan0 (interferes with WFB-NG ch157)
+  3. Increase WFB rx ring buffer on GS (EAGAIN crashes, 19 restarts)
+  4. Check GS adapter TX power (uplink severely worse than downlink)
+
+---
+
 ## [AI_STACK]
 online:  claude CLI → Claude API (full features, needs internet)
 offline: Ollama phi3:mini → local RPi5 inference (~3 tok/s)
