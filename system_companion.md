@@ -292,3 +292,7 @@ Use service to expose relay port `2222` to drone SSH:
 - M	system_companion.md
 **2026-02-23 22:55**
 - M	System_files/etc/netplan/50-cloud-init.yaml
+**2026-03-08 10:41**
+- M	System_files/etc/netplan/50-cloud-init.yaml
+- A	bootstrap.sh
+- A	install.sh
