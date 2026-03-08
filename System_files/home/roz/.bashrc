@@ -137,7 +137,13 @@ if [[ $- == *i* ]] && [[ -n "$SSH_TTY" ]] && [[ -z "$CLAUDE_ACTIVE" ]]; then
         echo "  → Native bash. Type 'claude' to start Claude, 'ai' for AI router."
         echo ""
     else
-        claude
+        if curl -s --max-time 3 --head https://api.anthropic.com > /dev/null 2>&1; then
+            claude
+        else
+            echo "  ✘ No internet — starting Phi-3 (offline mode)"
+            echo ""
+            ollama run phi3:mini
+        fi
     fi
 fi
 # ─────────────────────────────────────────────────────
