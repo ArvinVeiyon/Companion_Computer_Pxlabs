@@ -670,3 +670,5 @@ Use service to expose relay port `2222` to drone SSH:
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
 **2026-03-08 17:27**
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-03-09 00:02**
+- M	System_files/etc/wifibroadcast.cfg
