@@ -1,3 +1,7 @@
+etc/hostname
+etc/hosts
+etc/udev/rules.d/99-usb-cameras.rules
+etc/systemd/system/wifibroadcast@drone.service
 etc/ssh/sshd_config
 etc/ssh/sshd_config.d/50-cloud-init.conf
 etc/pam.d/sshd
