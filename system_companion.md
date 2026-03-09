@@ -674,9 +674,5 @@ Use service to expose relay port `2222` to drone SSH:
 - M	System_files/etc/wifibroadcast.cfg
 **2026-03-09 22:57**
 - M	System_files/etc/wifibroadcast.cfg
-**2026-03-09 SID-2**
+**2026-03-09 23:50**
 - M	System_files/etc/wifibroadcast.cfg
-  - Fix: drone/gs mavlink stream_rx/stream_tx corrected to match master.cfg convention (drone: rx=0x90 tx=0x10, gs: rx=0x10 tx=0x90)
-  - Increase video FEC: fec_n 12→14 (recovers up to 6 lost pkts/block, was 4)
-  - Increase mavlink FEC: fec_n 2→3 (recovers up to 2 lost pkts/block, was 1)
-  - Both sides (drone + relay) updated symmetrically
