@@ -413,15 +413,15 @@ Config file: `/etc/wifibroadcast.cfg`
 | Stream | Direction | Stream ID | Service type | Peer |
 |---|---|---|---|---|
 | video | TX only | 0x00 | udp_direct_tx | listen `127.0.0.1:5602` ← fed by vision_streaming ROS2 node |
-| mavlink | RX 0x10 / TX 0x90 | — | mavlink | listen `0.0.0.0:14550` ← fed by mavlink-router |
-| tunnel | RX 0xa0 / TX 0x20 | — | tunnel | peer `10.5.5.77/24` |
+| mavlink | RX 0x90 / TX 0x10 | — | mavlink | listen `0.0.0.0:14550` ← fed by mavlink-router |
+| tunnel | RX 0xa0 / TX 0x20 | — | tunnel | ifname `drone-wfb` |
 
 **FEC settings:**
-| Stream | fec_k | fec_n |
-|---|---|---|
-| video | 8 | 12 |
-| mavlink | 1 | 2 |
-| tunnel | 2 | 4 |
+| Stream | fec_k | fec_n | Max recoverable |
+|---|---|---|---|
+| video | 8 | 14 | 6 pkts/block |
+| mavlink | 1 | 3 | 2 pkts/block |
+| tunnel | 2 | 4 | 2 pkts/block |
 
 **Tunnel (WFB IP layer):**
 - Drone interface: `drone-wfb` @ `10.5.5.87/24`
@@ -674,3 +674,9 @@ Use service to expose relay port `2222` to drone SSH:
 - M	System_files/etc/wifibroadcast.cfg
 **2026-03-09 22:57**
 - M	System_files/etc/wifibroadcast.cfg
+**2026-03-09 SID-2**
+- M	System_files/etc/wifibroadcast.cfg
+  - Fix: drone/gs mavlink stream_rx/stream_tx corrected to match master.cfg convention (drone: rx=0x90 tx=0x10, gs: rx=0x10 tx=0x90)
+  - Increase video FEC: fec_n 12→14 (recovers up to 6 lost pkts/block, was 4)
+  - Increase mavlink FEC: fec_n 2→3 (recovers up to 2 lost pkts/block, was 1)
+  - Both sides (drone + relay) updated symmetrically
