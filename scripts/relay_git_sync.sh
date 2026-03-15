@@ -23,7 +23,7 @@ fi
 
 # --- Fetch new commits from relay via SSH ---
 echo "$LOG_PREFIX Fetching from relay $RELAY_HOST:$RELAY_REPO ..."
-git -C "$MIRROR_DIR" fetch "ssh://${RELAY_USER}@${RELAY_HOST}/${RELAY_REPO}" \
+git -C "$MIRROR_DIR" fetch "${RELAY_USER}@${RELAY_HOST}:/home/${RELAY_USER}/${RELAY_REPO}" \
   'refs/heads/*:refs/heads/*' \
   'refs/tags/*:refs/tags/*' \
   --update-head-ok
