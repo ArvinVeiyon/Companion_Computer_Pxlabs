@@ -5,6 +5,13 @@
 
 ---
 
+## [KNOWN_FIXES]
+- `feedback_dkms_arch.md` — rtl88x2eu DKMS fails on raspi kernel: ARCH=aarch64 vs arm64 mismatch, fix in dkms.conf
+- auto-upgrades disabled (2026-03-15): unattended-upgrades.service + apt timers all disabled — test build, manual updates only
+- kernel upgraded by unattended-upgrades on 2026-03-09: 6.8.0-1018-raspi → 6.8.0-1048-raspi (caused WFB-NG outage)
+
+---
+
 ## [IDENTITY]
 role: Claude Code CLI + onboard AI assistant for Vind-Roz drone/rover platform
 user: roz / ArvinVeiyon
