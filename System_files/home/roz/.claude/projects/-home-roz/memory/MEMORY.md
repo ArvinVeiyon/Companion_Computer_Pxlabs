@@ -9,6 +9,10 @@
 - `feedback_dkms_arch.md` — rtl88x2eu DKMS fails on raspi kernel: ARCH=aarch64 vs arm64 mismatch, fix in dkms.conf
 - auto-upgrades disabled (2026-03-15): unattended-upgrades.service + apt timers all disabled — test build, manual updates only
 - kernel upgraded by unattended-upgrades on 2026-03-09: 6.8.0-1018-raspi → 6.8.0-1048-raspi (caused WFB-NG outage)
+- tfmini.service: invalid Environment="source ..." lines removed (2026-03-15) — were silently ignored by systemd
+- vision_streaming.service: executable bit removed (2026-03-15) — no functional effect
+- relay NTP clock fixed (2026-03-15): was 21 days behind — timedatectl set-ntp corrected
+- relay isc-dhcp-server + mediamtx disabled (2026-03-15): GCS uses static IP, mediamtx dropped due to latency
 
 ---
 
@@ -182,14 +186,19 @@ hostname: vind-rly | OS: Ubuntu 24.04.2 LTS | RPi5
 ssh: vind-admin@10.5.5.77 | sudo_pass: 1987
 tunnel: port 2222 → drone 10.5.5.87:22 (autossh, ssh-tunnel-to-companion.service)
 p2p_iface: p2p-wlan0-0 @ 10.5.6.101/24
-services: wifibroadcast@gs | mediamtx (RTSP :8554, source udp://127.0.0.1:5600)
-          isc-dhcp-server (10.5.6.0/24 range .50-.99) | relay_files_sync.timer
+services: wifibroadcast@gs | mavlink.router | ssh-tunnel-to-companion | relay_files_sync.timer
+  DISABLED: mediamtx (latency), isc-dhcp-server (GCS uses static IP 10.5.6.50)
+mavlink_router: WFB-NG gs_mavlink → 127.0.0.1:14560 → mavlink-routerd
+  → QGC (10.5.6.50:14550) + antenna tracker (127.0.0.1:14551)
+  config: /etc/mavlink-router/main.conf | service: mavlink.router.service
 wfb_modes:
-  standalone: wifibroadcast@gs.service (single RPi node)
+  standalone: wifibroadcast@gs.service (single RPi node) ← CURRENT
   cluster: wifibroadcast-cluster@gs.service (+ CPE610 @ 10.5.7.102, NOT connected yet)
+  switch: stop one, start other — no other changes needed
 cluster_key: /home/vind-admin/.ssh/wfb_cluster_ed25519
 CPE610_firmware: ~/Openwrt_WFB_NG/openwrt-24.10.4-ath79-generic-tplink_cpe610-v2...
 repo: ~/codex-relay (local only, TODO push to GitHub)
+docs: system_relay.md — install runbook, mavlink-router config, antenna tracker plan
 
 ---
 
@@ -198,18 +207,23 @@ codex-work: ~/codex-work → github:ArvinVeiyon/Companion_Computer_Pxlabs
   branches: master(=main), release | tags: v1.0.0, v1.0.1, v1.0.2
   docs: system_companion.md (668 lines, living reference)
   sync: scripts/system_files_sync.sh | timer: system_files_sync.timer
+  sync_safety: armed check via tcp:127.0.0.1:5760 — skips all ops if FC armed
   memory: memory/claude_memory.md (GitHub copy of this file)
+  latest_commit: 727b44f (2026-03-15)
 codex-relay: ~/codex-relay on vind-rly → local only
+  latest_commit: 2767c9d (2026-03-15) — netplan backed up, sid.conf updated
 ros2_ws: ~/ros2_ws | branch: main_dev | release: release/2026-02-22
 
 ---
 
 ## [TODOS]
 → See memory/todos.md | DO AFTER FULL OS BACKUP
-  1. Fix GS NTP clock (relay 14 days behind)
+  1. ✅ Fix GS NTP clock — DONE 2026-03-15
   2. Disable drone wlan0 (interferes with WFB-NG ch157)
   3. Increase WFB rx ring buffer on GS (EAGAIN crashes, 19 restarts)
   4. Check GS adapter TX power (uplink severely worse than downlink)
+  5. Antenna tracker hardware — script ready on relay port 14551, hardware pending
+  6. Push codex-relay to GitHub (relay has no internet — needs companion proxy)
 
 ---
 
@@ -282,6 +296,7 @@ systemctl status <service>         # check any service
 ros2 topic list                    # list active DDS topics
 ros2 topic echo /fmu/out/battery_status  # check battery
 wfb-cli drone                      # WFB-NG link stats
+python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760  # PX4 NuttShell (close QGC console first)
 ollama list                        # check offline models
 ai                                 # start AI (auto online/offline)
 ai --offline "question"            # force local Phi-3
