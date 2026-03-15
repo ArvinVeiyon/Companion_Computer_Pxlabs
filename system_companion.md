@@ -595,128 +595,27 @@ First recorded entry:
 - Findings summary: pending (log content requires sudo access)
 - Follow-up action: re-check after service completes
 
-## 14) Relay Station (vind-rly) Install + Recovery Runbook
-Current known access path:
-- Relay reachable via WFB tunnel IP `10.5.5.77` (from drone side).
-- Relay direct LAN/Wi-Fi management IP may change during WPA/P2P setup.
-- When relay uses the same adapter for WPA/P2P and other links, temporary disconnect can happen.
+## 14) MAVLink Shell (PX4 NuttShell)
 
-Target behavior:
-- Relay acts as GS bridge for WFB-NG.
-- Ground systems (QGC or any OS) connect to relay management SSH on `:22`.
-- Ground systems connect to drone SSH through relay on `:2222`.
-
-Critical rule:
-- In `/etc/wifibroadcast.cfg` keep `[gs_tunnel] default_route = False`.
-- Do not set tunnel default route to true on relay in this mixed-network setup.
-
-### Safe implementation order
-1. Prepare base packages:
-   - `sudo apt-get update`
-   - `sudo apt-get install -y wpasupplicant wireless-tools net-tools dnsmasq openssh-server autossh socat`
-2. Configure WFB first and verify tunnel still works:
-   - Relay tunnel interface IP should be `10.5.5.77/24`.
-   - Drone side tunnel interface should be `10.5.5.87/24`.
-3. Configure relay management network (LAN/Wi-Fi) with static plan.
-4. Configure WPA/P2P only after confirming fallback access path.
-5. Add boot services (`ssh`, WFB services, relay P2P service, tunnel service).
-6. Reboot once and validate all paths.
-
-### WPA/P2P baseline
-`/etc/wpa_supplicant/wpa_supplicant.conf`
-- `ctrl_interface=/var/run/wpa_supplicant GROUP=netdev`
-- `update_config=1`
-- `device_name=VIND_RLY_P2P`
-- Optional P2P network block as required by field pairing.
-
-P2P startup commands:
-- `wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf -C /var/run/wpa_supplicant`
-- `wpa_cli -i wlan0 p2p_group_add persistent=0`
-- `ifconfig p2p-wlan0-0 10.5.6.101 netmask 255.255.255.0 up`
-- `wpa_cli -i p2p-wlan0-0 wps_pin any 1987`
-
-### Drone SSH bridge through relay
-Use service to expose relay port `2222` to drone SSH:
-- Listen: relay management IP `:2222`
-- Target: `10.5.5.87:22` (drone over WFB tunnel)
-- Recommended backend: `socat` or `autossh` systemd service with restart policy.
-
-### Validation checklist after each change
-1. `ip -br a` shows tunnel interface with `10.5.5.77/24`.
-2. `ping 10.5.5.87` succeeds from relay.
-3. `systemctl status wifibroadcast@gs.service` is active.
-4. `ss -tulpen | rg 2222` shows listener on relay.
-5. Ground station can:
-   - SSH relay: `ssh <user>@<relay_mgmt_ip> -p 22`
-   - SSH drone via relay: `ssh <user>@<relay_mgmt_ip> -p 2222`
-
-### Recovery when relay disconnects mid-setup
-1. Re-enter relay through tunnel path (current known: `10.5.5.77`).
-2. Stop temporary P2P flow if needed:
-   - `sudo pkill -f \"wpa_supplicant.*wlan0\"`
-   - `sudo ip link set p2p-wlan0-0 down || true`
-3. Restore known-good WFB config:
-   - Ensure `[gs_tunnel] default_route = False`
-   - Restart WFB:
-     - `sudo systemctl restart wifibroadcast.service wifibroadcast@gs.service`
-4. Confirm tunnel ping to drone (`10.5.5.87`) before reattempting WPA/P2P.
-
-### MAVLink Shell + Antenna Tracker — Relay Setup
-
-**Status: mavlink-router IMPLEMENTED on relay (2026-03-15)**
-
-#### MAVLink Shell (drone companion)
-- `mavlink_shell.py` uses `SERIAL_CONTROL` exclusive lock — QGC MAVLink Console must be closed first
+- `mavlink_shell.py` uses `SERIAL_CONTROL` exclusive lock — **QGC MAVLink Console must be closed first**
 - Only one client can hold the shell at a time (PX4 firmware enforcement, not mavlink-router)
 ```bash
 # Close QGC MAVLink Console first, then:
 python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
 ```
-
-#### mavlink-router on Relay (DONE)
-WFB-NG `gs_mavlink` peer redirected from direct QGC to local mavlink-router, which distributes to both QGC and antenna tracker port. No ROS2/DDS — zero tunnel overhead.
-
-**`/etc/wifibroadcast.cfg` on relay:**
-```ini
-[gs_mavlink]
-peer = 'connect://127.0.0.1:14560'   # was connect://10.5.6.50:14550
+Useful NSH commands:
+```
+nsh> dmesg                    # FC boot log
+nsh> commander status         # arming state + health
+nsh> free                     # memory usage
+nsh> top                      # tasks + CPU load
+nsh> listener sensor_combined # live IMU
+nsh> ver all                  # firmware version
 ```
 
-**`/etc/mavlink-router/main.conf` on relay:**
-```ini
-[General]
-TcpServerPort=5760
+> Relay station install/recovery runbook, mavlink-router config, and antenna tracker implementation
+> are documented in `system_relay.md` on vind-rly (`~/codex-relay/system_relay.md`).
 
-[UdpEndpoint WFB-input]
-Mode=server
-Address=0.0.0.0
-Port=14560
-
-[UdpEndpoint QGC]
-Mode=normal
-Address=10.5.6.50
-Port=14550
-
-[UdpEndpoint tracker]
-Mode=normal
-Address=127.0.0.1
-Port=14551
-```
-
-Service: `mavlink.router.service` on relay — enabled and running.
-- QGC continues to receive MAVLink on `10.5.6.50:14550` unchanged
-- Antenna tracker reads from `127.0.0.1:14551` — pure pymavlink, no ROS2/DDS, no tunnel overhead
-
-#### Antenna Tracker (TODO — hardware pending)
-- Read `GLOBAL_POSITION_INT` from `127.0.0.1:14551` on relay
-- Relay fixed GPS position → calculate bearing + elevation to drone (Haversine)
-- Output to rotator controller via GPIO or serial
-- Pure Python/pymavlink — no ROS2 (avoids DDS multicast flooding WFB tunnel)
-
-### Notes for future Codex sessions
-- Always confirm current reachable relay IP before making network changes.
-- Prefer applying one network subsystem at a time (WFB -> management LAN/Wi-Fi -> P2P -> bridge).
-- Avoid enabling competing managers on same interface during bring-up (NetworkManager vs manual wpa_supplicant).
 **2026-02-23 18:24**
 - A	Setup_Procedure_for_Relay_Station.docx
 - A	System_files/etc/sudoers.d/roz-codex
