@@ -661,57 +661,57 @@ Use service to expose relay port `2222` to drone SSH:
      - `sudo systemctl restart wifibroadcast.service wifibroadcast@gs.service`
 4. Confirm tunnel ping to drone (`10.5.5.87`) before reattempting WPA/P2P.
 
-### MAVLink Shell + Antenna Tracker — Relay Setup (Future)
+### MAVLink Shell + Antenna Tracker — Relay Setup
 
-**Goal:** Run pymavlink + mavlink-router on relay for:
-1. PX4 NSH shell access from relay (`mavlink_shell.py`)
-2. Antenna auto-rotation (read drone GPS → calculate bearing → drive directional antenna rotator)
+**Status: mavlink-router IMPLEMENTED on relay (2026-03-15)**
 
-**Relay has no internet** — all packages must be transferred from drone over WFB tunnel (`10.5.5.77`).
-
-#### Step A — Transfer mavlink-router binary (drone → relay)
+#### MAVLink Shell (drone companion)
+- `mavlink_shell.py` uses `SERIAL_CONTROL` exclusive lock — QGC MAVLink Console must be closed first
+- Only one client can hold the shell at a time (PX4 firmware enforcement, not mavlink-router)
 ```bash
-# Drone already has mavlink-router built from source
-scp /usr/local/bin/usr/bin/mavlink-routerd vind-admin@10.5.5.77:/tmp/
-ssh vind-admin@10.5.5.77 "sudo mv /tmp/mavlink-routerd /usr/local/bin/ && sudo chmod +x /usr/local/bin/mavlink-routerd"
+# Close QGC MAVLink Console first, then:
+python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
 ```
 
-#### Step B — Transfer pymavlink wheel (drone → relay)
-```bash
-# Download wheel on drone
-pip3 download pymavlink -d /tmp/pymavlink_pkg
+#### mavlink-router on Relay (DONE)
+WFB-NG `gs_mavlink` peer redirected from direct QGC to local mavlink-router, which distributes to both QGC and antenna tracker port. No ROS2/DDS — zero tunnel overhead.
 
-# Transfer to relay
-scp /tmp/pymavlink_pkg/*.whl vind-admin@10.5.5.77:/tmp/pymavlink_pkg/
-
-# Install on relay (offline)
-ssh vind-admin@10.5.5.77 "pip3 install --no-index --find-links /tmp/pymavlink_pkg pymavlink"
+**`/etc/wifibroadcast.cfg` on relay:**
+```ini
+[gs_mavlink]
+peer = 'connect://127.0.0.1:14560'   # was connect://10.5.6.50:14550
 ```
 
-#### Step C — Transfer mavlink_shell.py
-```bash
-scp ~/PX4-Autopilot/Tools/mavlink_shell.py vind-admin@10.5.5.77:~/
+**`/etc/mavlink-router/main.conf` on relay:**
+```ini
+[General]
+TcpServerPort=5760
+
+[UdpEndpoint WFB-input]
+Mode=server
+Address=0.0.0.0
+Port=14560
+
+[UdpEndpoint QGC]
+Mode=normal
+Address=10.5.6.50
+Port=14550
+
+[UdpEndpoint tracker]
+Mode=normal
+Address=127.0.0.1
+Port=14551
 ```
 
-#### Step D — Configure mavlink-router on relay
-Relay needs mavlink-router to consume WFB MAVLink stream locally and forward to both:
-- GCS (`10.5.6.50:14550`)
-- Localhost (`127.0.0.1:14550`) for antenna tracker + NSH shell
+Service: `mavlink.router.service` on relay — enabled and running.
+- QGC continues to receive MAVLink on `10.5.6.50:14550` unchanged
+- Antenna tracker reads from `127.0.0.1:14551` — pure pymavlink, no ROS2/DDS, no tunnel overhead
 
-Config: `/etc/mavlink-router/main.conf` on relay (to be written).
-
-#### Step E — NSH shell from relay
-```bash
-# Once mavlink-router is running on relay:
-python3 ~/mavlink_shell.py tcp:127.0.0.1:5760
-```
-
-#### Step F — Antenna Tracker (future)
-- Read `GLOBAL_POSITION_INT` from local MAVLink (`127.0.0.1:14550`)
-- Relay GPS = fixed known position
-- Calculate bearing + elevation to drone
-- Output to servo/rotator controller via GPIO or serial
-- Tools: pymavlink custom script or MAVProxy `antenna_tracker` module
+#### Antenna Tracker (TODO — hardware pending)
+- Read `GLOBAL_POSITION_INT` from `127.0.0.1:14551` on relay
+- Relay fixed GPS position → calculate bearing + elevation to drone (Haversine)
+- Output to rotator controller via GPIO or serial
+- Pure Python/pymavlink — no ROS2 (avoids DDS multicast flooding WFB tunnel)
 
 ### Notes for future Codex sessions
 - Always confirm current reachable relay IP before making network changes.
