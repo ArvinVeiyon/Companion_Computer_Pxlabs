@@ -265,6 +265,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
   - `/home/roz/mavlink.sh`
   - **Not yet synced (require sudo):** `/etc/ssh/sshd_config`, `/etc/netplan/50-cloud-init.yaml`
 - **On change:** auto-commits to git with tag `sync-YYYYMMDD-HHMM` and appends summary to this doc
+- **Flight safety:** checks FC arming state via MAVLink (`tcp:127.0.0.1:5760`) before syncing — skips entirely if drone is armed. Falls back to DISARMED (proceeds) if FC unreachable. Does not interfere with QGC (QGC uses UDP 14550, check uses TCP 5760, read-only)
 
 ## 6e) Rebuild & Setup Guide
 > Follow this section to reconstruct the companion computer from scratch after OS loss.
@@ -542,6 +543,7 @@ Auto sync uses:
 
 Behavior:
 - On boot and once per day, syncs originals into `System_files`.
+- **Armed check first:** reads FC HEARTBEAT via `tcp:127.0.0.1:5760` — skips all operations if drone is armed. Safe fallback to DISARMED if FC unreachable.
 - If changes exist, appends a change summary to this file and creates a git commit.
 - Creates an annotated tag `sync-YYYYMMDD-HHMM` with the same change summary.
 
