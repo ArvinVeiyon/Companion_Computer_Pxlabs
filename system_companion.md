@@ -665,3 +665,5 @@ nsh> ver all                  # firmware version
 **2026-03-15 17:19**
 - M	System_files/etc/mavlink-router/main.conf
 - M	System_files/etc/wifibroadcast.cfg
+**2026-03-15 19:09**
+- M	System_files/etc/mavlink-router/main.conf
