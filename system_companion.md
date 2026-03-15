@@ -761,3 +761,6 @@ python3 ~/mavlink_shell.py tcp:127.0.0.1:5760
 - M	System_files/etc/mavlink-router/main.conf
 - M	System_files/etc/vision_streaming.conf
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-03-15 17:19**
+- M	System_files/etc/mavlink-router/main.conf
+- M	System_files/etc/wifibroadcast.cfg
