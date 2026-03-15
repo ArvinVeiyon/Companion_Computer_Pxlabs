@@ -20,6 +20,26 @@ run_as_roz() {
 
 echo "[$(ts)] sync start" >> "$log"
 
+# --- Safety check: abort if drone is armed ---
+armed=$(python3 -c "
+from pymavlink import mavutil
+try:
+    m = mavutil.mavlink_connection('tcp:127.0.0.1:5760')
+    m.wait_heartbeat(timeout=3)
+    msg = m.recv_match(type='HEARTBEAT', blocking=True, timeout=3)
+    if msg and (msg.base_mode & 0x80):
+        print('ARMED')
+    else:
+        print('DISARMED')
+except:
+    print('DISARMED')
+" 2>/dev/null)
+
+if [ "$armed" = "ARMED" ]; then
+  echo "[$(ts)] drone is ARMED — skipping sync for flight safety" >> "$log"
+  exit 0
+fi
+
 rsync -rlptD --relative --ignore-missing-args \
   --chown=roz:roz \
   --files-from="$list" / "$dest" >> "$log" 2>&1
