@@ -86,7 +86,7 @@ LD_LIBRARY_PATH: /opt/ros/jazzy/lib:/usr/local/lib:/usr/lib:/lib
 ---
 
 ## [VIDEO_PIPELINE]
-/dev/video0 (primary, 1280x720 MJPEG, 3000K) ─┐
+/dev/video0 (primary, 1280x720 MJPEG, 2000K) ─┐
                                                 ├─► FFmpeg libx264 ultrafast yuv420p
 /dev/video2 (secondary, 1280x720 MJPEG, 2000K)─┘    PiP 240x180 bottom-right
   → RTP 127.0.0.1:5602 → WFB-NG drone_video stream → GS 10.5.6.50:5600
