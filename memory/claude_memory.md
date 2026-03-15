@@ -81,16 +81,22 @@ block-traffic.service | system_files_sync.timer | wifibroadcast@drone.service
   - Same sync structure as codex-work
 
 ### Role & Services
-- WFB-NG GS: wifibroadcast@gs.service (gs-wfb @ 10.5.5.77)
-- SSH tunnel: ssh-tunnel-to-companion.service (autossh, port 2222 → 10.5.5.87:22)
-- Video relay: mediamtx.service (RTSP, ~/Rtps_Server/mediamtx.yml, port 8554)
-- DHCP: isc-dhcp-server.service (10.5.6.0/24, range .50–.99)
-- Sync timer: relay_files_sync.timer (active)
+- WFB-NG GS: wifibroadcast@gs.service (gs-wfb @ 10.5.5.77) ← ACTIVE
+- MAVLink router: mavlink.router.service → QGC (10.5.6.50:14550) + tracker (127.0.0.1:14551) ← ACTIVE
+- SSH tunnel: ssh-tunnel-to-companion.service (autossh, port 2222 → 10.5.5.87:22) ← ACTIVE
+- Sync timer: relay_files_sync.timer ← ACTIVE
+- mediamtx.service — DISABLED 2026-03-15 (latency issues)
+- isc-dhcp-server.service — DISABLED 2026-03-15 (GCS uses static IP 10.5.6.50)
+
+### WFB-NG Control Tool
+- **`/usr/local/sbin/wfb-rlyctl`** — relay control CLI (sudoers: /etc/sudoers.d/wfb-rlyctl)
+- ENV file: /etc/default/wifibroadcast (manages WFB_NICS)
 
 ### WFB-NG Cluster Mode
-Two modes — switch between them:
-- **Standalone:** `sudo systemctl stop wifibroadcast-cluster@gs && sudo systemctl start wifibroadcast@gs`
-- **Cluster:** `sudo systemctl stop wifibroadcast@gs && sudo systemctl start wifibroadcast-cluster@gs`
+Two modes — use wfb-rlyctl to switch:
+- **Standalone (CURRENT):** `sudo wfb-rlyctl use-standalone`
+- **Cluster:** `sudo wfb-rlyctl use-cluster`
+- `wfb-rlyctl status` — show current mode + service states
 - Cluster adds OpenWrt CPE610 node at 10.5.7.102 (phy0-mon0)
 - SSH key for cluster: /home/vind-admin/.ssh/wfb_cluster_ed25519
 - Firmware + packages in ~/Openwrt_WFB_NG/
