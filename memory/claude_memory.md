@@ -72,7 +72,6 @@ block-traffic.service | system_files_sync.timer | wifibroadcast@drone.service
 
 ### Access
 - SSH: `ssh vind-admin@10.5.5.77` (key installed from companion)
-- sudo password: `1987`
 - Port 2222 on relay → drone companion SSH (autossh tunnel)
 
 ### Key Repo
