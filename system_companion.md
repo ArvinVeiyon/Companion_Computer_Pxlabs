@@ -353,7 +353,7 @@ sudo apt install v4l-utils
 
 ### Step 8 — Install Python Dependencies
 ```bash
-pip3 install pyserial smbus2 numpy
+pip3 install pyserial smbus2 numpy pymavlink
 # opencv-python if optical_flow_node is used:
 pip3 install opencv-python
 ```
@@ -382,6 +382,16 @@ ros2 topic list
 
 # Check WFB-NG
 systemctl status wifibroadcast@drone.service
+
+# PX4 NuttShell (NSH) — FC health / boot log via MAVLink
+# NOTE: uses TCP:5760 (not UDP:14550, that port is bound by mavlink-router)
+python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
+# Useful NSH commands:
+#   dmesg              → FC kernel boot log
+#   commander status   → arming/mode/health summary
+#   free               → FC memory usage
+#   top                → FC task list + CPU usage
+#   listener sensor_combined   → live IMU data
 ```
 
 ### Key Source Versions (pinned commits)
@@ -457,6 +467,23 @@ Config file: `/etc/wifibroadcast.cfg`
 
 **Sensor data missing:**
 - Verify wiring and PX4 parameters
+
+**FC Health Check via PX4 NSH (NuttShell):**
+```bash
+# Connect to PX4 shell over MAVLink (requires mavlink-router running)
+python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
+```
+- Uses TCP:5760 — do NOT use UDP:14550 (port bound by mavlink-router)
+- pymavlink v2.4.42 installed at `/usr/local/lib/python3.12/dist-packages`
+- Tool: `~/PX4-Autopilot/Tools/mavlink_shell.py`
+```
+nsh> dmesg                    # FC boot log
+nsh> commander status         # arming state, health flags
+nsh> free                     # heap/stack memory
+nsh> top                      # tasks + CPU load
+nsh> listener sensor_combined # live IMU
+nsh> ver all                  # firmware version info
+```
 
 ## 9) Notes / Decisions Log
 - 
@@ -633,6 +660,58 @@ Use service to expose relay port `2222` to drone SSH:
    - Restart WFB:
      - `sudo systemctl restart wifibroadcast.service wifibroadcast@gs.service`
 4. Confirm tunnel ping to drone (`10.5.5.87`) before reattempting WPA/P2P.
+
+### MAVLink Shell + Antenna Tracker — Relay Setup (Future)
+
+**Goal:** Run pymavlink + mavlink-router on relay for:
+1. PX4 NSH shell access from relay (`mavlink_shell.py`)
+2. Antenna auto-rotation (read drone GPS → calculate bearing → drive directional antenna rotator)
+
+**Relay has no internet** — all packages must be transferred from drone over WFB tunnel (`10.5.5.77`).
+
+#### Step A — Transfer mavlink-router binary (drone → relay)
+```bash
+# Drone already has mavlink-router built from source
+scp /usr/local/bin/usr/bin/mavlink-routerd vind-admin@10.5.5.77:/tmp/
+ssh vind-admin@10.5.5.77 "sudo mv /tmp/mavlink-routerd /usr/local/bin/ && sudo chmod +x /usr/local/bin/mavlink-routerd"
+```
+
+#### Step B — Transfer pymavlink wheel (drone → relay)
+```bash
+# Download wheel on drone
+pip3 download pymavlink -d /tmp/pymavlink_pkg
+
+# Transfer to relay
+scp /tmp/pymavlink_pkg/*.whl vind-admin@10.5.5.77:/tmp/pymavlink_pkg/
+
+# Install on relay (offline)
+ssh vind-admin@10.5.5.77 "pip3 install --no-index --find-links /tmp/pymavlink_pkg pymavlink"
+```
+
+#### Step C — Transfer mavlink_shell.py
+```bash
+scp ~/PX4-Autopilot/Tools/mavlink_shell.py vind-admin@10.5.5.77:~/
+```
+
+#### Step D — Configure mavlink-router on relay
+Relay needs mavlink-router to consume WFB MAVLink stream locally and forward to both:
+- GCS (`10.5.6.50:14550`)
+- Localhost (`127.0.0.1:14550`) for antenna tracker + NSH shell
+
+Config: `/etc/mavlink-router/main.conf` on relay (to be written).
+
+#### Step E — NSH shell from relay
+```bash
+# Once mavlink-router is running on relay:
+python3 ~/mavlink_shell.py tcp:127.0.0.1:5760
+```
+
+#### Step F — Antenna Tracker (future)
+- Read `GLOBAL_POSITION_INT` from local MAVLink (`127.0.0.1:14550`)
+- Relay GPS = fixed known position
+- Calculate bearing + elevation to drone
+- Output to servo/rotator controller via GPIO or serial
+- Tools: pymavlink custom script or MAVProxy `antenna_tracker` module
 
 ### Notes for future Codex sessions
 - Always confirm current reachable relay IP before making network changes.
