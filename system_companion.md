@@ -667,3 +667,5 @@ nsh> ver all                  # firmware version
 - M	System_files/etc/wifibroadcast.cfg
 **2026-03-15 19:09**
 - M	System_files/etc/mavlink-router/main.conf
+**2026-03-17 00:59**
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md

@@ -5,6 +5,13 @@
 
 ---
 
+## [MEMORY_FILES]
+- `feedback_dkms_arch.md`       — rtl88x2eu DKMS ARCH fix
+- `reference_wfb_rlyctl.md`     — wfb-rlyctl relay control tool (location, commands, all managed files)
+- `todos.md`                    — platform TODO list
+
+---
+
 ## [KNOWN_FIXES]
 - `feedback_dkms_arch.md` — rtl88x2eu DKMS fails on raspi kernel: ARCH=aarch64 vs arm64 mismatch, fix in dkms.conf
 - auto-upgrades disabled (2026-03-15): unattended-upgrades.service + apt timers all disabled — test build, manual updates only
@@ -194,7 +201,14 @@ mavlink_router: WFB-NG gs_mavlink → 127.0.0.1:14560 → mavlink-routerd
 wfb_modes:
   standalone: wifibroadcast@gs.service (single RPi node) ← CURRENT
   cluster: wifibroadcast-cluster@gs.service (+ CPE610 @ 10.5.7.102, NOT connected yet)
-  switch: stop one, start other — no other changes needed
+  switch_tool: sudo wfb-rlyctl use-standalone | sudo wfb-rlyctl use-cluster
+relay_files:
+  /usr/local/sbin/wfb-rlyctl        → WFB-NG mode/NIC control CLI (see reference_wfb_rlyctl.md)
+  /etc/sudoers.d/wfb-rlyctl         → passwordless sudo scope for wfb-rlyctl
+  /etc/default/wifibroadcast        → WFB_NICS env var (managed by wfb-rlyctl set-nics)
+  /etc/wifibroadcast.cfg            → main WFB-NG config
+  /etc/mavlink-router/main.conf     → mavlink-router config
+  /home/vind-admin/.ssh/wfb_cluster_ed25519 → cluster auth key
 cluster_key: /home/vind-admin/.ssh/wfb_cluster_ed25519
 CPE610_firmware: ~/Openwrt_WFB_NG/openwrt-24.10.4-ath79-generic-tplink_cpe610-v2...
 repo: ~/codex-relay (local only, TODO push to GitHub)
@@ -210,8 +224,10 @@ codex-work: ~/codex-work → github:ArvinVeiyon/Companion_Computer_Pxlabs
   sync_safety: armed check via tcp:127.0.0.1:5760 — skips all ops if FC armed
   memory: memory/claude_memory.md (GitHub copy of this file)
   latest_commit: 727b44f (2026-03-15)
-codex-relay: ~/codex-relay on vind-rly → local only
-  latest_commit: 2767c9d (2026-03-15) — netplan backed up, sid.conf updated
+codex-relay: ~/codex-relay on vind-rly → github:ArvinVeiyon/Relay_Station_Pxlabs
+  mirror: ~/codex-relay-mirror on companion (SSH clone, used for push)
+  sync: bash ~/codex-work/scripts/relay_git_sync.sh (manual, periodic)
+  latest_commit: 0d5c403 (2026-03-15) — wfb-rlyctl added to docs + sync list
 ros2_ws: ~/ros2_ws | branch: main_dev | release: release/2026-02-22
 
 ---
@@ -223,7 +239,7 @@ ros2_ws: ~/ros2_ws | branch: main_dev | release: release/2026-02-22
   3. Increase WFB rx ring buffer on GS (EAGAIN crashes, 19 restarts)
   4. Check GS adapter TX power (uplink severely worse than downlink)
   5. Antenna tracker hardware — script ready on relay port 14551, hardware pending
-  6. Push codex-relay to GitHub (relay has no internet — needs companion proxy)
+  6. ✅ Push codex-relay to GitHub — DONE 2026-03-15 (via companion mirror + relay_git_sync.sh)
 
 ---
 
@@ -295,7 +311,13 @@ offline_AI_fail: check ollama.service active, `ollama list` shows phi3:mini
 systemctl status <service>         # check any service
 ros2 topic list                    # list active DDS topics
 ros2 topic echo /fmu/out/battery_status  # check battery
-wfb-cli drone                      # WFB-NG link stats
+wfb-cli drone                      # WFB-NG link stats (on drone)
+# ON RELAY (ssh vind-admin@10.5.5.77):
+wfb-rlyctl status                  # show WFB mode, ENV, service states
+sudo wfb-rlyctl use-standalone     # switch to standalone mode
+sudo wfb-rlyctl use-cluster        # switch to cluster mode
+sudo wfb-rlyctl set-nics <iface>   # update WFB_NICS + restart
+wfb-rlyctl list-nics               # show available wireless ifaces
 python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760  # PX4 NuttShell (close QGC console first)
 ollama list                        # check offline models
 ai                                 # start AI (auto online/offline)
