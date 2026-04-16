@@ -1,10 +1,11 @@
 # Vind-Roz Platform Memory
 > Compressed semantic memory. Auto-loaded each session. Also Phi-3 system prompt (offline AI).
-> Backup: codex-work/memory/ → GitHub ArvinVeiyon/Companion_Computer_Pxlabs
+> Live: ~/.claude/projects/-home-roz/memory/ | Backup: ~/codex-work/memory/ → GitHub ArvinVeiyon/Companion_Computer_Pxlabs
 
 ---
 
 ## [MEMORY_FILES]
+All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/codex-work/memory/
 - `feedback_dkms_arch.md`  — rtl88x2eu DKMS ARCH fix
 - `reference_wfb_rlyctl.md` — wfb-rlyctl relay control tool (all managed files)
 - `todos.md`               — platform TODO list (WFB fixes, post OS backup)
