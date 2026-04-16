@@ -34,6 +34,14 @@ hw: VL53L1X ToF (I2C bus 1, addr 0x29, long-distance mode 3)
 pub: /fmu/in/obstacle_distance @ 10Hz
 coverage: front sector only — indices 0–5 of 72-element array (5° increment, 20–400cm)
 
+## ldlidar_stl_ros2_node
+pkg: ldlidar_stl_ros2 | src: ros2_ws/src/ldlidar_stl_ros2/
+service: ldlidar.service | node name: LD19
+hw: /dev/ttyAMA3 @ 230400 | pub: /scan (LaserScan) ~10Hz | TF: base_link→base_laser (0.18m)
+FIXES (both required on this platform):
+  1. Add `#include <pthread.h>` to ldlidar_driver/src/logger/log_module.cpp (GCC 14+ build fail)
+  2. Hardcode `/dev/ttyAMA3` in launch/ld19.launch.py line 35 — CLI port_name arg silently ignored
+
 ## rov_collision_stop
 src: ros2_ws/src/rov_collision_stop/src/main.cpp (C++)
 function: emergency collision stop for rover mode
