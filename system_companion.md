@@ -189,8 +189,9 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 - **Hardware:** LDRobot STL-19 360° LiDAR on `/dev/ttyAMA3` @ 230400 baud
 - **Wiring:** Lidar TX → RPi Pin 21 (GPIO9 RX only). No PWM motor control — motor runs at fixed speed.
 - **Publishes:** `/scan` (sensor_msgs/LaserScan) | TF: `base_link` → `base_laser`
-- **Launch:** `ld19.launch.py port_name:=/dev/ttyAMA3`
-- **Build fix:** Added `#include <pthread.h>` to `ldlidar_driver/src/logger/log_module.cpp` (missing in upstream, causes build failure on GCC 14+)
+- **Launch:** `ld19.launch.py` — port hardcoded in launch file (CLI `port_name:=` arg is ignored by upstream launch file)
+- **Build fix 1 (2026-04-17):** Added `#include <pthread.h>` to `ldlidar_driver/src/logger/log_module.cpp` (missing in upstream, causes build failure on GCC 14+)
+- **Launch fix (2026-04-17):** Changed `port_name` in `launch/ld19.launch.py` line 35 from `/dev/ttyUSB0` → `/dev/ttyAMA3` (upstream default is wrong, CLI override silently ignored)
 
 ### optical_flow_node (`optical_flow` package)
 - **Node name:** `optical_flow_node`
