@@ -76,8 +76,9 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 | ttyAMA4  | UART4  | GPIO12  | GPIO13  | Pin 32  | Pin 33  | FC uXRCE-DDS → MicroXRCEAgent    | 921600 |
 | ttyAMA1  | UART1  | GPIO0   | GPIO1   | Pin 27  | Pin 28  | FREE (needs dtoverlay=uart1-pi5) | —      |
 | ttyAMA3  | UART3  | GPIO8   | GPIO9   | Pin 24  | Pin 21  | FREE (needs dtoverlay=uart3-pi5) | —      |
-| ttyAMA10 | UART10 | —       | —       | —       | —       | Internal SoC only (BT freed)     | —      |
+| ttyAMA10 | UART10 | —       | —       | —       | —       | Internal SoC + 3-pin JST debug header (BT freed) | 115200 |
 Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart4 only
+> **Debug UART:** `ttyAMA10` = `soc/serial@7d001000` = 3-pin JST connector on RPi5 board edge. Used for U-Boot/kernel console at 115200. Not for peripherals.
 
 ## 5) PX4 Configuration
 **MAVLink (via mavlink-router `/etc/mavlink-router/main.conf`):**
