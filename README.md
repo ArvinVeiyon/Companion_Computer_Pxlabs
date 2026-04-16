@@ -71,3 +71,17 @@ python3 ~/codex-work/scripts/px4_mavlink.py shell <cmd>   # run NuttShell comman
 ```
 
 Requires: `pymavlink` (already installed)
+
+## Release History
+
+| Tag | Branch | Commit | Date | Key Changes |
+|-----|--------|--------|------|-------------|
+| `v1.0.0` | `release` | `36cd704` | 2026-03-08 | Initial release — README, ROS2 nodes, topics, camera switch, auto-backup |
+| `v1.0.1` | `release` | `422f4d2` | 2026-03-08 | Clean up sync list |
+| `v1.0.2` | `release` | `1de24c4` | 2026-03-08 | bump v1.3.7 — WFB-NG diagnostics logged |
+| `v1.0.3` | `release` | `ea9a5c9` | 2026-03-09 | fix wifibroadcast.cfg, mavlink_sys_id |
+| `v1.0.4` | `release` | `0ebf862` | 2026-03-09 | add px4_mavlink.py: PX4 MAVLink utility |
+| `v1.0.5` | `release` | `74f3c48` | 2026-03-09 | auto-sync: include px4_mavlink.py |
+| `v1.0.6` | `release` | `6bf1749` | 2026-03-09 | wfb-ng: fix mavlink streams, increase FEC |
+| `v1.0.7` | `release` | `b1236a9` | 2026-03-15 | Security: replace hardcoded PAT with SSH URL; remove sudo password from docs |
+| `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel 157→161; MEMORY.md + system_companion.md updated |

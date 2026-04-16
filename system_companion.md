@@ -671,3 +671,19 @@ nsh> ver all                  # firmware version
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
 **2026-03-19 21:44**
 - M	System_files/etc/wifibroadcast.cfg
+
+---
+
+## 18) Release History
+
+| Tag | Branch | Commit | Date | Key Changes |
+|-----|--------|--------|------|-------------|
+| `v1.0.0` | `release` | `36cd704` | 2026-03-08 | Initial release — README, all ROS2 nodes documented, live topics, camera switch, auto-backup |
+| `v1.0.1` | `release` | `422f4d2` | 2026-03-08 | Clean up sync list: remove .bak, .dpkg-old, drone_bind, gs_bind variants |
+| `v1.0.2` | `release` | `1de24c4` | 2026-03-08 | bump system version to v1.3.7 — WFB-NG diagnostics logged |
+| `v1.0.3` | `release` | `ea9a5c9` | 2026-03-09 | fix wifibroadcast.cfg: revert experimental changes, fix mavlink_sys_id |
+| `v1.0.4` | `release` | `0ebf862` | 2026-03-09 | add px4_mavlink.py: PX4 MAVLink utility via mavlink-router TCP:5760 |
+| `v1.0.5` | `release` | `74f3c48` | 2026-03-09 | auto-sync: include scripts/px4_mavlink.py in git add step |
+| `v1.0.6` | `release` | `6bf1749` | 2026-03-09 | wfb-ng: fix mavlink streams, increase video+mavlink FEC (SID-2 2026-03-09) |
+| `v1.0.7` | `release` | `b1236a9` | 2026-03-15 | Security: replace hardcoded PAT with SSH URL in relay_git_sync.sh; remove sudo password from docs |
+| `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel updated 157→161; system_companion.md + MEMORY.md synced |
