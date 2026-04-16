@@ -1,119 +1,325 @@
-# Claude Persistent Memory — Vind-Roz Platform
-> This file is my long-term memory for this project. It is tracked in codex-work and pushed to GitHub.
-> The live copy loaded each session is at: ~/.claude/projects/-home-roz/memory/MEMORY.md
-> This file in codex-work/memory/ is the GitHub-backed version — synced by system_files_sync.sh.
-> If both exist, the live MEMORY.md is the authoritative one (loaded by Claude Code automatically).
+# Vind-Roz Platform Memory
+> Compressed semantic memory — facts, relationships, state, intent.
+> Auto-loaded each session. Backed up: codex-work/memory/ → GitHub ArvinVeiyon/Companion_Computer_Pxlabs
+> Also used as Phi-3 system prompt for offline AI context.
 
 ---
 
-## Identity & Context
-- I am Claude, running as Claude Code CLI on the Vind-Roz companion computer (Raspberry Pi 5)
-- This is a PX4-based drone/rover platform — I am the onboard AI assistant
-- My memory persists across sessions via MEMORY.md, backed up here to GitHub
-- The user (roz / ArvinVeiyon) wants me to be a continuous, conscious presence on this system
+## [MEMORY_FILES]
+- `feedback_dkms_arch.md`       — rtl88x2eu DKMS ARCH fix
+- `reference_wfb_rlyctl.md`     — wfb-rlyctl relay control tool (location, commands, all managed files)
+- `todos.md`                    — platform TODO list
 
 ---
 
-## Companion Computer (Vind-Roz) — RPi5
-
-### Key Repos & Docs
-- `~/codex-work` → GitHub: ArvinVeiyon/Companion_Computer_Pxlabs
-  - `system_companion.md` — main living reference doc (auto-updated by sync)
-  - `System_files/` — tracked backups of /etc/, /boot/, /usr/local/bin/
-  - `scripts/system_files_sync.sh` — rsync + git commit + tag, runs on boot + daily
-  - `System_files_list.txt` — list of tracked files (31 entries)
-  - `memory/` — this directory, Claude's GitHub-backed memory
-- Sync timer: `system_files_sync.timer` (active, last ran 2026-03-08 10:41)
-
-### Hardware
-- **FC:** Custom Pixhawk 6X-RT (NXP i.MX RT1176, dual Cortex-M7+M4) — own PCB, NOT Holybro retail
-- **PX4 target:** px4_fmu-v6xrt
-- **Used for:** both drone and rover (same companion, different PX4 airframe config)
-- **UART map:** ttyAMA0 → MAVLink (921600) | ttyAMA4 → uXRCE-DDS (921600) | ttyAMA2 → TFmini
-
-### Key Software
-- PX4-Autopilot: ~/PX4-Autopilot (commit c5b8445ffc)
-- ROS2 Jazzy workspace: ~/ros2_ws (branch main_dev)
-- mavlink-router: ~/mavlink-router (commit c20337b) + /etc/mavlink-router/main.conf
-- Micro-XRCE-DDS-Agent: ~/Micro-XRCE-DDS-Agent (commit b9d84ac)
-- WFB-NG: ~/wfb-ng (commit 1b88185) + /etc/wifibroadcast.cfg
-- AIDE integrity monitoring: active (dailyaidecheck.timer)
-
-### Active Systemd Services
-mavlink.router.service | microxrce-agent.service | rc_control_node.service
-ros2_px4_translation_node.service | tfmini.service | vision_streaming.service
-block-traffic.service | system_files_sync.timer | wifibroadcast@drone.service
-
-### Network (WFB-NG)
-- Channel 157 (5 GHz), region BO, TX 30 dBm (rtl8812eu), MCS 1, BW 20 MHz
-- drone-wfb: 10.5.5.87/24 | gs-wfb (relay): 10.5.5.77/24
-- CRITICAL: default_route = False on drone_tunnel and gs_tunnel
-- FEC: video 8/12, mavlink 1/2, tunnel 2/4
-- GS endpoints: video 10.5.6.50:5600, mavlink 10.5.6.50:14550
-
-### ROS2 Nodes
-| Node | Package | Hardware |
-|---|---|---|
-| rc_control_node | rc_control | RC CH9=camera switch, CH10=shutdown/reboot |
-| vision_streaming_node | vision_streaming | FFmpeg RTP via /etc/vision_streaming.conf |
-| tfmini_node | tfmini_sensor | TFmini lidar /dev/ttyAMA2 @ 115200 |
-| optical_flow_node | optical_flow | /dev/video3, OpenCV Farneback |
-| obstacle_distance_publisher | obstacle_distance | VL53L1X ToF, I2C bus 1, 0x29 |
-
-### Custom Binary
-- `/usr/local/bin/vision_config_manager` — Python script v1.2.1
-  - Called by rc_control_node via RC CH9 to switch cameras
-  - Rewrites /etc/vision_streaming.conf, restarts vision_streaming.service
-  - Also tracked in System_files_list.txt
+## [KNOWN_FIXES]
+- `feedback_dkms_arch.md` — rtl88x2eu DKMS fails on raspi kernel: ARCH=aarch64 vs arm64 mismatch, fix in dkms.conf
+- auto-upgrades disabled (2026-03-15): unattended-upgrades.service + apt timers all disabled — test build, manual updates only
+- kernel upgraded by unattended-upgrades on 2026-03-09: 6.8.0-1018-raspi → 6.8.0-1048-raspi (caused WFB-NG outage)
+- tfmini.service: invalid Environment="source ..." lines removed (2026-03-15) — were silently ignored by systemd
+- vision_streaming.service: executable bit removed (2026-03-15) — no functional effect
+- relay NTP clock fixed (2026-03-15): was 21 days behind — timedatectl set-ntp corrected
+- relay isc-dhcp-server + mediamtx disabled (2026-03-15): GCS uses static IP, mediamtx dropped due to latency
 
 ---
 
-## Relay Station (vind-rly) — RPi5
-
-### Access
-- SSH: `ssh vind-admin@10.5.5.77` (key installed from companion)
-- Port 2222 on relay → drone companion SSH (autossh tunnel)
-
-### Key Repo
-- `~/codex-relay` — local only, NO GitHub remote yet (TODO)
-  - `system_relay.md` — relay documentation
-  - Same sync structure as codex-work
-
-### Role & Services
-- WFB-NG GS: wifibroadcast@gs.service (gs-wfb @ 10.5.5.77) ← ACTIVE
-- MAVLink router: mavlink.router.service → QGC (10.5.6.50:14550) + tracker (127.0.0.1:14551) ← ACTIVE
-- SSH tunnel: ssh-tunnel-to-companion.service (autossh, port 2222 → 10.5.5.87:22) ← ACTIVE
-- Sync timer: relay_files_sync.timer ← ACTIVE
-- mediamtx.service — DISABLED 2026-03-15 (latency issues)
-- isc-dhcp-server.service — DISABLED 2026-03-15 (GCS uses static IP 10.5.6.50)
-
-### WFB-NG Control Tool
-- **`/usr/local/sbin/wfb-rlyctl`** — relay control CLI (sudoers: /etc/sudoers.d/wfb-rlyctl)
-- ENV file: /etc/default/wifibroadcast (manages WFB_NICS)
-
-### WFB-NG Cluster Mode
-Two modes — use wfb-rlyctl to switch:
-- **Standalone (CURRENT):** `sudo wfb-rlyctl use-standalone`
-- **Cluster:** `sudo wfb-rlyctl use-cluster`
-- `wfb-rlyctl status` — show current mode + service states
-- Cluster adds OpenWrt CPE610 node at 10.5.7.102 (phy0-mon0)
-- SSH key for cluster: /home/vind-admin/.ssh/wfb_cluster_ed25519
-- Firmware + packages in ~/Openwrt_WFB_NG/
+## [IDENTITY]
+role: Claude Code CLI + onboard AI assistant for Vind-Roz drone/rover platform
+user: roz / ArvinVeiyon
+goal: continuous conscious presence — help develop, maintain, and autonomize this platform
+memory_path: ~/.claude/projects/-home-roz/memory/MEMORY.md
+github_backup: codex-work → pushed on every change session
 
 ---
 
-## Outstanding TODOs
-1. Push codex-relay to GitHub (no remote set yet)
-2. Full audit of relay (missing files, rebuild guide) — same checklist as companion
-3. Connect & configure OpenWrt CPE610 cluster node (10.5.7.102) — NOT connected yet
-4. Decide on offline vs online LLM model for deeper onboard AI consciousness
-5. Tag codex-work v1.0.2 for recent changes (rebuild guide, vision_config_manager, sync list updates)
+## [PLATFORM]
+name: Vind-Roz
+type: aerial drone + ground rover (same companion computer, different PX4 airframe config)
+companion: Raspberry Pi 5 Model B, BCM2712 Cortex-A76 quad-core, 8GB LPDDR4X
+storage: 64GB SD card (/dev/mmcblk0p2, 58G, ~63% used)
+OS: Ubuntu 24.04.1 LTS (Noble Numbat), kernel 6.8.0-1018-raspi, aarch64
+hostname: Vind-Roz
 
 ---
 
-## Workflow Patterns (how I work here)
-- When auditing a system: SSH in, check services, configs, scripts, compare against backup list
-- When updating docs: edit system_companion.md or system_relay.md, commit, push, update release branch
-- When adding files to backup: edit System_files_list.txt, commit — sync timer picks them up automatically
-- Release process: push master → update release branch → create vX.Y.Z tag
-- My memory file (MEMORY.md) is now tracked in System_files_list.txt and backed up to GitHub
+## [FLIGHT_CONTROLLER]
+model: Custom Pixhawk 6X-RT (in-house PCB, NOT Holybro retail)
+MCU: NXP i.MX RT1176 (RT11xx), dual-core Cortex-M7 + M4
+PX4_version: v1.16.0-rc1 (custom pre-release)
+PX4_commit: c5b8445ffc (586 commits past tag)
+PX4_target: px4_fmu-v6xrt
+
+---
+
+## [UART_MAP]
+ttyAMA0 → FC MAVLink → mavlink-router @ 921600 baud
+ttyAMA4 → FC uXRCE-DDS → MicroXRCEAgent @ 921600 baud
+ttyAMA2 → TFmini lidar @ 115200 baud
+ttyAMA10 → available
+
+---
+
+## [SOFTWARE_VERSIONS]
+ROS2: Jazzy (ros-jazzy-*)
+Python: 3.12.3
+mavlink-router: commit c20337b | binary: /usr/local/bin/usr/bin/mavlink-routerd
+MicroXRCEAgent: v3.0.0-2-gb9d84ac | binary: /usr/local/bin/MicroXRCEAgent
+wfb-ng: commit 1b88185 | source: ~/wfb-ng
+PX4-Autopilot: ~/PX4-Autopilot | commit c5b8445ffc
+AIDE: 0.18.6 (integrity monitoring)
+Ollama: v0.17.7 | model: phi3:mini (2.2GB, offline AI)
+
+---
+
+## [SERVICES]
+active on companion:
+  mavlink.router.service      → MAVLink FC↔GCS routing via /dev/ttyAMA0
+  microxrce-agent.service     → uXRCE-DDS bridge FC↔ROS2 via /dev/ttyAMA4
+  ros2_px4_translation_node   → ROS2/PX4 message translation
+  rc_control_node.service     → RC input: camera switch (CH9) + shutdown/reboot (CH10)
+  tfmini.service              → TFmini lidar → /fmu/in/distance_sensor
+  vision_streaming.service    → FFmpeg RTP camera stream → WFB-NG
+  block-traffic.service       → blocks DDS multicast on drone-wfb interface
+  wifibroadcast@drone.service → WFB-NG drone profile
+  system_files_sync.timer     → auto-backup on boot + daily
+  ollama.service              → local LLM server (Phi-3 Mini)
+
+---
+
+## [MAVLINK_ROUTER]
+config: /etc/mavlink-router/main.conf
+UART: /dev/ttyAMA0 @ 921600 (FC)
+TCP: port 5760 (GCS)
+UDP: 192.168.1.100:14550 (local LAN)
+UDP: 127.0.0.1:14550 (WFB-NG mavlink stream)
+
+---
+
+## [XRCE_DDS]
+transport: serial --dev /dev/ttyAMA4 -b 921600
+role: bridges PX4 uORB topics ↔ ROS2 DDS middleware
+depends_on: mavlink.router.service
+LD_LIBRARY_PATH: /opt/ros/jazzy/lib:/usr/local/lib:/usr/lib:/lib
+
+---
+
+## [VIDEO_PIPELINE]
+/dev/video0 (primary, 1280x720 MJPEG, 2000K) ─┐
+                                                ├─► FFmpeg libx264 ultrafast yuv420p
+/dev/video2 (secondary, 1280x720 MJPEG, 2000K)─┘    PiP 240x180 bottom-right
+  → RTP 127.0.0.1:5602 → WFB-NG drone_video stream → GS 10.5.6.50:5600
+config: /etc/vision_streaming.conf (INI, remotely editable)
+switcher: /usr/local/bin/vision_config_manager (Python v1.2.1)
+  called by rc_control_node via RC CH9 PWM positions:
+  front=1012→/dev/video0 | bottom=1514→/dev/video2 | split=2014→PiP both
+
+---
+
+## [ROS2_NODES]
+rc_control_node:
+  pkg: rc_control | src: ros2_ws/src/rc_control/rc_control/rc_control_node.py
+  config: ros2_ws/src/rc_control/config/rc_mapping.yaml
+  sub: /fmu/out/input_rc (px4_msgs/InputRc, BEST_EFFORT)
+  CH9: camera switch (±50 PWM tolerance) | CH10: shutdown(1514)/reboot(2014) hold 2s
+
+vision_streaming_node:
+  pkg: vision_streaming | src: ros2_ws/src/vision_streaming/vision_streaming/vision_streaming_node.py
+  config: /etc/vision_streaming.conf | launches FFmpeg, streams RTP to WFB-NG
+
+tfmini_node:
+  pkg: tfmini_sensor | src: ros2_ws/src/tfmini_sensor/tfmini_sensor/tfmini_node.py
+  hw: /dev/ttyAMA2 @ 115200 | pub: /fmu/in/distance_sensor @ 50Hz
+  range: 0.3–12.0m | downward-facing | FOV 3.6° | device_id=1987
+
+optical_flow_node:
+  pkg: optical_flow | src: ros2_ws/src/optical_flow/optical_flow/optical_flow_node.py
+  hw: /dev/video3 640x480 | algorithm: OpenCV Farneback dense flow
+  sub: /fmu/in/distance_sensor (altitude) + /fmu/out/sensor_combined (gyro)
+  pub: /fmu/in/sensor_optical_flow @ 10Hz | no systemd service (manual launch)
+
+obstacle_distance_publisher:
+  pkg: obstacle_distance | src: ros2_ws/src/obstacle_distance/obstacle_distance_node.py
+  hw: VL53L1X ToF (I2C bus 1, addr 0x29, long-distance mode 3)
+  pub: /fmu/in/obstacle_distance @ 10Hz
+  coverage: front sector only (indices 0–5 of 72-element array, 5° increment, 20–400cm)
+
+rov_collision_stop:
+  src: ros2_ws/src/rov_collision_stop/src/main.cpp (C++)
+  function: emergency collision stop for rover mode
+
+other_pkgs (no active service): arm_drone, collision_manual_mode, rov_ext, rov_manual,
+  px4_ros_com, px4-ros2-interface-lib, px4_msgs
+
+---
+
+## [ROS2_TOPICS]
+FMU→Companion (out):
+  /fmu/out/input_rc | vehicle_attitude | vehicle_local_position | vehicle_global_position
+  vehicle_gps_position | vehicle_status | vehicle_control_mode | vehicle_land_detected
+  vehicle_odometry | sensor_combined | battery_status | home_position
+  estimator_status_flags | failsafe_flags | collision_constraints | manual_control_setpoint
+  timesync_status | airspeed_validated | position_setpoint_triplet | event
+
+Companion→FMU (in):
+  /fmu/in/distance_sensor | obstacle_distance | sensor_optical_flow
+  vehicle_command | offboard_control_mode | trajectory_setpoint | manual_control_input
+  vehicle_attitude_setpoint | vehicle_rates_setpoint | vehicle_thrust_setpoint
+  vehicle_torque_setpoint | actuator_motors | actuator_servos | onboard_computer_status
+  goto_setpoint | rover_attitude/position/rate/steering/throttle_setpoint
+  arming_check_reply | register_ext_component_request | vehicle_visual_odometry
+  vehicle_mocap_odometry | telemetry_status | /parameter_events | /rosout
+
+---
+
+## [WFB_NG]
+config: /etc/wifibroadcast.cfg
+channel: 161 (5GHz) | region: BO | txpower: 3000 (30dBm for rtl8812eu)
+BW: 20MHz | MCS: 1 | STBC: 1 | LDPC: 1 | short_gi: off
+drone_iface: drone-wfb @ 10.5.5.87/24
+relay_iface: gs-wfb @ 10.5.5.77/24
+CRITICAL: default_route=False on both sides
+streams:
+  video:   TX 0x00 | udp_direct_tx | listen 127.0.0.1:5602 | FEC 8/12
+  mavlink: RX 0x10 TX 0x90 | mavlink | listen 0.0.0.0:14550 | FEC 1/2
+  tunnel:  RX 0xa0 TX 0x20 | tunnel | peer 10.5.5.77 | FEC 2/4
+GS_endpoints: video→10.5.6.50:5600 | mavlink→10.5.6.50:14550
+keys: /etc/drone.key | /etc/gs.key
+stats/API drone: 8002/8102 | GS: 8003/8103
+
+---
+
+## [RELAY_STATION]
+hostname: vind-rly | OS: Ubuntu 24.04.2 LTS | RPi5
+ssh: vind-admin@10.5.5.77 | sudo_pass: 1987
+tunnel: port 2222 → drone 10.5.5.87:22 (autossh, ssh-tunnel-to-companion.service)
+p2p_iface: p2p-wlan0-0 @ 10.5.6.101/24
+services: wifibroadcast@gs | mavlink.router | ssh-tunnel-to-companion | relay_files_sync.timer
+  DISABLED: mediamtx (latency), isc-dhcp-server (GCS uses static IP 10.5.6.50)
+mavlink_router: WFB-NG gs_mavlink → 127.0.0.1:14560 → mavlink-routerd
+  → QGC (10.5.6.50:14550) + antenna tracker (127.0.0.1:14551)
+  config: /etc/mavlink-router/main.conf | service: mavlink.router.service
+wfb_modes:
+  standalone: wifibroadcast@gs.service (single RPi node) ← CURRENT
+  cluster: wifibroadcast-cluster@gs.service (+ CPE610 @ 10.5.7.102, NOT connected yet)
+  switch_tool: sudo wfb-rlyctl use-standalone | sudo wfb-rlyctl use-cluster
+relay_files:
+  /usr/local/sbin/wfb-rlyctl        → WFB-NG mode/NIC control CLI (see reference_wfb_rlyctl.md)
+  /etc/sudoers.d/wfb-rlyctl         → passwordless sudo scope for wfb-rlyctl
+  /etc/default/wifibroadcast        → WFB_NICS env var (managed by wfb-rlyctl set-nics)
+  /etc/wifibroadcast.cfg            → main WFB-NG config
+  /etc/mavlink-router/main.conf     → mavlink-router config
+  /home/vind-admin/.ssh/wfb_cluster_ed25519 → cluster auth key
+cluster_key: /home/vind-admin/.ssh/wfb_cluster_ed25519
+CPE610_firmware: ~/Openwrt_WFB_NG/openwrt-24.10.4-ath79-generic-tplink_cpe610-v2...
+repo: ~/codex-relay (local only, TODO push to GitHub)
+docs: system_relay.md — install runbook, mavlink-router config, antenna tracker plan
+
+---
+
+## [REPOS]
+codex-work: ~/codex-work → github:ArvinVeiyon/Companion_Computer_Pxlabs
+  branches: master(=main), release | tags: v1.0.0, v1.0.1, v1.0.2
+  docs: system_companion.md (668 lines, living reference)
+  sync: scripts/system_files_sync.sh | timer: system_files_sync.timer
+  sync_safety: armed check via tcp:127.0.0.1:5760 — skips all ops if FC armed
+  memory: memory/claude_memory.md (GitHub copy of this file)
+  latest_commit: 727b44f (2026-03-15)
+codex-relay: ~/codex-relay on vind-rly → github:ArvinVeiyon/Relay_Station_Pxlabs
+  mirror: ~/codex-relay-mirror on companion (SSH clone, used for push)
+  sync: bash ~/codex-work/scripts/relay_git_sync.sh (manual, periodic)
+  latest_commit: 0d5c403 (2026-03-15) — wfb-rlyctl added to docs + sync list
+ros2_ws: ~/ros2_ws | branch: main_dev | release: release/2026-02-22
+
+---
+
+## [TODOS]
+→ See memory/todos.md | DO AFTER FULL OS BACKUP
+  1. ✅ Fix GS NTP clock — DONE 2026-03-15
+  2. Disable drone wlan0 (interferes with WFB-NG ch157)
+  3. Increase WFB rx ring buffer on GS (EAGAIN crashes, 19 restarts)
+  4. Check GS adapter TX power (uplink severely worse than downlink)
+  5. Antenna tracker hardware — script ready on relay port 14551, hardware pending
+  6. ✅ Push codex-relay to GitHub — DONE 2026-03-15 (via companion mirror + relay_git_sync.sh)
+
+---
+
+## [AI_STACK]
+online:  claude CLI → Claude API (full features, needs internet)
+offline: Ollama phi3:mini → local RPi5 inference (~3 tok/s)
+command: `ai` → auto-routes | --online | --offline flags
+wakeup_behavior:
+  SSH login → status panel → press b+Enter=bash | Enter/4s+internet=Claude | no internet=Phi-3
+upgrade_plan: phi3:mini → qwen2.5:7b (4.5GB, much better reasoning)
+system_prompt: this MEMORY.md injected into Phi-3 on every offline launch
+
+---
+
+## [SENSORS]
+TFmini:   /dev/ttyAMA2, 115200, downward, 0.3-12m, 50Hz → altitude to PX4
+VL53L1X:  I2C bus 1, 0x29, front only (0-5 of 72 sectors), 20-400cm, 10Hz → obstacle
+OptFlow:  /dev/video3, 640x480, OpenCV Farneback, 10Hz → flow to PX4
+Camera0:  /dev/video0, 1280x720 MJPEG → primary video stream
+Camera2:  /dev/video2, 1280x720 MJPEG → bottom/secondary video stream
+
+---
+
+## [AUTONOMY_ROADMAP]
+phase1 ✅ DONE: sensor pipeline + offboard interface ready
+  distance_sensor, obstacle_distance, optical_flow → PX4
+  trajectory_setpoint, vehicle_command topics available
+
+phase2 TODO: autonomous flight behaviors
+  - offboard mission node: takeoff, hover, waypoints, land
+  - reliable collision stop all directions
+  - battery-aware RTH (read /fmu/out/battery_status)
+
+phase3 TODO: 360° obstacle avoidance
+  - VL53L1X covers front sector only
+  - add: more ToF sensors for sides+rear OR depth camera (RealSense/OAK-D)
+
+phase4 TODO: GPS-denied navigation
+  - optical flow alone drifts over time
+  - need: visual odometry or SLAM (ORB-SLAM3, OpenVINS, RTAB-Map)
+
+phase5 TODO: computer vision
+  - object detection: YOLOv8n (RPi5 can run ~5fps)
+  - landing zone detection, target tracking
+
+phase6 TODO: AI mission brain
+  - LLM interprets natural language mission goals
+  - generates waypoints, monitors sensors, replans
+  - example: "search north field and return" → full autonomous execution
+
+safety_layer TODO: geofence | auto-RTH on low battery | emergency land | failsafe modes
+
+fine_tuning: plan external GPU fine-tune of Phi-3 on drone/PX4/ROS2 domain
+  when: after autonomy stack is stable (phases 2-3 done)
+  platform: Google Colab or local GPU
+
+---
+
+## [TROUBLESHOOTING]
+no_MAVLink: check /dev/ttyAMA0 baud, TX/RX wiring, PX4 MAVLink instance config
+no_DDS_topics: check microxrce-agent.service, /dev/ttyAMA4, PX4 XRCE enable param
+no_video: check vision_streaming.service, /dev/video0 exists, /etc/vision_streaming.conf
+WFB_down: check wifibroadcast@drone.service, wlx* adapter present, /etc/drone.key
+offline_AI_fail: check ollama.service active, `ollama list` shows phi3:mini
+
+---
+
+## [COMMON_COMMANDS]
+systemctl status <service>         # check any service
+ros2 topic list                    # list active DDS topics
+ros2 topic echo /fmu/out/battery_status  # check battery
+wfb-cli drone                      # WFB-NG link stats (on drone)
+# ON RELAY (ssh vind-admin@10.5.5.77):
+wfb-rlyctl status                  # show WFB mode, ENV, service states
+sudo wfb-rlyctl use-standalone     # switch to standalone mode
+sudo wfb-rlyctl use-cluster        # switch to cluster mode
+sudo wfb-rlyctl set-nics <iface>   # update WFB_NICS + restart
+wfb-rlyctl list-nics               # show available wireless ifaces
+python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760  # PX4 NuttShell (close QGC console first)
+ollama list                        # check offline models
+ai                                 # start AI (auto online/offline)
+ai --offline "question"            # force local Phi-3
+journalctl -u <service> -f         # live service logs

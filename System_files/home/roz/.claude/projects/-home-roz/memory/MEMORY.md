@@ -173,7 +173,7 @@ Companion→FMU (in):
 
 ## [WFB_NG]
 config: /etc/wifibroadcast.cfg
-channel: 157 (5GHz) | region: BO | txpower: 3000 (30dBm for rtl8812eu)
+channel: 161 (5GHz) | region: BO | txpower: 3000 (30dBm for rtl8812eu)
 BW: 20MHz | MCS: 1 | STBC: 1 | LDPC: 1 | short_gi: off
 drone_iface: drone-wfb @ 10.5.5.87/24
 relay_iface: gs-wfb @ 10.5.5.77/24
