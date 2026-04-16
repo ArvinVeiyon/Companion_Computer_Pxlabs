@@ -411,7 +411,7 @@ Config file: `/etc/wifibroadcast.cfg`
 **RF Settings:**
 | Parameter | Value |
 |---|---|
-| WiFi channel | 157 (5 GHz) |
+| WiFi channel | 161 (5 GHz) |
 | Region | BO |
 | TX power | 3000 (30 dBm × 100, for rtl8812eu) |
 | Bandwidth | 20 MHz |
