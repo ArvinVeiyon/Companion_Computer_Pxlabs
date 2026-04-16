@@ -66,7 +66,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - GNSS: (document)
 - Radio/Telemetry: WFB-NG via WiFi adapter (wfb-ng)
 - Camera: CSI (auto-detect)
-- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node), LDRobot STL-19 360° LiDAR (UART, via ldlidar_stl_ros2)
+- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node) | STL-19 LiDAR: tested, hardware moved to other team (2026-04-17), not installed on this platform
 
 **RPi5 UART Map (full):**
 | ttyAMA   | UART   | GPIO TX | GPIO RX | Phys TX | Phys RX | Use                              | Baud   |
@@ -104,7 +104,7 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 | `rc_control_node.service` | RC input handling |
 | `ros2_external_node_reg.service` | External ROS2 node registration |
 | `tfmini.service` | TFmini lidar ROS2 node |
-| `ldlidar.service` | LDRobot STL-19 360° LiDAR ROS2 node |
+| `ldlidar.service` | LDRobot STL-19 LiDAR — **DISABLED** (hardware moved to other team 2026-04-17, for future use) |
 | `vision_streaming.service` | Camera/vision streaming ROS2 node |
 | `block-traffic.service` | Firewall: block DDS multicast on WFB iface |
 
@@ -183,15 +183,15 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 - **Sensor params:** range 0.3–12.0 m, downward-facing, FOV 3.6°, device_id=1987
 
 ### ldlidar_stl_ros2_node (`ldlidar_stl_ros2` package)
-- **Service:** `ldlidar.service`
+> **STATUS: TESTING ONLY — hardware (STL-19) moved to other team 2026-04-17. Service disabled locally. Package kept in ros2_ws for future integration.**
+- **Service:** `ldlidar.service` (disabled)
 - **Node name:** `LD19`
 - **Source:** `ros2_ws/src/ldlidar_stl_ros2/` (upstream: ldrobotSensorTeam/ldlidar_stl_ros2)
-- **Hardware:** LDRobot STL-19 360° LiDAR on `/dev/ttyAMA3` @ 230400 baud
-- **Wiring:** Lidar TX → RPi Pin 21 (GPIO9 RX only). No PWM motor control — motor runs at fixed speed.
+- **Hardware:** LDRobot STL-19 360° LiDAR on `/dev/ttyAMA3` @ 230400 baud (RX-only, no PWM)
 - **Publishes:** `/scan` (sensor_msgs/LaserScan) | TF: `base_link` → `base_laser`
-- **Launch:** `ld19.launch.py` — port hardcoded in launch file (CLI `port_name:=` arg is ignored by upstream launch file)
-- **Build fix 1 (2026-04-17):** Added `#include <pthread.h>` to `ldlidar_driver/src/logger/log_module.cpp` (missing in upstream, causes build failure on GCC 14+)
-- **Launch fix (2026-04-17):** Changed `port_name` in `launch/ld19.launch.py` line 35 from `/dev/ttyUSB0` → `/dev/ttyAMA3` (upstream default is wrong, CLI override silently ignored)
+- **Install guide:** `ldlidar_stl19_install_guide.md` (shared with other team)
+- **Build fix (2026-04-17):** Added `#include <pthread.h>` to `ldlidar_driver/src/logger/log_module.cpp` (GCC 14+)
+- **Port fix (2026-04-17):** Hardcoded `/dev/ttyAMA3` in `launch/ld19.launch.py` line 35 — CLI `port_name:=` arg silently ignored by upstream
 
 ### optical_flow_node (`optical_flow` package)
 - **Node name:** `optical_flow_node`

@@ -35,10 +35,12 @@ pub: /fmu/in/obstacle_distance @ 10Hz
 coverage: front sector only — indices 0–5 of 72-element array (5° increment, 20–400cm)
 
 ## ldlidar_stl_ros2_node
+STATUS: TESTING ONLY — hardware (STL-19) moved to other team 2026-04-17. Service DISABLED. Pkg kept in ros2_ws for future use.
 pkg: ldlidar_stl_ros2 | src: ros2_ws/src/ldlidar_stl_ros2/
-service: ldlidar.service | node name: LD19
+service: ldlidar.service (disabled) | node name: LD19
 hw: /dev/ttyAMA3 @ 230400 | pub: /scan (LaserScan) ~10Hz | TF: base_link→base_laser (0.18m)
-FIXES (both required on this platform):
+install guide: codex-work/ldlidar_stl19_install_guide.md
+FIXES (both required, already applied in src):
   1. Add `#include <pthread.h>` to ldlidar_driver/src/logger/log_module.cpp (GCC 14+ build fail)
   2. Hardcode `/dev/ttyAMA3` in launch/ld19.launch.py line 35 — CLI port_name arg silently ignored
 

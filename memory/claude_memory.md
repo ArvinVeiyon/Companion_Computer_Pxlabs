@@ -78,7 +78,7 @@ block-traffic.service    → block DDS multicast on drone-wfb iface
 wifibroadcast@drone      → WFB-NG drone profile
 system_files_sync.timer  → auto-backup boot+daily | armed check: tcp:127.0.0.1:5760
 ollama.service           → Phi-3 Mini local LLM
-ldlidar.service          → STL-19 → /scan (LaserScan) via ttyAMA3
+ldlidar.service          → STL-19 → /scan (DISABLED 2026-04-17: hardware moved to other team, pkg kept in ros2_ws)
 
 ---
 
@@ -135,7 +135,7 @@ upgrade plan: phi3:mini → qwen2.5:7b (4.5GB) | fine-tune: post phase2-3, Googl
 TFmini:  ttyAMA2 115200 downward 0.3-12m 50Hz → PX4 distance_sensor
 VL53L1X: I2C bus1 0x29 front-only (0-5/72 sectors 5°) 20-400cm 10Hz → obstacle_distance
 OptFlow: /dev/video3 640x480 OpenCV Farneback 10Hz → sensor_optical_flow (manual launch)
-STL-19:  ttyAMA3 230400 360° 0.02-12m → /scan LaserScan (ldlidar.service)
+STL-19:  ttyAMA3 230400 360° 0.02-12m — TESTING ONLY, hw moved to other team 2026-04-17
 Camera0: /dev/video0 1280x720 MJPEG → primary stream
 Camera2: /dev/video2 1280x720 MJPEG → bottom/secondary stream
 
