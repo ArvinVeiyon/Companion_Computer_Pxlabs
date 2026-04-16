@@ -68,6 +68,17 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Camera: CSI (auto-detect)
 - Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node)
 
+**RPi5 UART Map (full):**
+| ttyAMA   | UART   | GPIO TX | GPIO RX | Phys TX | Phys RX | Use                              | Baud   |
+|----------|--------|---------|---------|---------|---------|----------------------------------|--------|
+| ttyAMA0  | UART0  | GPIO14  | GPIO15  | Pin 8   | Pin 10  | FC MAVLink → mavlink-router      | 921600 |
+| ttyAMA2  | UART2  | GPIO4   | GPIO5   | Pin 7   | Pin 29  | TFmini lidar                     | 115200 |
+| ttyAMA4  | UART4  | GPIO12  | GPIO13  | Pin 32  | Pin 33  | FC uXRCE-DDS → MicroXRCEAgent    | 921600 |
+| ttyAMA1  | UART1  | GPIO0   | GPIO1   | Pin 27  | Pin 28  | FREE (needs dtoverlay=uart1-pi5) | —      |
+| ttyAMA3  | UART3  | GPIO8   | GPIO9   | Pin 24  | Pin 21  | FREE (needs dtoverlay=uart3-pi5) | —      |
+| ttyAMA10 | UART10 | —       | —       | —       | —       | Internal SoC only (BT freed)     | —      |
+Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart4 only
+
 ## 5) PX4 Configuration
 **MAVLink (via mavlink-router `/etc/mavlink-router/main.conf`):**
 - TCP server: port 5760 (GCS)
@@ -115,7 +126,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Role: bridges PX4 uORB topics ↔ ROS2 DDS middleware
 - Depends on: `mavlink-router.service` (After + Wants in unit file)
 - LD_LIBRARY_PATH: `/opt/ros/jazzy/lib:/usr/local/lib:/usr/lib:/lib`
-- Available UART ports on this board: `ttyAMA0`, `ttyAMA2`, `ttyAMA4`, `ttyAMA10`
+- Available UART ports on this board: `ttyAMA0`, `ttyAMA2`, `ttyAMA4` (active) | `ttyAMA1`, `ttyAMA3` (free, GPIO header) | `ttyAMA10` (internal SoC only)
   - `ttyAMA0` → MAVLink (mavlink-router)
   - `ttyAMA4` → uXRCE-DDS (microxrce-agent)
 
