@@ -19,7 +19,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - CPU/SoC: Broadcom BCM2712, ARM Cortex-A76 quad-core, aarch64
 - RAM: 8 GB LPDDR4X
 - Storage: ~64 GB SD card (`/dev/mmcblk0p2` 58 G, 63% used as of 2026-03-08)
-- OS: Ubuntu 24.04.1 LTS (Noble Numbat), kernel 6.8.0-1018-raspi
+- OS: Ubuntu 24.04.1 LTS (Noble Numbat), kernel 6.8.0-1048-raspi
 
 **Sensors:**
 - GNSS: (document port/model)
@@ -41,7 +41,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Git commit: c5b8445ffc (586 commits past v1.16.0-rc1 tag)
 
 **Companion Software:**
-- OS: Ubuntu 24.04.1 LTS, kernel 6.8.0-1018-raspi
+- OS: Ubuntu 24.04.1 LTS, kernel 6.8.0-1048-raspi
 - ROS2: Jazzy (ros-jazzy-*)
 - Python: 3.12.3
 - MAVLink toolchain: mavlink-router (custom build, `/usr/local/bin/usr/bin/mavlink-routerd`)
@@ -296,7 +296,7 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 
 ### Base OS
 - **Image:** Ubuntu 24.04 LTS for Raspberry Pi 5 (ARM64)
-- **Kernel:** `6.8.0-1018-raspi`
+- **Kernel:** `6.8.0-1048-raspi`
 - **Hostname:** `Vind-Roz`
 - Flash with Raspberry Pi Imager → Ubuntu Server 24.04 LTS (64-bit)
 
