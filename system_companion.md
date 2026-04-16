@@ -66,7 +66,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - GNSS: (document)
 - Radio/Telemetry: WFB-NG via WiFi adapter (wfb-ng)
 - Camera: CSI (auto-detect)
-- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node)
+- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node), LDRobot STL-19 360° LiDAR (UART, via ldlidar_stl_ros2)
 
 **RPi5 UART Map (full):**
 | ttyAMA   | UART   | GPIO TX | GPIO RX | Phys TX | Phys RX | Use                              | Baud   |
@@ -75,9 +75,9 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 | ttyAMA2  | UART2  | GPIO4   | GPIO5   | Pin 7   | Pin 29  | TFmini lidar                     | 115200 |
 | ttyAMA4  | UART4  | GPIO12  | GPIO13  | Pin 32  | Pin 33  | FC uXRCE-DDS → MicroXRCEAgent    | 921600 |
 | ttyAMA1  | UART1  | GPIO0   | GPIO1   | Pin 27  | Pin 28  | FREE (needs dtoverlay=uart1-pi5) | —      |
-| ttyAMA3  | UART3  | GPIO8   | GPIO9   | Pin 24  | Pin 21  | FREE (needs dtoverlay=uart3-pi5) | —      |
+| ttyAMA3  | UART3  | GPIO8   | GPIO9   | Pin 24  | Pin 21  | STL-19 LiDAR (RX only, no PWM)   | 230400 |
 | ttyAMA10 | UART10 | —       | —       | —       | —       | Internal SoC + 3-pin JST debug header (BT freed) | 115200 |
-Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart4 only
+Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 > **Debug UART:** `ttyAMA10` = `soc/serial@7d001000` = 3-pin JST connector on RPi5 board edge. Used for U-Boot/kernel console at 115200. Not for peripherals.
 
 ## 5) PX4 Configuration
@@ -104,6 +104,7 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart4 only
 | `rc_control_node.service` | RC input handling |
 | `ros2_external_node_reg.service` | External ROS2 node registration |
 | `tfmini.service` | TFmini lidar ROS2 node |
+| `ldlidar.service` | LDRobot STL-19 360° LiDAR ROS2 node |
 | `vision_streaming.service` | Camera/vision streaming ROS2 node |
 | `block-traffic.service` | Firewall: block DDS multicast on WFB iface |
 
@@ -127,7 +128,7 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart4 only
 - Role: bridges PX4 uORB topics ↔ ROS2 DDS middleware
 - Depends on: `mavlink-router.service` (After + Wants in unit file)
 - LD_LIBRARY_PATH: `/opt/ros/jazzy/lib:/usr/local/lib:/usr/lib:/lib`
-- Available UART ports on this board: `ttyAMA0`, `ttyAMA2`, `ttyAMA4` (active) | `ttyAMA1`, `ttyAMA3` (free, GPIO header) | `ttyAMA10` (internal SoC only)
+- Available UART ports on this board: `ttyAMA0`, `ttyAMA2`, `ttyAMA3`, `ttyAMA4` (active) | `ttyAMA1` (free, GPIO header) | `ttyAMA10` (internal SoC only)
   - `ttyAMA0` → MAVLink (mavlink-router)
   - `ttyAMA4` → uXRCE-DDS (microxrce-agent)
 
@@ -180,6 +181,16 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart4 only
 - **Hardware:** TFmini lidar on `/dev/ttyAMA2` @ 115200 baud
 - **Publishes:** `/fmu/in/distance_sensor` (px4_msgs/DistanceSensor) @ 50 Hz
 - **Sensor params:** range 0.3–12.0 m, downward-facing, FOV 3.6°, device_id=1987
+
+### ldlidar_stl_ros2_node (`ldlidar_stl_ros2` package)
+- **Service:** `ldlidar.service`
+- **Node name:** `LD19`
+- **Source:** `ros2_ws/src/ldlidar_stl_ros2/` (upstream: ldrobotSensorTeam/ldlidar_stl_ros2)
+- **Hardware:** LDRobot STL-19 360° LiDAR on `/dev/ttyAMA3` @ 230400 baud
+- **Wiring:** Lidar TX → RPi Pin 21 (GPIO9 RX only). No PWM motor control — motor runs at fixed speed.
+- **Publishes:** `/scan` (sensor_msgs/LaserScan) | TF: `base_link` → `base_laser`
+- **Launch:** `ld19.launch.py port_name:=/dev/ttyAMA3`
+- **Build fix:** Added `#include <pthread.h>` to `ldlidar_driver/src/logger/log_module.cpp` (missing in upstream, causes build failure on GCC 14+)
 
 ### optical_flow_node (`optical_flow` package)
 - **Node name:** `optical_flow_node`
