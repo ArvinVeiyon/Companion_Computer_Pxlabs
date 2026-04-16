@@ -20,6 +20,7 @@
 - vision_streaming.service: executable bit removed (2026-03-15) — no functional effect
 - relay NTP clock fixed (2026-03-15): was 21 days behind — timedatectl set-ntp corrected
 - relay isc-dhcp-server + mediamtx disabled (2026-03-15): GCS uses static IP, mediamtx dropped due to latency
+- ldrobot ldlidar_stl_ros2 build fix (2026-04-17): missing #include <pthread.h> in log_module.cpp — added manually
 
 ---
 
@@ -58,9 +59,9 @@ PX4_target: px4_fmu-v6xrt
 | ttyAMA2  | UART2  | GPIO4   | GPIO5   | Pin 7   | Pin 29  | TFmini lidar                     | 115200 |
 | ttyAMA4  | UART4  | GPIO12  | GPIO13  | Pin 32  | Pin 33  | FC uXRCE-DDS → MicroXRCEAgent    | 921600 |
 | ttyAMA1  | UART1  | GPIO0   | GPIO1   | Pin 27  | Pin 28  | FREE (needs dtoverlay=uart1-pi5) | —      |
-| ttyAMA3  | UART3  | GPIO8   | GPIO9   | Pin 24  | Pin 21  | FREE (needs dtoverlay=uart3-pi5) | —      |
+| ttyAMA3  | UART3  | GPIO8   | GPIO9   | Pin 24  | Pin 21  | STL-19 LiDAR (RX only, no PWM)   | 230400 |
 | ttyAMA10 | UART10 | —       | —       | —       | —       | Internal SoC + 3-pin JST debug header (BT freed) | 115200 |
-enabled in /boot/firmware/config.txt: uart0, uart2, uart4 only
+enabled in /boot/firmware/config.txt: uart0, uart2, uart3-pi5, uart4
 debug_uart: ttyAMA10 = soc/serial@7d001000 = 3-pin JST connector on board edge (115200, U-Boot/kernel console, NOT for peripherals)
 
 ---
@@ -89,6 +90,7 @@ active on companion:
   wifibroadcast@drone.service → WFB-NG drone profile
   system_files_sync.timer     → auto-backup on boot + daily
   ollama.service              → local LLM server (Phi-3 Mini)
+  ldlidar.service             → LDRobot STL-19 LiDAR → /scan (sensor_msgs/LaserScan)
 
 ---
 
@@ -266,6 +268,7 @@ VL53L1X:  I2C bus 1, 0x29, front only (0-5 of 72 sectors), 20-400cm, 10Hz → ob
 OptFlow:  /dev/video3, 640x480, OpenCV Farneback, 10Hz → flow to PX4
 Camera0:  /dev/video0, 1280x720 MJPEG → primary video stream
 Camera2:  /dev/video2, 1280x720 MJPEG → bottom/secondary video stream
+STL-19:   /dev/ttyAMA3, 230400, 360° scan, 0.02-12m, pub:/scan → ldlidar.service (no PWM, RX-only wiring)
 
 ---
 
