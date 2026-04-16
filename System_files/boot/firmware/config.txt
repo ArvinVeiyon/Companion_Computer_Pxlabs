@@ -63,4 +63,5 @@ enable_uart=1
 dtoverlay=disable-bt
 dtoverlay=uart0
 dtoverlay=uart2
+dtoverlay=uart3-pi5
 dtoverlay=uart4

@@ -710,3 +710,7 @@ nsh> ver all                  # firmware version
 | `v1.0.6` | `release` | `6bf1749` | 2026-03-09 | wfb-ng: fix mavlink streams, increase video+mavlink FEC (SID-2 2026-03-09) |
 | `v1.0.7` | `release` | `b1236a9` | 2026-03-15 | Security: replace hardcoded PAT with SSH URL in relay_git_sync.sh; remove sudo password from docs |
 | `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel updated 157→161; system_companion.md + MEMORY.md synced |
+**2026-04-17 02:12**
+- M	System_files/boot/firmware/config.txt
+- M	System_files/etc/vision_streaming.conf
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
