@@ -61,6 +61,8 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 **FC <-> Companion Links (two serial connections):**
 - MAVLink: `/dev/ttyAMA0` @ 921600 baud → mavlink-router
 - uXRCE-DDS: `/dev/ttyAMA4` @ 921600 baud → MicroXRCEAgent
+  <img width="1500" height="1500" alt="sec" src="https://github.com/user-attachments/assets/1a59625f-f050-4db5-88c7-4eb773e40612" />
+  <img width="1500" height="1500" alt="RECENT" src="https://github.com/user-attachments/assets/4e99561c-5861-4eaa-9dfd-e4a974a3feb5" />
 
 **Peripheral Connections:**
 - GNSS: (document)
@@ -68,8 +70,6 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Camera: CSI (auto-detect)
 - Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node)
 
-<img width="1500" height="1500" alt="WhatsApp Image 2026-04-18 at 1 24 05 PM" src="https://github.com/user-attachments/assets/18aa2580-5b19-4407-b469-3f4c12db6a52" />
-<img width="1500" height="1500" alt="WhatsApp Image 2026-04-18 at 1 24 45 PM" src="https://github.com/user-attachments/assets/f8a98aa8-a24c-4cea-93bc-c9e77c68d93c" />
 
 
 ## 5) PX4 Configuration
