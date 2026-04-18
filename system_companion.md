@@ -80,6 +80,10 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 > **Debug UART:** `ttyAMA10` = `soc/serial@7d001000` = 3-pin JST connector on RPi5 board edge. Used for U-Boot/kernel console at 115200. Not for peripherals.
 
+<img width="1500" height="1500" alt="WhatsApp Image 2026-04-18 at 1 24 05 PM" src="https://github.com/user-attachments/assets/18aa2580-5b19-4407-b469-3f4c12db6a52" />
+<img width="1500" height="1500" alt="WhatsApp Image 2026-04-18 at 1 24 45 PM" src="https://github.com/user-attachments/assets/f8a98aa8-a24c-4cea-93bc-c9e77c68d93c" />
+
+
 ## 5) PX4 Configuration
 **MAVLink (via mavlink-router `/etc/mavlink-router/main.conf`):**
 - TCP server: port 5760 (GCS)
