@@ -68,6 +68,10 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Camera: CSI (auto-detect)
 - Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node)
 
+<img width="1500" height="1500" alt="WhatsApp Image 2026-04-18 at 1 24 05 PM" src="https://github.com/user-attachments/assets/18aa2580-5b19-4407-b469-3f4c12db6a52" />
+<img width="1500" height="1500" alt="WhatsApp Image 2026-04-18 at 1 24 45 PM" src="https://github.com/user-attachments/assets/f8a98aa8-a24c-4cea-93bc-c9e77c68d93c" />
+
+
 ## 5) PX4 Configuration
 **MAVLink (via mavlink-router `/etc/mavlink-router/main.conf`):**
 - TCP server: port 5760 (GCS)
