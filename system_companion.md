@@ -715,3 +715,5 @@ nsh> ver all                  # firmware version
 - M	System_files/boot/firmware/config.txt
 - M	System_files/etc/vision_streaming.conf
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-04-18 22:31**
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
