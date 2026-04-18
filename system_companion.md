@@ -62,7 +62,9 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - MAVLink: `/dev/ttyAMA0` @ 921600 baud → mavlink-router
 - uXRCE-DDS: `/dev/ttyAMA4` @ 921600 baud → MicroXRCEAgent
   <img width="1500" height="1500" alt="sec" src="https://github.com/user-attachments/assets/1a59625f-f050-4db5-88c7-4eb773e40612" />
-  <img width="1500" height="1500" alt="RECENT" src="https://github.com/user-attachments/assets/4e99561c-5861-4eaa-9dfd-e4a974a3feb5" />
+  <img width="1500" height="1500" alt="RECENT" src="https://github.com/user-attachments/assets/57de142a-e412-4ab2-ba98-4ae954682a10" />
+
+
 
 **Peripheral Connections:**
 - GNSS: (document)
