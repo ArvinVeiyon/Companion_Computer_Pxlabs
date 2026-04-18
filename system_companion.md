@@ -59,6 +59,9 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 
 ## 4) Connections
 **FC <-> Companion Links (two serial connections):**
+
+  <img width="1374" height="1378" alt="image" src="https://github.com/user-attachments/assets/68a07aec-7102-4c8d-a0a8-d24fa5e90b43" />
+
 - MAVLink: `/dev/ttyAMA0` @ 921600 baud → mavlink-router
 - uXRCE-DDS: `/dev/ttyAMA4` @ 921600 baud → MicroXRCEAgent
   <img width="1500" height="1500" alt="sec" src="https://github.com/user-attachments/assets/1a59625f-f050-4db5-88c7-4eb773e40612" />
