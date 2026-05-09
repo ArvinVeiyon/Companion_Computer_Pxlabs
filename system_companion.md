@@ -90,14 +90,73 @@ Enabled in `/boot/firmware/config.txt`: uart0, uart2, uart3-pi5, uart4
 
 
 ## 5) PX4 Configuration
-**MAVLink (via mavlink-router `/etc/mavlink-router/main.conf`):**
-- TCP server: port 5760 (GCS)
-- UART endpoint: `/dev/ttyAMA0` @ 921600
-- UDP endpoint local2: `192.168.1.100:14550`
-- UDP endpoint WFB-NG: `127.0.0.1:14550`
+
+### FC Telemetry Port Mapping
+Three telemetry ports are active. TELEM3 is repurposed for uXRCE-DDS (not standard MAVLink).
+
+| FC Port | RPi UART      | Device       | GPIO TX/RX   | Baud   | PX4 Instance / Function         | Mode        | Role                          |
+|---------|---------------|--------------|--------------|--------|---------------------------------|-------------|-------------------------------|
+| TELEM1  | —             | —            | —            | 57600  | MAVLink instance 0 (MAV_0_CONFIG=101) | Normal (0) | Holybro telemetry radio → GCS RF |
+| TELEM2  | UART0 (AMA0)  | /dev/ttyAMA0 | GPIO14 / GPIO15 | 921600 | MAVLink instance 1 (MAV_1_CONFIG=102) | Onboard (2) | mavlink-router → WFB-NG + TCP:5760 |
+| TELEM3  | UART4 (AMA4)  | /dev/ttyAMA4 | GPIO12 / GPIO13 | 921600 | uXRCE-DDS (UXRCE_DDS_CFG=103) | —           | MicroXRCEAgent → ROS2 DDS     |
+
+**Key PX4 params (from QGC param dump):**
+```
+SER_TEL1_BAUD  = 57600    # TELEM1 — Holybro radio
+SER_TEL2_BAUD  = 921600   # TELEM2 — companion MAVLink
+SER_TEL3_BAUD  = 921600   # TELEM3 — uXRCE-DDS
+
+MAV_0_CONFIG   = 101      # MAVLink instance 0 → TELEM1
+MAV_0_MODE     = 0        # Normal (GCS radio)
+MAV_0_RATE     = 1200     # B/s
+
+MAV_1_CONFIG   = 102      # MAVLink instance 1 → TELEM2
+MAV_1_MODE     = 2        # Onboard (companion) — enables high-rate LOCAL_POSITION_NED etc.
+MAV_1_RATE     = 92160    # B/s (~921600/10)
+MAV_1_FORWARD  = 0        # no forwarding
+
+MAV_2_CONFIG   = 0        # instance 2 disabled
+
+UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
+UXRCE_DDS_KEY  = 1        # client_key: 0x00000001
+UXRCE_DDS_DOM_ID = 0
+```
+
+**FC Telemetry Connector Pinout (JST-GH 6-pin, same for TELEM1/2/3):**
+| Pin | Signal | Direction (FC) |
+|-----|--------|----------------|
+| 1   | 5V     | Power out      |
+| 2   | TX     | FC transmits   |
+| 3   | RX     | FC receives    |
+| 4   | CTS    | —              |
+| 5   | RTS    | —              |
+| 6   | GND    | Ground         |
+
+**Wiring — TELEM2 → RPi UART0 (`ttyAMA0`):**
+| FC TELEM2 | Signal | → | RPi Pin | GPIO    | Signal |
+|-----------|--------|---|---------|---------|--------|
+| Pin 2     | TX     | → | Pin 10  | GPIO15  | RX     |
+| Pin 3     | RX     | ← | Pin 8   | GPIO14  | TX     |
+| Pin 6     | GND    | — | GND     | —       | GND    |
+
+**Wiring — TELEM3 → RPi UART4 (`ttyAMA4`):**
+| FC TELEM3 | Signal | → | RPi Pin | GPIO    | Signal |
+|-----------|--------|---|---------|---------|--------|
+| Pin 2     | TX     | → | Pin 33  | GPIO13  | RX     |
+| Pin 3     | RX     | ← | Pin 32  | GPIO12  | TX     |
+| Pin 6     | GND    | — | GND     | —       | GND    |
+
+> TX always crosses to RX — FC Pin 2 (TX) → RPi RX, RPi TX → FC Pin 3 (RX). CTS/RTS (pins 4/5) not connected; flow control disabled in PX4 (`MAV_1_FLOW_CTRL`) and mavlink-router.
+
+> **Note:** mavlink-router config names the UART endpoint `[UartEndpoint serial-AMA4]` — this is just the config section label, the actual device is `/dev/ttyAMA0`. Section name ≠ device path.
+
+**MAVLink router (`/etc/mavlink-router/main.conf`):**
+- UART endpoint: `/dev/ttyAMA0` @ 921600 (FC TELEM2)
+- TCP server: port 5760 (GCS / NuttShell)
+- UDP → `127.0.0.1:14550` (WFB-NG mavlink stream)
 
 **uXRCE-DDS:**
-- Serial: `/dev/ttyAMA4` @ 921600 → connects PX4 uORB topics to ROS2
+- Serial: `/dev/ttyAMA4` @ 921600 (FC TELEM3) → MicroXRCEAgent → ROS2
 
 **Autonomy / Offboard:**
 - Offboard: enabled (ros2_px4_translation_node + rc_control_node)
