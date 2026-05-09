@@ -100,7 +100,7 @@ Three telemetry ports are active. TELEM3 is repurposed for uXRCE-DDS (not standa
 | TELEM2  | UART0 (AMA0)  | /dev/ttyAMA0 | GPIO14 / GPIO15 | 921600 | MAVLink instance 1 (MAV_1_CONFIG=102) | Onboard (2) | mavlink-router → WFB-NG + TCP:5760 |
 | TELEM3  | UART4 (AMA4)  | /dev/ttyAMA4 | GPIO12 / GPIO13 | 921600 | uXRCE-DDS (UXRCE_DDS_CFG=103) | —           | MicroXRCEAgent → ROS2 DDS     |
 
-**Key PX4 params (from QGC param dump):**
+**Key PX4 params (live verified 2026-05-09 via MAVLink TCP:5760):**
 ```
 SER_TEL1_BAUD  = 57600    # TELEM1 — Holybro radio
 SER_TEL2_BAUD  = 921600   # TELEM2 — companion MAVLink
@@ -108,7 +108,7 @@ SER_TEL3_BAUD  = 921600   # TELEM3 — uXRCE-DDS
 
 MAV_0_CONFIG   = 101      # MAVLink instance 0 → TELEM1
 MAV_0_MODE     = 0        # Normal (GCS radio)
-MAV_0_RATE     = 1200     # B/s
+MAV_0_RATE     = 5760     # B/s
 
 MAV_1_CONFIG   = 102      # MAVLink instance 1 → TELEM2
 MAV_1_MODE     = 2        # Onboard (companion) — enables high-rate LOCAL_POSITION_NED etc.
@@ -118,8 +118,6 @@ MAV_1_FORWARD  = 0        # no forwarding
 MAV_2_CONFIG   = 0        # instance 2 disabled
 
 UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
-UXRCE_DDS_KEY  = 1        # client_key: 0x00000001
-UXRCE_DDS_DOM_ID = 0
 ```
 
 **FC Telemetry Connector Pinout (JST-GH 6-pin, same for TELEM1/2/3):**
@@ -552,7 +550,35 @@ Config file: `/etc/wifibroadcast.cfg`
 ## 8) Troubleshooting
 **No MAVLink connection:**
 - Check port, baud, and PX4 MAVLink instance
-- Verify wiring (TX/RX and ground)
+- Verify wiring (TX/RX and ground) — **TX swap is the #1 cause of silent failure**
+- Diagnosis method:
+  ```bash
+  # Step 1 — is mavlink-router reading UART data from FC?
+  cat /proc/$(pgrep mavlink-routerd)/io   # rchar must be climbing
+  # Step 2 — is it forwarding to clients?
+  # wchar must ALSO climb when a TCP client is connected
+  # If rchar climbs but wchar stays flat → TX wire disconnected (FC not receiving our heartbeat)
+  ```
+- Root cause of rchar↑ / wchar=0: **RPi TX → FC RX wire was open** — FC never saw our heartbeat so never sent data back. Fix: reseat TELEM2 TX pin.
+- Quick live battery+sysid check once MAVLink is working:
+  ```bash
+  timeout 12 python3 - <<'EOF'
+  from pymavlink import mavutil
+  import time, threading, struct
+  m = mavutil.mavlink_connection('tcp:127.0.0.1:5760', source_system=255, source_component=190)
+  stop=False
+  def hb():
+      while not stop: m.mav.heartbeat_send(6,8,0,0,0); time.sleep(1)
+  threading.Thread(target=hb,daemon=True).start()
+  deadline=time.time()+10
+  while time.time()<deadline:
+      msg=m.recv_match(blocking=True,timeout=1)
+      if msg and msg.get_type()=='SYS_STATUS':
+          print(f"Battery: {msg.battery_remaining}%  Voltage: {msg.voltage_battery/1000:.2f}V")
+          break
+  stop=True
+  EOF
+  ```
 
 **Companion cannot control vehicle:**
 - Confirm arming rules and OFFBOARD enable
