@@ -510,17 +510,26 @@ Config file: `/etc/wifibroadcast.cfg`
 | LDPC | 1 |
 | Short GI | disabled |
 
+**Adapters (multi-NIC TX):**
+Both RTL8812EU adapters are active on the drone side. `/etc/default/wifibroadcast`:
+```
+WFB_NICS="wlx782288d993c0 wlx782288d98f91"
+```
+All three TX streams (video, mavlink, tunnel) transmit on both NICs simultaneously. WFB-NG selects the best path per-packet based on RSSI delta (`tx_sel_rssi_delta = 3`).
+
 **Streams (drone side):**
-| Stream | Direction | Stream ID | Service type | Peer |
-|---|---|---|---|---|
-| video | TX only | 0x00 | udp_direct_tx | listen `127.0.0.1:5602` ← fed by vision_streaming ROS2 node |
-| mavlink | RX 0x90 / TX 0x10 | — | mavlink | listen `0.0.0.0:14550` ← fed by mavlink-router |
-| tunnel | RX 0xa0 / TX 0x20 | — | tunnel | ifname `drone-wfb` |
+| Stream | Direction | Stream ID | Service type | fwmark | Peer |
+|---|---|---|---|---|---|
+| video | TX only | 0x00 | `udp_proxy` | 20 | listen `127.0.0.1:5602` ← vision_streaming node |
+| mavlink | RX 0x90 / TX 0x10 | — | `mavlink` | 10 | listen `0.0.0.0:14550` ← mavlink-router |
+| tunnel | RX 0xa0 / TX 0x20 | — | `tunnel` | 30 | ifname `drone-wfb` |
+
+> **Multi-adapter note:** video stream uses `service_type = udp_proxy` (changed from `udp_direct_tx`). This is required for multi-NIC TX — `udp_direct_tx` only uses a single adapter. `udp_proxy` allows WFB-NG to distribute TX across all NICs in `WFB_NICS` using fwmark + tc rules.
 
 **FEC settings:**
 | Stream | fec_k | fec_n | Max recoverable |
 |---|---|---|---|
-| video | 8 | 14 | 6 pkts/block |
+| video | 8 | 12 | 4 pkts/block |
 | mavlink | 1 | 3 | 2 pkts/block |
 | tunnel | 2 | 4 | 2 pkts/block |
 
