@@ -6,4 +6,5 @@
 # WIFIBROADCAST_CFG=/etc/wifibroadcast_linkXXX.cfg
 
 # Autodetect local cards supported by wfb-ng (8812au and 8812eu)
-WFB_NICS="$(wfb-nics)"
+#WFB_NICS="$(wfb-nics)"
+WFB_NICS="wlx782288d993c0"
