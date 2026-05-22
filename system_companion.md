@@ -827,3 +827,8 @@ nsh> ver all                  # firmware version
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
 **2026-05-10 16:33**
 - M	System_files/etc/default/wifibroadcast
+**2026-05-22 14:49**
+- M	System_files/etc/default/wifibroadcast
+- M	System_files/etc/vision_streaming.conf
+- M	System_files/etc/wifibroadcast.cfg
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md

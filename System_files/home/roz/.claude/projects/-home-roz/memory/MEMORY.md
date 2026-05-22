@@ -23,6 +23,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - relay isc-dhcp-server + mediamtx disabled 2026-03-15: GCS static IP, mediamtx→latency
 - ldlidar build fix 2026-04-17: added `#include <pthread.h>` to ldlidar_driver/src/logger/log_module.cpp (GCC 14+)
 - ldlidar port fix 2026-04-17: hardcoded `/dev/ttyAMA3` in launch/ld19.launch.py line 35 — CLI port_name arg silently ignored by upstream
+- WFB_NICS syntax fix 2026-05-10: /etc/default/wifibroadcast had two separate quoted strings instead of one — fixed to `WFB_NICS="wlx782288d993c0 wlx782288d98f91"` (both NICs present and UP)
 
 ---
 
@@ -90,9 +91,11 @@ ldlidar.service          → STL-19 → /scan (DISABLED 2026-04-17: hardware mov
 config: /etc/wifibroadcast.cfg | ch: 161 (5GHz) | region: BO | txpower: 3000 (30dBm rtl8812eu)
 BW: 20MHz | MCS: 1 | STBC: 1 | LDPC: 1 | short_gi: off | CRITICAL: default_route=False both sides
 drone: drone-wfb@10.5.5.87/24 | relay/GS: gs-wfb@10.5.5.77/24
-streams: video TX 0x00 FEC 8/12 | mavlink RX 0x10/TX 0x90 FEC 1/2 | tunnel RX 0xa0/TX 0x20 FEC 2/4
+streams: video TX 0x00 FEC 8/12 | mavlink RX 0x10/TX 0x90 FEC 1/3 | tunnel RX 0xa0/TX 0x20 FEC 2/4
 GS endpoints: video→10.5.6.50:5600 | mavlink→10.5.6.50:14550 | keys: /etc/drone.key /etc/gs.key
 stats API: drone 8002/8102 | GS 8003/8103
+MULTI-ADAPTER: drone video service_type=udp_proxy (was udp_direct_tx) — enables TX across both wlx NICs via fwmark+tc (fwmark: video=20, mavlink=10, tunnel=30)
+mavlink_sys_id=3 | both NIC in WFB_NICS (syntax fixed 2026-05-10)
 
 ---
 
