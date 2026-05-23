@@ -832,3 +832,6 @@ nsh> ver all                  # firmware version
 - M	System_files/etc/vision_streaming.conf
 - M	System_files/etc/wifibroadcast.cfg
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-05-23 12:05**
+- M	System_files/etc/netplan/50-cloud-init.yaml
+- M	System_files/etc/vision_streaming.conf
