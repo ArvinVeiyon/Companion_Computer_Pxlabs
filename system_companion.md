@@ -837,3 +837,5 @@ nsh> ver all                  # firmware version
 - M	System_files/etc/vision_streaming.conf
 **2026-05-24 01:06**
 - M	System_files/etc/vision_streaming.conf
+**2026-05-29 21:54**
+- M	System_files/etc/netplan/50-cloud-init.yaml
