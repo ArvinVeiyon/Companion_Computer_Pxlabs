@@ -11,6 +11,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `todos.md`               — platform TODO list (WFB fixes, post OS backup)
 - `ros2_nodes.md`          — ROS2 node details (pkg paths, pub/sub, params)
 - `ros2_topics.md`         — full FMU↔companion DDS topic lists
+- `rover_odometry.md`     — rover wheel odometry node plan (all params, formulas, ESC mapping)
 
 ---
 
