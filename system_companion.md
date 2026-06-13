@@ -843,3 +843,5 @@ nsh> ver all                  # firmware version
 - M	System_files/etc/netplan/50-cloud-init.yaml
 **2026-06-01 21:53**
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-06-13 11:28**
+- M	System_files/etc/vision_streaming.conf
