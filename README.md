@@ -54,7 +54,9 @@ System config files are automatically synced to `System_files/` on boot and dail
 Relay (`vind-rly`) bridges WFB-NG to the ground station:
 - WFB tunnel: `gs-wfb` @ `10.5.5.77/24`
 - SSH port forward: relay `:2222` → drone `10.5.5.87:22`
-- See `system_companion.md` §14 and `Setup_Procedure_for_Relay_Station.docx`
+- GCS also SSHes relay directly (port 22) for WFB mode control via `wfb-rlyctl`
+- See `system_companion.md` §15 (GCS Interface) and `Setup_Procedure_for_Relay_Station.docx`
+- Relay docs: `ArvinVeiyon/Relay_Station_Pxlabs` (mirror at `~/codex-relay-mirror`)
 
 ## PX4 MAVLink Utility
 
@@ -85,3 +87,5 @@ Requires: `pymavlink` (already installed)
 | `v1.0.6` | `release` | `6bf1749` | 2026-03-09 | wfb-ng: fix mavlink streams, increase FEC |
 | `v1.0.7` | `release` | `b1236a9` | 2026-03-15 | Security: replace hardcoded PAT with SSH URL; remove sudo password from docs |
 | `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel 157→161; MEMORY.md + system_companion.md updated |
+| `v1.0.9` | `master` | — | 2026-05-10 | WFB-NG multi-adapter: video udp_direct_tx→udp_proxy, dual NIC, fwmark documented |
+| —        | `master` | `2087fce` | 2026-07-10 | Add Section 15: GCS Interface (G-Control/pxlabs_cli full call chain + future dev guide) |
