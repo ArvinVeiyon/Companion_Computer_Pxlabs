@@ -31,6 +31,11 @@ Root cause: GS wfb-server crashes with BlockingIOError EAGAIN (socket buffer ove
 Option A — increase rx_ring_size in /etc/wifibroadcast.cfg on relay (currently 2MB, try 4-8MB).
 Option B — reduce drone video bitrate in /etc/vision_streaming.conf.
 
+### 5. Fix channel reference in PXLABS_qgroundcontrol docs (local edit + push)
+ARCHITECTURE.md and DEVELOPMENT.md both say `ch157` — correct value is **ch161**.
+Clone repo, search `ch157` / `channel 157`, replace with `ch161` in both files, then push.
+Repo: https://github.com/ArvinVeiyon/PXLABS_qgroundcontrol (branch: master)
+
 ### 4. Check GS adapter TX power (Relay station)
 Uplink (GS→Drone) has severe packet loss (1-7 pkt/s constant) vs downlink which is fine.
 Asymmetry may indicate GS TX power too low.
