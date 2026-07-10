@@ -745,6 +745,130 @@ nsh> ver all                  # firmware version
 > Relay station install/recovery runbook, mavlink-router config, and antenna tracker implementation
 > are documented in `system_relay.md` on vind-rly (`~/codex-relay/system_relay.md`).
 
+## 15) GCS Interface — G-Control (PXLABS QGC)
+
+G-Control is a customized QGroundControl v5.0.8 build (ArvinVeiyon/PXLABS_qgroundcontrol, branch: master).
+It controls the companion over SSH — **the relay station is always in the middle**.
+
+### Full Call Chain
+
+```
+G-Control.exe  (Windows GCS, 10.5.6.50)
+  └─ FlyViewCustomLayer.qml  [button click]
+       └─ PXLABSRunner.run("companion <action>")   [QML C++ singleton]
+            └─ PXLABSCommandRunner.cc  [QProcess wrapper]
+                 └─ pxlabs_cli.exe companion <action>   [PyInstaller .exe]
+                      └─ pick_companion_host()  [TCP probe primary → fallback]
+                           └─ Paramiko SSH
+                                ├─ PRIMARY:  relay (10.5.5.77):2222
+                                │             └─ autossh → companion:22  [ssh-tunnel-to-companion.service]
+                                └─ FALLBACK: companion (10.5.5.87):22   [direct WFB tunnel, if GCS has route]
+                                     └─ command executes on Vind-Roz
+                                          └─ stdout streamed back → GCS status label
+```
+
+**SSH user on companion:** `roz`
+**Password source:** keyring / env `PXLABS_COMPANION_PASSWORD`
+**Relay tunnel:** `ssh-tunnel-to-companion.service` (autossh) on vind-rly — always must be running for GCS→companion SSH to work.
+
+### Binaries Called on Companion (must exist)
+
+| GCS Action | SSH Command on Companion |
+|---|---|
+| front-switch | `sudo vision_config_manager /dev/video0` |
+| bottom-switch | `sudo vision_config_manager /dev/video2` |
+| split-front-bottom | `sudo vision_config_manager /dev/video0 /dev/video2` |
+| split-bottom-front | `sudo vision_config_manager /dev/video2 /dev/video0` |
+| camera-params | `sudo vision_config_manager set-cam-params <dev> <res> <fps> --format <fmt>` |
+| capture-front/bottom | `Rozcam -i /dev/video0` / `Rozcam -i /dev/video2` |
+| reboot | `sudo systemd-run --on-active=0 systemctl reboot` |
+| shutdown | `sudo systemd-run --on-active=0 systemctl poweroff` |
+| services refresh | `systemctl is-active + is-enabled` loop |
+| services start/stop/restart | `sudo systemctl <action> <service>` |
+| services enable/disable | `sudo systemctl enable/disable --now <service>` |
+| wifi-temp | read `/proc/net/rtl88x2eu/<iface>/thermal_state` → `wfb-cli drone` → sysfs hwmon |
+| ssh-terminal | opens new terminal window → `ssh roz@<companion_ip>` |
+
+**`vision_config_manager`** — custom PXLABS script, installed at `/usr/local/bin/vision_config_manager`.
+Rewrites `/etc/vision_streaming.conf` and restarts `vision_streaming.service`. Both the RC switch (rc_control_node) and the GCS panel call this same binary.
+**`Rozcam`** — custom image capture tool. Location: `/usr/local/bin/Rozcam` (verify with `which Rozcam`).
+
+### Camera Device Mapping
+
+```
+Default (swap=false):  /dev/video0 = front    /dev/video2 = bottom
+Swapped  (swap=true):  /dev/video2 = front    /dev/video0 = bottom
+```
+
+The `--swap` flag is a GCS setting. Physical camera wiring determines which is correct.
+RC CH9 PWM and GCS panel both ultimately call `vision_config_manager` — keep physical wiring consistent.
+
+### wifi-temp Probe (3-Layer Fallback)
+
+GCS polls this every N seconds to display Air-TX temperature in the toolbar chip (green <60°C / orange 60–74°C / red ≥75°C).
+1. `/proc/net/rtl88x2eu/<iface>/thermal_state` — NIC driver thermal register (preferred, fastest)
+2. `wfb-cli drone` output → grep temperature
+3. `/sys/class/hwmon/hwmon*/temp1_input` — sysfs (value >200 → divide by 1000 for millidegrees)
+
+NIC name resolved from `WFB_NICS` in `/etc/default/wifibroadcast`.
+Always exits 0 and prints `N/A` on failure — never crashes GCS.
+Reuses a single SSH session for all 3 probe attempts.
+
+### Sudo Security
+
+All sudo calls use `printf` (not `echo`) to avoid password exposure in `ps` output:
+```bash
+printf '%s\n' 'password' | sudo -S <command>
+```
+Companion `/etc/sudoers` must allow `roz` to run `vision_config_manager`, `systemctl`, `systemd-run` without TTY (`NOPASSWD` or password via stdin).
+
+### PXLABSRunner Constraints
+
+- **Singleton** — only one SSH command runs at a time across all GCS panels
+- **No timeout** — if companion SSH hangs, GCS blocks until complete or manually aborted
+- **Stateless** — new SSH connection per action (except wifi-temp: one session, 3 probes)
+- **Busy guard** — if a background poll is running when user clicks, it is aborted and the user's command is queued with a 400ms retry timer
+- **Dev mode** — if cli path ends in `.py`, prepends `python` automatically (no recompile for testing)
+
+### WFB Mode Control (Relay-side, via same CLI)
+
+GCS also controls the relay directly (not via companion):
+```
+pxlabs_cli.exe relay wfb switch --mode standalone|cluster
+  → SSH roz@10.5.5.77:22  [relay, direct]
+  → sudo /usr/local/sbin/wfb-rlyctl use-standalone|use-cluster
+```
+WFB mode shown in pull-tab: ◉ standalone (green) / ⬡ cluster (blue).
+After switch, GCS waits 4 s then re-queries `relay wfb refresh` to confirm new mode.
+
+### Future Dev — Adding New GCS-Controllable Features
+
+To expose a new companion capability to G-Control without touching C++:
+
+1. Add branch in `tools/pxlabs_cli.py` → `companion_actions()`:
+   ```python
+   if action == "my-action":
+       return run_cmd(*ssh_exec(ip, port, username, password, "my-command"))
+   ```
+2. Add QML button in `src/FlightDisplay/FlyViewCustomLayer.qml`:
+   ```qml
+   MouseArea { onClicked: _runPanelCmd("companion my-action", "Running…") }
+   ```
+3. No C++ changes needed — `PXLABSRunner` passes args as-is.
+
+**Candidates from autonomy roadmap:**
+| Future Action | Companion Command | Phase |
+|---|---|---|
+| `companion offboard-start` | start phase2 mission ROS2 node | phase2 |
+| `companion offboard-stop` | stop mission node + disarm | phase2 |
+| `companion ros2-status` | `ros2 node list` or service health check | phase2 |
+| `companion arm` / `disarm` | pymavlink via tcp:127.0.0.1:5760 | phase2 |
+| `companion ai-query "msg"` | `ollama run phi3:mini "msg"` | phase6 |
+| `companion mission-status` | read `/fmu/out/vehicle_status` via ros2 echo | phase2 |
+
+**Services manageable from GCS now** (via `services` subcommand): any `systemctl` service.
+To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` list in `pxlabs_cli.py`.
+
 **2026-02-23 18:24**
 - A	Setup_Procedure_for_Relay_Station.docx
 - A	System_files/etc/sudoers.d/roz-codex
