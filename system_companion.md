@@ -1003,7 +1003,7 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 | `v1.0.7` | `release` | `b1236a9` | 2026-03-15 | Security: replace hardcoded PAT with SSH URL in relay_git_sync.sh; remove sudo password from docs |
 | `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel updated 157→161; system_companion.md + MEMORY.md synced |
 | `v1.0.9` | `master` | `ea17fe4` | 2026-05-10 | WFB-NG multi-adapter: video service_type udp_direct_tx→udp_proxy, dual NIC (wlx782288d993c0 + wlx782288d98f91) in WFB_NICS, fwmark table documented, peer restored in drone_tunnel/gs_tunnel |
-| —        | `master` | `2087fce` | 2026-07-10 | Add Section 15: GCS Interface — full G-Control→pxlabs_cli→relay→SSH→companion call chain, all binaries, camera map, wifi-temp fallback, future dev guide |
+| `v1.1.0` | `master` | `474e05e` | 2026-07-10 | GCS interface docs (Section 15), WFB-NG full drone config reference (Section 7), memory backup sync (MEMORY.md, GCS interface ref, rover odometry) |
 **2026-04-17 02:12**
 - M	System_files/boot/firmware/config.txt
 - M	System_files/etc/vision_streaming.conf
