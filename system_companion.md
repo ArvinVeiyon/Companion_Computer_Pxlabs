@@ -496,57 +496,121 @@ python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
 ---
 
 ## 7) WFB-NG (WiFi Broadcast) Configuration
-Config file: `/etc/wifibroadcast.cfg`
 
-**RF Settings:**
-| Parameter | Value |
-|---|---|
-| WiFi channel | 161 (5 GHz) |
-| Region | BO |
-| TX power | 3000 (30 dBm × 100, for rtl8812eu) |
-| Bandwidth | 20 MHz |
-| MCS index | 1 |
-| STBC | 1 |
-| LDPC | 1 |
-| Short GI | disabled |
+Config file: `/etc/wifibroadcast.cfg` | Profile used: **drone**
+Companion runs only the `drone` profile — never `gs`. The `[gs]` section in the config is present for reference only.
 
-**Adapters (multi-NIC TX):**
-Both RTL8812EU adapters are active on the drone side. `/etc/default/wifibroadcast`:
+### RF Settings
+| Parameter | Value | Notes |
+|---|---|---|
+| `wifi_channel` | 161 | 5 GHz — must match relay side exactly |
+| `wifi_region` | BO | Bolivia — allows higher TX power |
+| `wifi_txpower` | 3000 | 30 dBm × 100 (rtl8812eu driver unit) |
+| `bandwidth` | 20 MHz | 20 MHz channel width |
+| `mcs_index` | 1 | BPSK 1/2 — robust low-rate modulation |
+| `stbc` | 1 | Space-time block coding enabled |
+| `ldpc` | 1 | Low-density parity check enabled |
+| `short_gi` | False | Standard guard interval |
+
+### Adapters — Multi-NIC TX
+Both RTL8812EU adapters TX simultaneously. `/etc/default/wifibroadcast`:
 ```
 WFB_NICS="wlx782288d993c0 wlx782288d98f91"
 ```
-All three TX streams (video, mavlink, tunnel) transmit on both NICs simultaneously. WFB-NG selects the best path per-packet based on RSSI delta (`tx_sel_rssi_delta = 3`).
+WFB-NG selects best path per-packet based on RSSI delta (`tx_sel_rssi_delta = 3`).
 
-**Streams (drone side):**
+### Drone Profile Streams
 | Stream | Direction | Stream ID | Service type | fwmark | Peer |
 |---|---|---|---|---|---|
-| video | TX only | 0x00 | `udp_proxy` | 20 | listen `127.0.0.1:5602` ← vision_streaming node |
-| mavlink | RX 0x90 / TX 0x10 | — | `mavlink` | 10 | listen `0.0.0.0:14550` ← mavlink-router |
-| tunnel | RX 0xa0 / TX 0x20 | — | `tunnel` | 30 | ifname `drone-wfb` |
+| video | TX only | 0x00 | `udp_proxy` | 20 | `listen://127.0.0.1:5602` ← vision_streaming |
+| mavlink | RX 0x90 / TX 0x10 | — | `mavlink` | 10 | `listen://0.0.0.0:14550` ← mavlink-router |
+| tunnel | RX 0xa0 / TX 0x20 | — | `tunnel` | 30 | ifname `drone-wfb` @ `10.5.5.87/24` |
 
-> **Multi-adapter note:** video stream uses `service_type = udp_proxy` (changed from `udp_direct_tx`). This is required for multi-NIC TX — `udp_direct_tx` only uses a single adapter. `udp_proxy` allows WFB-NG to distribute TX across all NICs in `WFB_NICS` using fwmark + tc rules.
+> **`udp_proxy` for video** — required for multi-NIC TX. `udp_direct_tx` only uses one adapter.
+> `udp_proxy` routes packets via fwmark + tc rules across all NICs in `WFB_NICS`. Changed from
+> `udp_direct_tx` in v1.0.9 (2026-05-10) when second NIC was added.
 
-**FEC settings:**
-| Stream | fec_k | fec_n | Max recoverable |
+> **Mavlink stream IDs** — drone TX=0x10 pairs with relay GS RX=0x10 ✓
+> drone RX=0x90 pairs with relay GS TX=0x90 ✓. These must be complementary — not identical.
+> The relay's initial config had both sides with the same IDs (broken). Fixed 2026-02-22.
+
+### FEC Settings
+| Stream | fec_k | fec_n | Max recoverable loss |
 |---|---|---|---|
-| video | 8 | 12 | 4 pkts/block |
-| mavlink | 1 | 3 | 2 pkts/block |
-| tunnel | 2 | 4 | 2 pkts/block |
+| video | 8 | 12 | 4 packets per block |
+| mavlink | 1 | 3 | 2 packets per block |
+| tunnel | 2 | 4 | 2 packets per block |
 
-**Tunnel (WFB IP layer):**
-- Drone interface: `drone-wfb` @ `10.5.5.87/24`
-- GS/relay interface: `gs-wfb` @ `10.5.5.77/24`
-- `default_route = False` on both sides (critical — do not change)
+### Full Reference Config (drone side — current correct state)
+> Use this to restore `/etc/wifibroadcast.cfg` on the companion if ever wiped or misconfigured.
 
-**GS side endpoints:**
-- Video → `connect://10.5.6.50:5600`
-- MAVLink → `connect://10.5.6.50:14550`
+```ini
+# ===== RF — same values on both drone and relay =====
+wifi_channel = 161          # 5 GHz, must match relay
+wifi_region = 'BO'
+wifi_txpower = 3000         # 30 dBm × 100 (8812eu)
+temp_measurement_interval = 2
+temp_overheat_warning = 60
 
-**Keys:** `drone.key` / `gs.key` (tracked in `System_files/etc/`)
+# ===== CLUSTER — companion does NOT use cluster, section stays commented =====
+#[cluster]
+#nodes = {}
 
-**Stats/API ports:**
-- Drone: stats `8002`, API `8102`
-- GS: stats `8003`, API `8103`
+# ===== DRONE PROFILE — this is what runs on companion =====
+[drone]
+streams = [
+  {'name': 'video',   'stream_rx': None,  'stream_tx': 0x00, 'service_type': 'udp_proxy',      'profiles': ['base','drone_base','video','drone_video']},
+  {'name': 'mavlink', 'stream_rx': 0x90,  'stream_tx': 0x10, 'service_type': 'mavlink',         'profiles': ['base','drone_base','mavlink','drone_mavlink']},
+  {'name': 'tunnel',  'stream_rx': 0xa0,  'stream_tx': 0x20, 'service_type': 'tunnel',          'profiles': ['base','drone_base','tunnel','drone_tunnel']}
+]
+stats_port = 8002
+api_port   = 8102
+
+# ===== DRONE LOW-LEVEL PROFILES =====
+[drone_video]
+fwmark = 20
+peer = 'listen://127.0.0.1:5602'   # FFmpeg/vision_streaming sends video here
+
+[drone_mavlink]
+fwmark = 10
+peer = 'listen://0.0.0.0:14550'    # mavlink-router UDP endpoint
+
+[drone_tunnel]
+fwmark = 30
+ifname = 'drone-wfb'
+ifaddr = '10.5.5.87/24'            # drone side of WFB IP tunnel
+default_route = False               # CRITICAL — do not set True
+
+# ===== RF BASE SETTINGS =====
+[base]
+bandwidth = 20
+short_gi  = False
+stbc      = 1
+ldpc      = 1
+mcs_index = 1
+
+[drone_base]
+keypair = 'drone.key'   # /etc/drone.key
+```
+
+### Keys
+- `/etc/drone.key` — drone TX/RX keypair (tracked in `System_files/etc/drone.key`)
+- `/etc/gs.key` — GS keypair (also on relay, must match)
+- Both keys must be identical on companion and relay — generated once, copied to both
+
+### Stats / API Ports
+| Side | Stats port | API port |
+|---|---|---|
+| Drone (companion) | 8002 | 8102 |
+| GS (relay) | 8003 | 8103 |
+
+### Verify WFB-NG on Companion
+```bash
+wfb-cli drone                          # live link stats, RSSI, packet loss
+systemctl status wifibroadcast@drone   # service health
+ip addr show drone-wfb                 # tunnel interface: should show 10.5.5.87/24
+cat /etc/default/wifibroadcast         # confirm both NICs in WFB_NICS
+```
 
 ## 8) Testing Checklist
 1. FC boots and PX4 console accessible
