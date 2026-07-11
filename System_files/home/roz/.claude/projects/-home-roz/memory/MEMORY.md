@@ -12,6 +12,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `ros2_nodes.md`          — ROS2 node details (pkg paths, pub/sub, params)
 - `ros2_topics.md`         — full FMU↔companion DDS topic lists
 - `rover_odometry.md`     — rover wheel odometry node plan (all params, formulas, ESC mapping)
+- `reference_gcs_companion_interface.md` — G-Control↔companion SSH interface, binaries, camera map, future dev hooks
 
 ---
 
@@ -157,6 +158,19 @@ phase4 TODO: GPS-denied nav (visual odometry / SLAM: ORB-SLAM3, OpenVINS, RTAB-M
 phase5 TODO: computer vision (YOLOv8n ~5fps, landing zone, target tracking)
 phase6 TODO: AI mission brain (LLM → natural language → waypoints + replan)
 safety TODO: geofence | auto-RTH low battery | emergency land | failsafe modes
+
+---
+
+## [GCS_INTERFACE]
+→ Full detail in memory/reference_gcs_companion_interface.md
+G-Control.exe → PXLABSRunner (QProcess) → pxlabs_cli.exe → Paramiko SSH → relay:2222 → autossh → companion:22 (relay ALWAYS in middle)
+key binaries on companion: `vision_config_manager` (camera switch/params) | `Rozcam` (capture)
+camera: /dev/video0=front /dev/video2=bottom | split = both devices in one call
+wifi-temp: /proc/net/rtl88x2eu/<iface>/thermal_state → wfb-cli drone → hwmon (3-layer fallback)
+sudo via: `printf '%s\n' 'pw' | sudo -S <cmd>` (not echo — ps-safe)
+singleton runner: one SSH command at a time, no timeout, stateless per call
+future dev: new GCS action = add branch in pxlabs_cli companion_actions() + QML button, no C++ needed
+candidates: offboard-start/stop, ros2-status, arm/disarm, ai-query → Phi-3
 
 ---
 
