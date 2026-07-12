@@ -22,10 +22,12 @@ etc/gs.key
 etc/drone.key
 etc/default/wifibroadcast
 etc/wifibroadcast.cfg
+etc/wifibroadcast.cfg.default
 etc/logrotate.d/wifibroadcast
 etc/gnutls/config
 usr/local/bin/vision_config_manager
 usr/local/bin/block-traffic.sh
+usr/local/sbin/wfb-cfg-apply
 etc/systemd/system/block-traffic.service
 boot/firmware/config.txt
 etc/systemd/system/ollama.service

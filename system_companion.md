@@ -345,13 +345,14 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
   - All active systemd service files (mavlink-router, microxrce-agent, rc_control, tfmini, vision_streaming, ros2 nodes, block-traffic)
   - `/etc/mavlink-router/main.conf`
   - `/etc/vision_streaming.conf` + `.bak`
-  - `/etc/wifibroadcast.cfg` + defaults
+  - `/etc/wifibroadcast.cfg` + `/etc/wifibroadcast.cfg.default` (QGC *Restore Default* baseline)
   - `/etc/sid.conf`, `/etc/gnutls/config`
   - `/etc/pam.d/sshd`
   - `/etc/drone.key`, `/etc/gs.key`
   - `/etc/sudoers`
   - `/boot/firmware/config.txt`
   - `/usr/local/bin/block-traffic.sh`
+  - `/usr/local/sbin/wfb-cfg-apply` (WFB safe-apply watchdog — restore as `755 root:root`; see §7)
   - `/home/roz/mavlink.sh`
   - **Not yet synced (require sudo):** `/etc/ssh/sshd_config`, `/etc/netplan/50-cloud-init.yaml`
 - **On change:** auto-commits to git with tag `sync-YYYYMMDD-HHMM` and appends summary to this doc
@@ -611,6 +612,52 @@ systemctl status wifibroadcast@drone   # service health
 ip addr show drone-wfb                 # tunnel interface: should show 10.5.5.87/24
 cat /etc/default/wifibroadcast         # confirm both NICs in WFB_NICS
 ```
+
+### Safe Config Apply & Watchdog — `wfb-cfg-apply`
+Every WFB/`wifibroadcast.cfg` change pushed from the ground (QGC → *Settings → WFB Config*)
+is applied through this script, **never** by editing `/etc/wifibroadcast.cfg` directly. It is the
+safety net that guarantees a bad RF setting can never permanently kill the link.
+
+- **Script:** `/usr/local/sbin/wfb-cfg-apply` — **must be `755 root:root`** (tracked in
+  `System_files/usr/local/sbin/wfb-cfg-apply`). Byte-identical on companion and relay.
+- **Log:** `/var/log/wfb-cfg-apply.log`
+- **Confirm file:** `/run/wfb-cfg-confirm` — the ground station `touch`es it over SSH once it can
+  reach this device again after the restart. Its presence = "keep the new config".
+- **Backup:** `/etc/wifibroadcast.cfg.bak` (auto, per apply). **Default baseline:**
+  `/etc/wifibroadcast.cfg.default` (factory config for QGC's *Restore Default* — tracked in
+  `System_files/etc/wifibroadcast.cfg.default`).
+
+**Invocation** (by `pxlabs_cli` over SSH; QGC is the authoring UI):
+```bash
+sudo wfb-cfg-apply <new-cfg-path> [timeout-seconds]   # callers upload to /tmp/wfb-new.cfg
+```
+QGC/`pxlabs_cli` commands: `wfb-config set` (one side), `wfb-config set-both` (synchronized both
+ends, relay first then companion — neither confirmed until both applied, any failure rolls both
+back so the two configs always match), `wfb-config restore-default` (applies `.default`).
+
+**Flow:**
+1. Sanity-check new cfg — must contain `[common]`/`[base]`/`[video]` sections; refuses if the
+   target path is `/etc/wifibroadcast.cfg` itself (callers stage to `/tmp/wfb-new.cfg`).
+2. Back up `/etc/wifibroadcast.cfg` → `.bak`, install the new cfg.
+3. Restart the **active** WFB unit — auto-detected: only template instances in `running` state
+   (`wifibroadcast@*` / `wifibroadcast-cluster@*`); the oneshot `wifibroadcast.service`
+   (`active (exited)` in both modes) is deliberately excluded. Companion → `wifibroadcast@drone`;
+   relay → `wifibroadcast-cluster@gs`. Fallback to any loaded instance if the service is dead
+   (recovering from a broken cfg).
+4. Start a background watchdog (`nohup` + `disown` — survives SSH drop) that waits up to
+   `timeout` seconds for `/run/wfb-cfg-confirm`. **No confirm in time → restore `.bak` + restart
+   the unit** (self-healing, even if the new cfg killed the radio link).
+
+**Timeouts the ground uses:** single-side apply **60 s**; `set-both` (companion window outlives
+the relay phase) — relay `N` (60 normal / 120 for channel/bandwidth), companion `2·N+60`
+(180 / 300 s). Channel/bandwidth are TIER2 "danger" params (must match both ends, require
+`--danger-ack`); MCS/TX-power/STBC/LDPC/FEC are TIER1 (one side, other adapts).
+
+> **Reflash note:** the restore rsync in *Step 1* runs as root with `-p`, so it recreates
+> `/usr/local/sbin/wfb-cfg-apply` as **755 root:root** automatically. Source of record is this
+> device — a PC-side reference copy lives at `tools/reference/wfb-cfg-apply` in the QGC repo
+> (`PXLABS_qgroundcontrol`), full design in its `WFB_CONFIG_EDITOR.md`; if they disagree, the
+> device wins.
 
 ## 8) Testing Checklist
 1. FC boots and PX4 console accessible
