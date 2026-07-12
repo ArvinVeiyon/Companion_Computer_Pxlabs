@@ -1051,6 +1051,7 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 | `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel updated 157→161; system_companion.md + MEMORY.md synced |
 | `v1.0.9` | `master` | `ea17fe4` | 2026-05-10 | WFB-NG multi-adapter: video service_type udp_direct_tx→udp_proxy, dual NIC (wlx782288d993c0 + wlx782288d98f91) in WFB_NICS, fwmark table documented, peer restored in drone_tunnel/gs_tunnel |
 | `v1.1.0` | `master` | `474e05e` | 2026-07-10 | GCS interface docs (Section 15), WFB-NG full drone config reference (Section 7), memory backup sync (MEMORY.md, GCS interface ref, rover odometry) |
+| `v1.2.0` | `master` | `740ebc7` | 2026-07-12 | WFB safe-apply watchdog (wfb-cfg-apply, 755 root:root) + wifibroadcast.cfg.default added to tracked System_files (§7) |
 **2026-04-17 02:12**
 - M	System_files/boot/firmware/config.txt
 - M	System_files/etc/vision_streaming.conf
