@@ -6,6 +6,7 @@
 All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/codex-work/memory/
 - `feedback_dkms_arch.md` — rtl88x2eu DKMS ARCH fix
 - `reference_wfb_rlyctl.md` — wfb-rlyctl relay control tool (all managed files)
+- `reference_wfb_cfg_apply.md` — wfb-cfg-apply WFB safe-apply watchdog (QGC-driven, both devices)
 - `reference_wfb_ng.md` — full WFB-NG config (channel/FEC/endpoints/multi-adapter)
 - `reference_uart_map.md` — full ttyAMA UART pin/baud table
 - `reference_services.md` — full systemd service map (endpoints, configs, notes)
@@ -18,6 +19,8 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `project_relay_ntp_setup.md` — relay clock fix plan/status — OPEN
 - `project_companion_network_degraded.md` — companion IPv6 unreachable + slow bandwidth
 - `project_codexwork_branches.md` — codex-work origin/main stale, left as-is
+- `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
+- `feedback_wlan0_persistent_name.md` — wlan0 internet uplink pinned to MAC via udev (was drifting to wlan1)
 
 ## [KNOWN_FIXES]
 → full archive: reference_known_fixes_archive.md
