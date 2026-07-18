@@ -11,7 +11,7 @@ dtparam=audio=on
 dtparam=i2c_arm=on
 dtparam=spi=on
 dtparam=pciex1
-dtparam=pciex1_gen=3
+dtparam=pciex1_gen=2
 # Comment out the following line if the edges of the desktop appear outside
 # the edges of your display
 disable_overscan=1
