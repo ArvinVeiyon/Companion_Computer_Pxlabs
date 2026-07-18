@@ -1105,3 +1105,5 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 - M	System_files/etc/netplan/50-cloud-init.yaml
 **2026-07-19 01:33**
 - M	System_files/boot/firmware/config.txt
+**2026-07-19 01:39**
+- M	System_files/etc/netplan/50-cloud-init.yaml
