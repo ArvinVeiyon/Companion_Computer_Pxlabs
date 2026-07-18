@@ -20,7 +20,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `project_companion_network_degraded.md` — companion IPv6 unreachable + slow bandwidth
 - `project_codexwork_branches.md` — codex-work origin/main stale, left as-is
 - `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
-- `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4 @192.168.1.132) built 2026-07-12 via relay_bootstrap.sh
+- `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4, mgmt ssh vind-admin@192.168.1.221 pass 1987) built 2026-07-12. OPEN: WFB/EU card browns out Pi4 USB budget → kills uplink too; fix=powered hub (debug 2026-07-14, continue)
 - `feedback_wlan0_persistent_name.md` — wlan0 internet uplink pinned to MAC via udev (was drifting to wlan1)
 
 ## [KNOWN_FIXES]
