@@ -20,7 +20,7 @@
 
      wifis:
 
-         wlan0:
+         wlan1:
               access-points:
                    Nilan:
             #   OnePlus:
