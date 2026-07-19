@@ -22,6 +22,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
 - `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4, mgmt ssh vind-admin@192.168.1.221 pass 1987) built 2026-07-12. OPEN: WFB/EU card browns out Pi4 USB budget → kills uplink too; fix=powered hub (debug 2026-07-14, continue)
 - `feedback_wlan0_persistent_name.md` — wlan0 internet uplink pinned to MAC via udev (was drifting to wlan1)
+- `project_boxb_pcie_usb.md` — BOX-B PCIe→4x USB3.2 board: PCIe link down (electrical, not driver) → Orbbec Gemini 336L + WFB adapter not enumerating — OPEN 2026-07-19
 
 ## [KNOWN_FIXES]
 → full archive: reference_known_fixes_archive.md
