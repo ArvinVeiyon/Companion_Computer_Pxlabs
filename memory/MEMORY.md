@@ -24,7 +24,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `feedback_camera_qgc_only.md` — RULE: camera config only via QGC by user; never run vision_config_manager/edit conf myself
 - `feedback_wlan0_persistent_name.md` — onboard uplink naming: MAC pin raced vs USB WFB adapters ("Failed to rename: File exists") — fix = rename to wifi0, 2026-07-19 pending reboot verify
 - `project_boxb_pcie_usb.md` — BOX-B PCIe→USB3.2 board RESOLVED+verified 2026-07-19 (FFC reseat): VL805 xHCI up, Orbbec=/dev/video0-7, LG cam=8/9, dual-NIC WFB restored, user confirmed all cameras visible
-- `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: companion phases A+B DONE+pushed+rebuilt (vision_config_manager v2.0.0, node watchdog a561e93); phase C QGC-side IN PROGRESS by user 2026-07-19; FPV DOWN (stale v1 conf→video0 depth) until user re-applies from QGC
+- `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: phases A+B DONE+pushed+rebuilt+docs-audited (v2.0.0, watchdog a561e93, docs fb4e86a); phase C QGC-side IN PROGRESS by user 2026-07-19; FPV DOWN until user re-applies from QGC — **see NEXT SESSION PICKUP in file for resume steps**
 
 ## [KNOWN_FIXES]
 → full archive: reference_known_fixes_archive.md

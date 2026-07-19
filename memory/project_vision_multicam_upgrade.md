@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 41726602-da8e-4edf-b5e2-8b266624ecfa
-  modified: 2026-07-19T07:30:52.050Z
+  modified: 2026-07-19T07:49:38.234Z
 ---
 
 # Vision System Upgrade: Multi-Camera with Aliases (design 2026-07-19)
@@ -144,6 +144,21 @@ E. Delete stale front/back assumptions from docs (ride along with todos #5 ch157
 - Push/rebuild audit 2026-07-19 13:00: codex-work 18568ee + ros2_ws a561e93 confirmed on
   origin; deployed /usr/local/bin/vision_config_manager == repo copy; node install space ==
   src, service restarted 12:44:45 on new code (watchdog verified firing in journal).
+- Docs audit DONE 2026-07-19 (commit fb4e86a): system_companion.md + README purged of
+  front/back model (5 stale spots: sensors, pipeline, RC CH9 table, G-Control binaries
+  table, --swap section) — legacy RC/Rozcam entries marked STALE pending phase D, not
+  deleted, because rc_control really still sends /dev/video0 (v2 guard rejects loudly).
+
+### NEXT SESSION PICKUP (written 2026-07-19 ~13:15 before session reset)
+1. User is implementing Phase C in PXLABS_qgroundcontrol on PC (camera-list/apply/set-alias
+   per vision_multicam_companion.md §2+§5). A background conf-watcher was running here —
+   it dies with the session; instead just check on resume:
+2. Has /etc/vision_streaming.conf been rewritten in v2 format (camera_id key present)?
+   If yes → verify FPV recovered: journalctl -u vision_streaming (want ffmpeg stable >60s,
+   backoff reset), stream = LG cam 960x540 MJPG → rtp 127.0.0.1:5602.
+   If no → FPV still down in watchdog retry loop (expected, not a new bug); wait for user.
+3. Then likely next: phase D (rc_control rc_mapping.yaml + optical_flow to aliases/by-id,
+   todos #8) — only on user go-ahead.
 
 ## 5. Current state snapshot (2026-07-19 13:00)
 - **FPV currently DOWN**: /etc/vision_streaming.conf is stale v1 format (camera_name=/dev/video0
