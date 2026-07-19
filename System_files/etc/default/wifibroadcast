@@ -1,4 +1,5 @@
-WFB_NICS="wlx782288d993c0"
+WFB_NICS="wlx782288d993c0 wlx782288d98f91"
+#WFB_NICS="wlx782288d993c0"
 #WFB_NICS="wlan1 wlan2"
 
 # For multi-link setup you can specify path to custom config
@@ -7,5 +8,3 @@ WFB_NICS="wlx782288d993c0"
 
 # Autodetect local cards supported by wfb-ng (8812au and 8812eu)
 #WFB_NICS="$(wfb-nics)"
-
-#WFB_NICS="wlx782288d993c0 wlx782288d98f91"

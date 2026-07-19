@@ -18,11 +18,13 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `rover_odometry.md` — rover wheel odometry node plan (all params, formulas, ESC mapping)
 - `project_relay_ntp_setup.md` — relay clock fix plan/status — OPEN
 - `project_companion_network_degraded.md` — companion IPv6 unreachable + slow bandwidth
-- `project_codexwork_branches.md` — codex-work origin/main stale, left as-is
+- `project_codexwork_branches.md` — codex-work origin/main stale, left as-is; + auto-sync doesn't git-add NEW memory files, add manually after creating one
 - `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
 - `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4, mgmt ssh vind-admin@192.168.1.221 pass 1987) built 2026-07-12. OPEN: WFB/EU card browns out Pi4 USB budget → kills uplink too; fix=powered hub (debug 2026-07-14, continue)
-- `feedback_wlan0_persistent_name.md` — wlan0 internet uplink pinned to MAC via udev (was drifting to wlan1)
-- `project_boxb_pcie_usb.md` — BOX-B PCIe→4x USB3.2 board: PCIe link down (electrical, not driver) → Orbbec Gemini 336L + WFB adapter not enumerating — OPEN 2026-07-19
+- `feedback_camera_qgc_only.md` — RULE: camera config only via QGC by user; never run vision_config_manager/edit conf myself
+- `feedback_wlan0_persistent_name.md` — onboard uplink naming: MAC pin raced vs USB WFB adapters ("Failed to rename: File exists") — fix = rename to wifi0, 2026-07-19 pending reboot verify
+- `project_boxb_pcie_usb.md` — BOX-B PCIe→USB3.2 board RESOLVED+verified 2026-07-19 (FFC reseat): VL805 xHCI up, Orbbec=/dev/video0-7, LG cam=8/9, dual-NIC WFB restored, user confirmed all cameras visible
+- `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: phases A+B DONE+pushed+rebuilt+docs-audited (v2.0.0, watchdog a561e93, docs fb4e86a); phase C QGC-side IN PROGRESS by user 2026-07-19; FPV DOWN until user re-applies from QGC — **see NEXT SESSION PICKUP in file for resume steps**
 
 ## [KNOWN_FIXES]
 → full archive: reference_known_fixes_archive.md
@@ -76,10 +78,13 @@ ros2_ws: ~/ros2_ws | branch: main_dev | release: release/2026-02-22
 ## [TODOS]
 → See memory/todos.md (full detail + commands)
 1. Fix relay clock for real (local NTP via companion) — OPEN, recurred 2026-07-11, see project_relay_ntp_setup.md
-2. Disable drone wlan0 (5GHz interference with WFB-NG ch161)
+2. Disable drone onboard Wi-Fi wifi0/ex-wlan0 (5GHz interference with WFB-NG ch161)
 3. Increase WFB rx_ring_size on GS (EAGAIN crashes, 19 restarts observed)
 4. Check GS TX power (uplink severely worse than downlink)
 5. Antenna tracker hardware (script ready on relay port 14551, HW pending)
+6. vision_streaming node: add ffmpeg watchdog (zombie ffmpeg = silent FPV death, seen 2026-07-19)
+7. Orbbec autonomy pipeline: OrbbecSDK_ROS2 → depth/pointcloud → obstacle avoidance (phase 3 prep)
+8. G-Control camera presets stale (send /dev/video0/2 = Orbbec depth/IR now) → repoint to by-id; check CH9 RC path too
 
 ## [AI_STACK]
 online: claude CLI → Claude API | offline: Ollama phi3:mini (~3 tok/s on RPi5)
@@ -91,7 +96,7 @@ TFmini: ttyAMA2 downward 0.3-12m 50Hz → distance_sensor
 VL53L1X: I2C 0x29 front 20-400cm 10Hz → obstacle_distance
 OptFlow: /dev/video3 Farneback 10Hz → sensor_optical_flow (manual launch)
 STL-19: ttyAMA3 360° — TESTING ONLY, hw moved to other team 2026-04-17
-Camera0/2: /dev/video0 front, /dev/video2 bottom, 1280x720 MJPEG
+Cameras (roles set 2026-07-19): LG Smart Cam=FPV (video8, applied via `vision_config_manager /dev/video8` = QGC way, 960x540 MJPG; videoN may shuffle per boot → reapply from QGC) | Orbbec Gemini 336L=autonomy-only (video0=depth Z16, video2/4=IR, video6=color; USB3 on BOX-B; ROS2 wrapper for phase3/4, never ffmpeg) | old front/bottom cams removed
 
 ## [AUTONOMY_ROADMAP]
 phase1 ✅ sensor pipeline + offboard interface

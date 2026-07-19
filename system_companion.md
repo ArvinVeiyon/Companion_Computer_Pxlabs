@@ -1117,3 +1117,6 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 - M	System_files/boot/firmware/config.txt
 - M	System_files/etc/netplan/50-cloud-init.yaml
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-07-19 13:26**
+- M	System_files/etc/default/wifibroadcast
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
