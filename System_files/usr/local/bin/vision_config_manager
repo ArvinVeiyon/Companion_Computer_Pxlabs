@@ -2,10 +2,17 @@
 """
 Vision Manager Script — multi-camera edition
 
-Camera identity model (v2):
-  - Stable key = /dev/v4l/by-id symlink basename ("id"), survives reboots and
-    /dev/videoN shuffles (see 2026-07-19 BOX-B incident: Orbbec claimed video0-7).
+Camera identity model (v2.1):
+  - Stable key ("id") = usbcam-<vidpid>-<serial>-i<bInterfaceNumber>, built from
+    sysfs USB descriptors. /dev/v4l/by-id is NOT used: its -video-indexN numbers
+    are assigned in udev event order, which is not function-stable on multi-node
+    devices (2026-07-19 post-reboot: Orbbec index0 = depth node, color node had
+    no by-id symlink at all — camera invisible to discovery).
+  - Discovery walks /dev/video* directly and probes V4L2 capabilities; nodes are
+    classified by what they offer (MJPG/YUYV = streamable), never by index.
   - User-facing name = alias, stored in /etc/vision_cameras.yaml (set from QGC).
+    Legacy by-id keys in the store are migrated to usbcam keys by USB-serial
+    match (in-memory always; persisted on set-alias/apply/migrate-store).
   - /etc/vision_streaming.conf gets BOTH camera_id (stable) and camera_name
     (resolved /dev/videoN); the streaming node prefers camera_id at startup.
 
@@ -20,6 +27,11 @@ selection (e.g. Orbbec depth node) errors visibly instead of writing a config
 ffmpeg dies on (silent black feed, 2026-07-19).
 
 Changelog:
+- v2.1.0 (2026-07-19)
+  * Discovery rewrite: walk /dev/video* + sysfs USB identity instead of
+    /dev/v4l/by-id (by-id index order proved non-deterministic across boots).
+    New stable key usbcam-<vidpid>-<serial>-i<iface>; alias-store migration;
+    legacy by-id ids still accepted everywhere. New: migrate-store subcommand.
 - v2.0.0 (2026-07-19)
   * Multi-camera: list/--json, alias store, apply by id/alias, camera_id in conf,
     streamable-format guard, role_lock warning. Legacy modes preserved.
@@ -27,9 +39,10 @@ Changelog:
 - v1.2.0 / v1.1.0 / v1.0.0 — earlier iterations.
 """
 
-__version__ = "v2.0.0"
+__version__ = "v2.1.0"
 
 import subprocess
+import glob
 import os
 import sys
 import argparse
@@ -47,11 +60,14 @@ CONFIG_FILE = "/etc/vision_streaming.conf"
 CAMERAS_FILE = "/etc/vision_cameras.yaml"
 TEMP_FILE = "/tmp/vision_streaming.conf"
 CAMERAS_TEMP = "/tmp/vision_cameras.yaml"
-BY_ID_DIR = "/dev/v4l/by-id"
+SYSFS_V4L = "/sys/class/video4linux"
 SERVICE_NAME = "vision_streaming.service"
 
 # Formats the streaming node can actually ingest (ffmpeg -input_format)
 STREAMABLE_FORMATS = {"MJPG", "YUYV"}
+
+# Legacy pre-v2.1 stable key (a /dev/v4l/by-id basename)
+OLD_ID_RE = re.compile(r'^usb-.+-video-index\d+$')
 
 # ---------------- Core helpers ----------------
 
@@ -131,10 +147,51 @@ def probe_formats(device: str) -> Dict[str, List[str]]:
 def hw_name(device: str) -> str:
     node = os.path.basename(os.path.realpath(device))
     try:
-        with open(f"/sys/class/video4linux/{node}/name") as f:
+        with open(f"{SYSFS_V4L}/{node}/name") as f:
             return f.read().strip()
     except OSError:
         return "unknown"
+
+def _read_sysfs(path: str) -> Optional[str]:
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+def usb_identity(device: str) -> Optional[Tuple[str, str, str]]:
+    """
+    (serial_raw, vidpid, iface) for /dev/videoN from sysfs, or None for
+    non-USB nodes (platform ISP/codec: pispbe, rpivid).
+    serial_raw is the untouched USB serial — needed for legacy-key matching;
+    a device with no serial gets its USB port path (semi-stable) instead.
+    """
+    node = os.path.basename(os.path.realpath(device))
+    ifdir = os.path.realpath(os.path.join(SYSFS_V4L, node, "device"))
+    iface = _read_sysfs(os.path.join(ifdir, "bInterfaceNumber"))
+    usbdir = os.path.dirname(ifdir)
+    vid = _read_sysfs(os.path.join(usbdir, "idVendor"))
+    pid = _read_sysfs(os.path.join(usbdir, "idProduct"))
+    if not (iface and vid and pid):
+        return None
+    serial = _read_sysfs(os.path.join(usbdir, "serial")) or \
+        ("port" + os.path.basename(usbdir))
+    return serial, vid + pid, iface
+
+def camera_key(identity: Tuple[str, str, str]) -> str:
+    serial, vidpid, iface = identity
+    return f"usbcam-{vidpid}-{re.sub(r'[^A-Za-z0-9_.]', '_', serial)}-i{iface}"
+
+def function_tag(formats: Dict[str, List[str]]) -> Optional[str]:
+    """Human hint for multi-node devices, derived from what the node offers."""
+    fmts = set(formats)
+    if STREAMABLE_FORMATS & fmts:
+        return "color"
+    if "Z16" in fmts:
+        return "depth"
+    if fmts & {"GREY", "Y8", "Y8I", "Y12I", "Y16"}:
+        return "IR"
+    return None
 
 def load_camera_store() -> Dict[str, dict]:
     if yaml is None or not os.path.exists(CAMERAS_FILE):
@@ -153,34 +210,106 @@ def save_camera_store(store: Dict[str, dict]) -> None:
         sys.exit(1)
     with open(CAMERAS_TEMP, 'w') as f:
         f.write("# Camera alias/role store — managed by vision_config_manager (QGC-driven).\n"
-                "# Key = /dev/v4l/by-id symlink basename (stable across reboots).\n")
+                "# Key = usbcam-<vidpid>-<serial>-i<iface> (USB descriptors; firmware-stable\n"
+                "# across boots, unlike /dev/v4l/by-id index numbers).\n")
         yaml.safe_dump(store, f, default_flow_style=False, sort_keys=True)
     root_write(CAMERAS_TEMP, CAMERAS_FILE)
 
-def discover_cameras() -> List[dict]:
-    """All by-id capture nodes, with formats probed. Metadata nodes excluded."""
-    cameras = []
-    if not os.path.isdir(BY_ID_DIR):
-        return cameras
-    store = load_camera_store()
-    for entry in sorted(os.listdir(BY_ID_DIR)):
-        if '-video-index' not in entry:
+def scan_nodes() -> List[dict]:
+    """
+    Walk /dev/video* probing sysfs identity + V4L2 capabilities directly.
+    Non-USB nodes and metadata nodes (no capture formats) are excluded.
+    A USB interface usually carries one capture node; when it carries several
+    (Orbbec puts depth + both IR nodes on iface 00), they are disambiguated
+    by function tag + ordinal (-depth0, -ir0, -ir1). Single-node interfaces
+    (every streamable camera today) keep the bare key.
+    """
+    raw = []
+    for dev in sorted(glob.glob('/dev/video[0-9]*'),
+                      key=lambda d: int(re.sub(r'\D', '', d))):
+        identity = usb_identity(dev)
+        if identity is None:
             continue
-        path = os.path.join(BY_ID_DIR, entry)
-        dev = os.path.realpath(path)
         formats = probe_formats(dev)
         if not formats:          # metadata node — not a camera
             continue
-        meta = store.get(entry, {}) if isinstance(store.get(entry, {}), dict) else {}
-        cameras.append({
-            "id": entry,
-            "dev": dev,
-            "hw_name": hw_name(dev),
-            "alias": meta.get("alias"),
-            "streamable": bool(STREAMABLE_FORMATS & set(formats)),
-            "formats": formats,
-            "role_lock": meta.get("role_lock"),
-        })
+        raw.append((dev, identity, formats))
+
+    by_key: Dict[str, list] = {}
+    for item in raw:
+        by_key.setdefault(camera_key(item[1]), []).append(item)
+
+    cameras: List[dict] = []
+    for base, items in by_key.items():
+        if len(items) == 1:
+            keys = [base]
+        else:
+            counts: Dict[str, int] = {}
+            keys = []
+            for _dev, _identity, formats in items:
+                tag = (function_tag(formats) or "cap").lower()
+                n = counts.get(tag, 0)
+                counts[tag] = n + 1
+                keys.append(f"{base}-{tag}{n}")
+        for key, (dev, identity, formats) in zip(keys, items):
+            cameras.append({
+                "id": key,
+                "dev": dev,
+                "hw_name": hw_name(dev),
+                "alias": None,
+                "streamable": bool(STREAMABLE_FORMATS & set(formats)),
+                "formats": formats,
+                "role_lock": None,
+                "_serial_raw": identity[0],
+                "_usbdev": identity[1] + ":" + identity[0],
+            })
+    # (color)/(depth)/(IR) hints, only where one USB device exposes several nodes
+    per_dev: Dict[str, int] = {}
+    for c in cameras:
+        per_dev[c["_usbdev"]] = per_dev.get(c["_usbdev"], 0) + 1
+    for c in cameras:
+        tag = function_tag(c["formats"])
+        if tag and per_dev[c["_usbdev"]] > 1:
+            c["hw_name"] += f" ({tag})"
+    return cameras
+
+def migrated_store(cameras: List[dict]) -> Tuple[Dict[str, dict], Dict[str, str]]:
+    """
+    Alias store with legacy /dev/v4l/by-id keys mapped to usbcam keys.
+    A legacy key migrates when exactly one streamable camera's USB serial
+    appears in it (by-id names embed the serial); anything ambiguous is kept
+    untouched. Purely in-memory — callers decide whether to persist.
+    """
+    store = load_camera_store()
+    moves: Dict[str, str] = {}
+    for old_key in [k for k in list(store) if OLD_ID_RE.match(k)]:
+        cands = [c for c in cameras
+                 if c["streamable"] and c["_serial_raw"] in old_key]
+        if len(cands) != 1:
+            print(f"Warning: cannot migrate legacy camera key '{old_key}' "
+                  f"({len(cands)} serial matches); leaving as-is.", file=sys.stderr)
+            continue
+        new_key = cands[0]["id"]
+        entry = store.pop(old_key)
+        if not isinstance(entry, dict):
+            entry = {}
+        existing = store.get(new_key)
+        if isinstance(existing, dict):
+            store[new_key] = {**entry, **existing}
+        else:
+            store[new_key] = entry
+        moves[old_key] = new_key
+    return store, moves
+
+def discover_cameras() -> List[dict]:
+    """All capture-capable USB cameras with aliases/role_locks attached."""
+    cameras = scan_nodes()
+    store, _moves = migrated_store(cameras)
+    for c in cameras:
+        meta = store.get(c["id"])
+        if isinstance(meta, dict):
+            c["alias"] = meta.get("alias")
+            c["role_lock"] = meta.get("role_lock")
     return cameras
 
 def active_selection(cameras: List[dict]) -> Dict[str, Optional[str]]:
@@ -191,11 +320,18 @@ def active_selection(cameras: List[dict]) -> Dict[str, Optional[str]]:
         return active
     cfg.read(CONFIG_FILE)
     by_dev = {c["dev"]: c["id"] for c in cameras}
+    known_ids = {c["id"] for c in cameras}
     for role in ("primary", "secondary"):
         if not cfg.has_section(role):
             continue
         cam_id = cfg.get(role, "camera_id", fallback=None)
         if cam_id:
+            if cam_id not in known_ids and OLD_ID_RE.match(cam_id):
+                # conf written pre-v2.1 — translate so QGC's ●-markers match
+                cands = [c for c in cameras
+                         if c["streamable"] and c["_serial_raw"] in cam_id]
+                if len(cands) == 1:
+                    cam_id = cands[0]["id"]
             active[role] = cam_id
             continue
         name = cfg.get(role, "camera_name", fallback=None)
@@ -203,9 +339,10 @@ def active_selection(cameras: List[dict]) -> Dict[str, Optional[str]]:
             active[role] = by_dev.get(os.path.realpath(name), name)
     return active
 
-def resolve_camera(target: str) -> Tuple[Optional[str], str]:
+def resolve_camera(target: str) -> Tuple[Optional[str], str, Optional[dict]]:
     """
-    Resolve id | alias | /dev path -> (id or None, /dev/videoN).
+    Resolve id | legacy by-id id | alias | /dev path
+    -> (id or None, /dev/videoN, camera dict or None).
     Exits with a clear message if nothing matches.
     """
     cameras = discover_cameras()
@@ -214,14 +351,19 @@ def resolve_camera(target: str) -> Tuple[Optional[str], str]:
         real = os.path.realpath(target)
         for c in cameras:
             if c["dev"] == real:
-                return c["id"], c["dev"]
-        return None, real            # device exists but has no by-id entry
+                return c["id"], c["dev"], c
+        return None, real, None      # exists but not a USB camera node
     for c in cameras:
         if c["id"] == target:
-            return c["id"], c["dev"]
+            return c["id"], c["dev"], c
+    if OLD_ID_RE.match(target):      # legacy pre-v2.1 id (stale QGC/RC caller)
+        cands = [c for c in cameras
+                 if c["streamable"] and c["_serial_raw"] in target]
+        if len(cands) == 1:
+            return cands[0]["id"], cands[0]["dev"], cands[0]
     matches = [c for c in cameras if (c["alias"] or "").lower() == target.lower()]
     if len(matches) == 1:
-        return matches[0]["id"], matches[0]["dev"]
+        return matches[0]["id"], matches[0]["dev"], matches[0]
     if len(matches) > 1:
         print(f"Error: alias '{target}' is ambiguous ({len(matches)} cameras). Use the id.")
         sys.exit(1)
@@ -239,15 +381,12 @@ def guard_streamable(dev: str, label: str) -> None:
               f"Depth/IR nodes cannot be used for video streaming.")
         sys.exit(1)
 
-def warn_role_lock(cam_id: Optional[str], dev: str) -> None:
-    if not cam_id:
+def warn_role_lock(cam: Optional[dict]) -> None:
+    if not cam or not cam.get("role_lock"):
         return
-    meta = load_camera_store().get(cam_id, {})
-    lock = meta.get("role_lock") if isinstance(meta, dict) else None
-    if lock:
-        print(f"WARNING: camera '{meta.get('alias') or cam_id}' is role-locked "
-              f"'{lock}' (reserved for the autonomy pipeline). Streaming it may "
-              f"steal the device from ROS2.")
+    print(f"WARNING: camera '{cam.get('alias') or cam['id']}' is role-locked "
+          f"'{cam['role_lock']}' (reserved for the autonomy pipeline). Streaming "
+          f"it may steal the device from ROS2.")
 
 # ---------------- apply (v2) / legacy switch ----------------
 
@@ -326,25 +465,49 @@ def edit_camera_config(primary_device: str, secondary_device: Optional[str] = No
     print("Configuration file updated from live camera probe.")
     control_service('restart')
 
+def persist_migration_if_needed() -> None:
+    """Persist legacy-key store migration (rides along with any store write path)."""
+    cameras = scan_nodes()
+    store, moves = migrated_store(cameras)
+    if moves:
+        save_camera_store(store)
+        for old, new in moves.items():
+            print(f"Migrated camera key: {old} -> {new}", file=sys.stderr)
+
 def cmd_apply(primary: str, secondary: Optional[str]) -> None:
-    p_id, p_dev = resolve_camera(primary)
+    p_id, p_dev, p_cam = resolve_camera(primary)
     guard_streamable(p_dev, "primary camera")
-    warn_role_lock(p_id, p_dev)
+    warn_role_lock(p_cam)
     s_id, s_dev = (None, None)
     if secondary:
-        s_id, s_dev = resolve_camera(secondary)
+        s_id, s_dev, s_cam = resolve_camera(secondary)
         if s_dev == p_dev:
             print("Error: primary and secondary are the same camera.")
             sys.exit(1)
         guard_streamable(s_dev, "secondary camera")
-        warn_role_lock(s_id, s_dev)
+        warn_role_lock(s_cam)
+    persist_migration_if_needed()
     edit_camera_config(p_dev, s_dev, p_id, s_id)
+
+def cmd_migrate_store() -> None:
+    """One-shot: persist the legacy by-id -> usbcam key migration."""
+    cameras = scan_nodes()
+    store, moves = migrated_store(cameras)
+    if not moves:
+        print("Nothing to migrate.")
+        return
+    save_camera_store(store)
+    for old, new in moves.items():
+        print(f"Migrated: {old} -> {new}")
 
 def cmd_list(as_json: bool, show_all: bool) -> None:
     cameras = discover_cameras()
     if not show_all:
         cameras = [c for c in cameras if c["streamable"]]
-    result = {"cameras": cameras, "active": active_selection(cameras)}
+    active = active_selection(cameras)
+    cameras = [{k: v for k, v in c.items() if not k.startswith('_')}
+               for c in cameras]
+    result = {"cameras": cameras, "active": active}
     if as_json:
         print(json.dumps(result, indent=2))
         return
@@ -368,15 +531,15 @@ def cmd_list(as_json: bool, show_all: bool) -> None:
         print(f"{'':<12} id: {c['id']}")
 
 def cmd_set_alias(target: str, alias: str) -> None:
-    cam_id, _dev = resolve_camera(target)
+    cam_id, _dev, _cam = resolve_camera(target)
     if cam_id is None:
-        print("Error: camera has no /dev/v4l/by-id entry; cannot alias a bare "
-              "device path (identity would not survive reboots).")
+        print("Error: not a USB camera node; cannot alias a bare device path "
+              "(identity would not survive reboots).")
         sys.exit(1)
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}', alias):
         print("Error: alias must be 1-32 chars: letters, digits, space, _ . -")
         sys.exit(1)
-    store = load_camera_store()
+    store, _moves = migrated_store(scan_nodes())
     entry = store.get(cam_id)
     if not isinstance(entry, dict):
         entry = {}
@@ -570,7 +733,7 @@ def list_details(device):
 
 # --------------------------------- CLI ---------------------------------
 
-SUBCOMMANDS = {"list", "apply", "set-alias",
+SUBCOMMANDS = {"list", "apply", "set-alias", "migrate-store",
                "set-resolution-only", "set-cam-params", "list-details",
                "--version", "-V"}
 
@@ -604,6 +767,9 @@ def main():
     parser_alias.add_argument("camera", help="Camera id, alias, or /dev/videoN")
     parser_alias.add_argument("alias", help="New alias (1-32 chars)")
 
+    subparsers.add_parser("migrate-store",
+                          help="Persist legacy by-id keys in the alias store as usbcam keys")
+
     parser_res_only = subparsers.add_parser("set-resolution-only", help="Set only the resolution for a camera")
     parser_res_only.add_argument("device", help="Camera id, alias, or /dev/videoN")
     parser_res_only.add_argument("resolution", help="Desired resolution (e.g. 1920x1080)")
@@ -624,14 +790,16 @@ def main():
         cmd_apply(args.primary, args.secondary)
     elif args.command == "set-alias":
         cmd_set_alias(args.camera, args.alias)
+    elif args.command == "migrate-store":
+        cmd_migrate_store()
     elif args.command == "set-resolution-only":
-        _id, dev = resolve_camera(args.device)
+        _id, dev, _cam = resolve_camera(args.device)
         set_resolution_only(dev, args.resolution)
     elif args.command == "set-cam-params":
-        _id, dev = resolve_camera(args.device)
+        _id, dev, _cam = resolve_camera(args.device)
         set_cam_params(dev, args.resolution, args.fps, args.format)
     elif args.command == "list-details":
-        _id, dev = resolve_camera(args.device)
+        _id, dev, _cam = resolve_camera(args.device)
         list_details(dev)
 
 if __name__ == '__main__':

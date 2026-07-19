@@ -4,8 +4,18 @@ Implemented: **2026-07-19** &nbsp;|&nbsp; Status: **deployed & tested on compani
 Design/contract: `memory/project_vision_multicam_upgrade.md` &nbsp;|&nbsp; QGC-side work: pending (user, PXLABS_qgroundcontrol)
 
 Replaces the fixed two-camera front/back model with N cameras identified by a
-**stable id** (`/dev/v4l/by-id` symlink basename), user-renamable **aliases**,
-and free **primary/secondary (PiP)** selection — all driven from QGC.
+**stable id**, user-renamable **aliases**, and free **primary/secondary (PiP)**
+selection — all driven from QGC.
+
+> **v2.1 (2026-07-19 evening): identity scheme changed.** by-id basenames proved
+> non-deterministic across boots (post-reboot the Orbbec's `index0` pointed at
+> the depth node and the color node had *no* symlink → camera invisible,
+> NAV-COLOR resolving to depth). Discovery now walks `/dev/video*` probing
+> sysfs + V4L2 capabilities directly; the stable id is
+> `usbcam-<vidpid>-<serial>-i<bInterfaceNumber>` (USB descriptors,
+> firmware-fixed). Ids stay **opaque strings** to QGC — contract unchanged.
+> Legacy by-id ids are still accepted everywhere (conf, apply, store) and the
+> alias store migrates automatically (`migrate-store` ran 2026-07-19).
 
 ---
 
@@ -13,8 +23,8 @@ and free **primary/secondary (PiP)** selection — all driven from QGC.
 
 | Component | Version | Location | What changed |
 |---|---|---|---|
-| vision_config_manager | **v2.0.0** | `/usr/local/bin/vision_config_manager` | new `list/set-alias/apply` + guard; legacy modes kept |
-| vision_streaming node | watchdog rev | `ros2_ws` commit `a561e93` (main_dev) | ffmpeg watchdog, camera_id resolution, stderr→journal |
+| vision_config_manager | **v2.1.0** | `/usr/local/bin/vision_config_manager` | v2.1: sysfs discovery + usbcam ids + `migrate-store`; v2.0: `list/set-alias/apply` + guard; legacy modes kept |
+| vision_streaming node | watchdog rev | `ros2_ws` main_dev (see git log) | ffmpeg watchdog, camera_id resolution (usbcam + legacy by-id), stderr→journal |
 | camera store | new | `/etc/vision_cameras.yaml` | alias + role_lock per stable camera id |
 | stream conf | extended | `/etc/vision_streaming.conf` | new optional `camera_id` key per section |
 | v1 backup | v1.2.1 | `/usr/local/bin/vision_config_manager.bak.2026-07-19-v1.2.1` | rollback point |
@@ -31,13 +41,13 @@ Camera inventory. Default: only **streamable** cameras (offer MJPG or YUYV) —
 depth/IR/metadata nodes are filtered out automatically. `--all` adds
 non-streamable capture nodes (marked). `--json` is the machine form for QGC.
 
-Real output on the current platform (2026-07-19):
+Real output on the current platform (2026-07-19, v2.1 ids):
 ```
 $ vision_config_manager list
-FPV          /dev/video8    LG Smart Cam                 MJPG(1920x1080..) YUYV(..)
-             id: usb-EBP6415700138S077G_LG_Smart_Cam_01.00.00-video-index0
-NAV-COLOR    /dev/video6    Orbbec Gemini 336L           YUYV(424x240..) MJPG(..)  lock:autonomy
-             id: usb-Orbbec_R__Orbbec_Gemini_336L_CPC7B53000AB-video-index0
+NAV-COLOR    /dev/video6    Orbbec Gemini 336L (color)   YUYV(424x240..) MJPG(..)  lock:autonomy
+             id: usbcam-2bc50807-CPC7B53000AB-i04
+FPV          /dev/video8    LG Smart Cam                 MJPG(1920x1080..) YUYV(..) PRIMARY
+             id: usbcam-30c9009d-01.00.00-i00
 ```
 
 JSON shape (QGC parses this):
@@ -45,7 +55,7 @@ JSON shape (QGC parses this):
 {
   "cameras": [
     {
-      "id":        "usb-..._-video-index0",   // STABLE key — use this everywhere
+      "id":        "usbcam-30c9009d-01.00.00-i00",  // STABLE key — OPAQUE, use everywhere
       "dev":       "/dev/video8",             // current node (informational only)
       "hw_name":   "LG Smart Cam: LG Smart Cam",
       "alias":     "FPV",                     // null until user names it
@@ -58,7 +68,14 @@ JSON shape (QGC parses this):
 }
 ```
 `formats` is the source of truth for the QGC resolution/fps dialog — only offer
-what the camera lists (LG max 1080p; Orbbec color MJPG max 640x480).
+what the camera lists (LG max 1080p; Orbbec color actually offers up to
+**1280x800** MJPG/YUYV — more than the 640x480 the design assumed).
+
+### `vision_config_manager migrate-store` (v2.1)
+One-shot: rewrites legacy by-id keys in `/etc/vision_cameras.yaml` to usbcam
+keys (by USB-serial match). Already run on the platform; harmless when there is
+nothing to migrate. The migration also rides along automatically in memory on
+every command and is persisted by any `set-alias`/`apply`.
 
 ### `vision_config_manager set-alias <id|alias|/dev/videoN> "<name>"`
 Stores the alias companion-side in `/etc/vision_cameras.yaml`, keyed by stable
@@ -94,8 +111,10 @@ front/bottom cameras **error clearly instead of writing a dead config**.
 ## 3. Streaming node behavior (ros2_ws `a561e93`)
 
 - **camera_id first:** at every ffmpeg (re)start the node resolves
-  `/dev/v4l/by-id/<camera_id>` → current `/dev/videoN`. Boot renumbering or a
-  replug cannot break the stream; a mismatch with conf `camera_name` is logged.
+  `camera_id` → current `/dev/videoN`. v2.1 `usbcam-*` ids resolve via sysfs
+  USB descriptors (vid:pid + serial + interface); legacy by-id ids still
+  resolve through `/dev/v4l/by-id`. Boot renumbering or a replug cannot break
+  the stream; a mismatch with conf `camera_name` is logged.
 - **Watchdog (2s):** a dead ffmpeg is reaped and logged as
   `[ERROR] FFmpeg exited with code N after Xs`, then restarted with backoff
   2s → 4s → … → 30s cap (backoff resets after 60s of stable streaming).
@@ -116,12 +135,17 @@ Error opening input file /dev/video0.
 
 ## 4. Current camera map (2026-07-19, will drift — use ids!)
 
-| Alias | id (stable) | Node today | Role |
+| Alias | id (stable, v2.1) | Node today | Role |
 |---|---|---|---|
-| FPV | `usb-EBP6415700138S077G_LG_Smart_Cam_01.00.00-video-index0` | /dev/video8 | live FPV feed |
-| NAV-COLOR | `usb-Orbbec_R__Orbbec_Gemini_336L_CPC7B53000AB-video-index0` | /dev/video6 | autonomy (role_lock) |
-| — (filtered) | Orbbec index2 / index4 | video2 / video4 | IR, not streamable |
-| — (no by-id) | Orbbec depth | video0 | Z16 depth, autonomy |
+| FPV | `usbcam-30c9009d-01.00.00-i00` | /dev/video8 | live FPV feed |
+| NAV-COLOR | `usbcam-2bc50807-CPC7B53000AB-i04` | /dev/video6 | autonomy (role_lock) |
+| — (filtered) | `usbcam-2bc50807-CPC7B53000AB-i00-depth0` | video0 | Z16 depth, autonomy |
+| — (filtered) | `…-i00-ir0` / `…-i00-cap0` | video2 / video4 | IR, not streamable |
+
+(The Orbbec carries depth + both IR nodes on USB interface 00; they get
+function-tag suffixes derived from their pixel formats, so the suffix follows
+the function even if node order shuffles. Streamable cameras are always alone
+on their interface → bare keys.)
 
 Stale leftovers from the old build (harmless, cleanup later):
 `/etc/udev/rules.d/99-usb-cameras.rules` still pins the REMOVED Waveshare/See3CAM
