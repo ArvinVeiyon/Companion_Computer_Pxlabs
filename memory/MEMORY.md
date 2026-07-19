@@ -18,13 +18,13 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `rover_odometry.md` — rover wheel odometry node plan (all params, formulas, ESC mapping)
 - `project_relay_ntp_setup.md` — relay clock fix plan/status — OPEN
 - `project_companion_network_degraded.md` — companion IPv6 unreachable + slow bandwidth
-- `project_codexwork_branches.md` — codex-work origin/main stale, left as-is
+- `project_codexwork_branches.md` — codex-work origin/main stale, left as-is; + auto-sync doesn't git-add NEW memory files, add manually after creating one
 - `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
 - `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4, mgmt ssh vind-admin@192.168.1.221 pass 1987) built 2026-07-12. OPEN: WFB/EU card browns out Pi4 USB budget → kills uplink too; fix=powered hub (debug 2026-07-14, continue)
 - `feedback_camera_qgc_only.md` — RULE: camera config only via QGC by user; never run vision_config_manager/edit conf myself
 - `feedback_wlan0_persistent_name.md` — onboard uplink naming: MAC pin raced vs USB WFB adapters ("Failed to rename: File exists") — fix = rename to wifi0, 2026-07-19 pending reboot verify
 - `project_boxb_pcie_usb.md` — BOX-B PCIe→USB3.2 board RESOLVED+verified 2026-07-19 (FFC reseat): VL805 xHCI up, Orbbec=/dev/video0-7, LG cam=8/9, dual-NIC WFB restored, user confirmed all cameras visible
-- `project_vision_multicam_upgrade.md` — DESIGN: multi-camera + alias + primary/secondary via QGC (interface contract, companion & QGC work split) — user pulls this for PC-side QGC work
+- `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: companion phases A+B DONE+pushed+rebuilt (vision_config_manager v2.0.0, node watchdog a561e93); phase C QGC-side IN PROGRESS by user 2026-07-19; FPV DOWN (stale v1 conf→video0 depth) until user re-applies from QGC
 
 ## [KNOWN_FIXES]
 → full archive: reference_known_fixes_archive.md

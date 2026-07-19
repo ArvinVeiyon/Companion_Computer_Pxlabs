@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 41726602-da8e-4edf-b5e2-8b266624ecfa
+  modified: 2026-07-19T07:30:52.050Z
 ---
 
 # Vision System Upgrade: Multi-Camera with Aliases (design 2026-07-19)
@@ -137,12 +138,19 @@ E. Delete stale front/back assumptions from docs (ride along with todos #5 ch157
 - 12:17 incident during dev: a QGC front-switch (`vision_config_manager /dev/video0` in sudo log)
   killed the stream via v1 — the exact failure v2 now blocks. Conf left as user's selection
   (video0, failing loudly) — USER must re-apply (QGC or `apply FPV`) per feedback_camera_qgc_only.
-- **Phase C (QGC, user on PC) TODO** — checklist in vision_multicam_companion.md §5.
+- **Phase C (QGC, user on PC) IN PROGRESS 2026-07-19 ~13:00** — checklist in
+  vision_multicam_companion.md §5.
 - **Phase D TODO** — rc_control yamls + optical_flow to aliases/by-id (todos #8).
+- Push/rebuild audit 2026-07-19 13:00: codex-work 18568ee + ros2_ws a561e93 confirmed on
+  origin; deployed /usr/local/bin/vision_config_manager == repo copy; node install space ==
+  src, service restarted 12:44:45 on new code (watchdog verified firing in journal).
 
-## 5. Current state snapshot (2026-07-19)
-- FPV live: LG cam /dev/video8, 960x540 MJPG 30fps 2000K → rtp 127.0.0.1:5602 (conf applied
-  via vision_config_manager, standard QGC format).
+## 5. Current state snapshot (2026-07-19 13:00)
+- **FPV currently DOWN**: /etc/vision_streaming.conf is stale v1 format (camera_name=/dev/video0
+  = Orbbec depth, no camera_id) from the 12:17 QGC front-switch. Watchdog retry-looping every
+  30s, failing loudly as designed. Waiting on USER re-apply from QGC (Phase C) — do not fix
+  companion-side per [[feedback-camera-qgc-only]].
+- When FPV is up (target): LG cam /dev/video8, 960x540 MJPG 30fps 2000K → rtp 127.0.0.1:5602.
 - Orbbec /dev/video0-7 (video0=depth Z16, video2/4=IR, video6=color) — reserved for autonomy.
 - QGC picker still hardcoded video0-3 → currently cannot select any working camera; this
   upgrade removes that class of failure permanently.

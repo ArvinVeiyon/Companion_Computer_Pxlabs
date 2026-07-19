@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 15cc4d60-122c-4a4b-9f9b-8e1a15ef71a0
+  modified: 2026-07-19T07:31:08.795Z
 ---
 
 `~/codex-work` (ArvinVeiyon/Companion_Computer_Pxlabs) has both `origin/main` and `origin/master` on GitHub, diverged with no common merge (`git merge-base --is-ancestor origin/main origin/master` → no).
@@ -17,3 +18,9 @@ metadata:
 **Decision (2026-07-11):** user chose to leave `origin/main` untouched (offered rename-to-`main-unused` or delete; declined both). Revisit only if it becomes a source of confusion (e.g. someone clones expecting `main` to be current).
 
 **How to apply:** Always use `master` as the reference branch for this repo. Don't recommend deleting/renaming `origin/main` again unless the user raises it.
+
+**Memory-backup gap (found+fixed 2026-07-19, commit `3e206dd`):** the system_files_sync
+auto-commit only picks up already-tracked files — newly created memory files sit untracked in
+`~/codex-work/memory/` until someone `git add`s them once (10 files were missing). After writing
+a NEW memory file, check `git status ~/codex-work/memory/` and add+push it. Also: mirror has a
+stray `claude_memory.md` not present in live memory — left alone, not verified.
