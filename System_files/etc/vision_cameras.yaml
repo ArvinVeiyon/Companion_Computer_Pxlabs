@@ -1,7 +1,8 @@
 # Camera alias/role store — managed by vision_config_manager (QGC-driven).
-# Key = /dev/v4l/by-id symlink basename (stable across reboots).
-usb-EBP6415700138S077G_LG_Smart_Cam_01.00.00-video-index0:
-  alias: FPV
-usb-Orbbec_R__Orbbec_Gemini_336L_CPC7B53000AB-video-index0:
+# Key = usbcam-<vidpid>-<serial>-i<iface> (USB descriptors; firmware-stable
+# across boots, unlike /dev/v4l/by-id index numbers).
+usbcam-2bc50807-CPC7B53000AB-i04:
   alias: NAV-COLOR
   role_lock: autonomy
+usbcam-30c9009d-01.00.00-i00:
+  alias: FPV

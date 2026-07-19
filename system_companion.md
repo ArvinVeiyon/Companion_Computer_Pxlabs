@@ -1120,3 +1120,11 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 **2026-07-19 13:26**
 - M	System_files/etc/default/wifibroadcast
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-07-19 23:48**
+- M	System_files/etc/vision_cameras.yaml
+- M	System_files/etc/vision_streaming.conf
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+- A	System_files/usr/local/bin/__pycache__/vision_config_managercpython-312.pyc
+- M	memory/MEMORY.md
+- A	memory/project_ros2ws_tag_cleanup.md
+- A	memory/project_rover_autonav.md
