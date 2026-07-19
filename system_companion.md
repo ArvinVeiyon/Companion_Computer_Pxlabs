@@ -24,7 +24,7 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 **Sensors:**
 - GNSS: (document port/model)
 - IMU (if external): (document)
-- Camera(s): Primary `/dev/video0` (1280×720, MJPEG), Secondary `/dev/video2` (1280×720, MJPEG, PiP)
+- Camera(s) (2026-07-19, see `vision_multicam_companion.md`): LG Smart Cam = FPV (by-id `usb-EBP...LG_Smart_Cam...-index0`, 960×540 MJPG); Orbbec Gemini 336L = autonomy-only (depth/IR/color, ROS2 wrapper, never ffmpeg). Old front/bottom cams removed. `/dev/videoN` shuffles per boot — always use `/dev/v4l/by-id` ids.
 - Lidar/sonar: TFmini (ROS2 node: `tfmini.service`)
 - Other: Optical flow node in ros2_ws
 
@@ -176,14 +176,15 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
 
 **Video Pipeline:**
 ```
-/dev/video0 (primary, MJPEG)  ─┐
-                                ├─► FFmpeg (libx264 ultrafast) ─► RTP → 127.0.0.1:5602 ─► WFB-NG ─► GS 10.5.6.50:5600
-/dev/video2 (secondary, MJPEG)─┘    PiP overlay bottom-right
+FPV cam (LG, by-id → /dev/videoN) ─► FFmpeg (libx264 ultrafast) ─► RTP → 127.0.0.1:5602 ─► WFB-NG ─► GS 10.5.6.50:5600
+optional secondary cam ────────────┘    PiP overlay
 ```
 - ROS2 node: `vision_streaming_node` (Python, package `vision_streaming`)
-- Config file: `/etc/vision_streaming.conf`
-- Primary: `/dev/video0`, 1280×720, 3000K bitrate
-- Secondary: `/dev/video2`, 1280×720, 2000K bitrate, PiP 240×180 bottom-right
+- Config file: `/etc/vision_streaming.conf` — written by `vision_config_manager` v2 (2026-07-19):
+  each section carries `camera_id` (stable /dev/v4l/by-id key) + `camera_name` (resolved /dev/videoN);
+  node prefers `camera_id`, re-resolves on every (re)start, so boot-time /dev/videoN shuffles can't break the stream
+- ffmpeg watchdog in node: dead ffmpeg is reaped, error logged to journal, restart with 2s→30s backoff (no more silent black feed)
+- Typical FPV: LG cam 960×540 MJPG 30fps 2000K — full detail: `vision_multicam_companion.md`
 - Encoder: `libx264 ultrafast`, output format `yuv420p`
 - RTP destination: `127.0.0.1:5602` → picked up by WFB-NG `drone_video` stream
 
@@ -223,6 +224,9 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
   - RC channel: CH9 (index 8, 0-based), tolerance ±50 PWM
   - Calls `/usr/local/bin/vision_config_manager` with device path args
   - PWM positions: front=1012 (`/dev/video0`), bottom=1514 (`/dev/video2`), split=2014 (both cameras, PiP)
+  - **STALE (2026-07-19):** these device paths predate the multicam upgrade — `/dev/video0` is now
+    the Orbbec depth node, so the v2 guard rejects these calls (loud error, no silent failure).
+    Phase D (todos #8) migrates `rc_mapping.yaml` to aliases (FPV / NAV-COLOR).
   - Camera config is **remotely configurable** by editing `rc_mapping.yaml` and restarting the node
 - **Function 2 — Shutdown/reboot via RC:**
   - RC channel: CH10 (index 9), tolerance ±100 PWM, hold_time 2.0 s
@@ -262,7 +266,7 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
 ### optical_flow_node (`optical_flow` package)
 - **Node name:** `optical_flow_node`
 - **Source:** `ros2_ws/src/optical_flow/optical_flow/optical_flow_node.py`
-- **Hardware:** Camera at `/dev/video3` (640×480)
+- **Hardware:** Camera at `/dev/video3` (640×480) — **STALE (2026-07-19):** /dev/video3 is now an Orbbec IR node; needs by-id param before next use (phase D, design doc §2.4)
 - **Subscribes:** `/fmu/in/distance_sensor` (TFmini altitude), `/fmu/out/sensor_combined` (gyro)
 - **Publishes:** `/fmu/in/sensor_optical_flow` (px4_msgs/SensorOpticalFlow) @ 10 Hz
 - **Algorithm:** OpenCV Farneback dense optical flow
@@ -886,12 +890,14 @@ G-Control.exe  (Windows GCS, 10.5.6.50)
 
 | GCS Action | SSH Command on Companion |
 |---|---|
-| front-switch | `sudo vision_config_manager /dev/video0` |
-| bottom-switch | `sudo vision_config_manager /dev/video2` |
-| split-front-bottom | `sudo vision_config_manager /dev/video0 /dev/video2` |
-| split-bottom-front | `sudo vision_config_manager /dev/video2 /dev/video0` |
-| camera-params | `sudo vision_config_manager set-cam-params <dev> <res> <fps> --format <fmt>` |
-| capture-front/bottom | `Rozcam -i /dev/video0` / `Rozcam -i /dev/video2` |
+| front-switch (LEGACY) | `sudo vision_config_manager /dev/video0` — now rejected by v2 guard (video0 = Orbbec depth); repoint to ids/aliases (todos #8) |
+| bottom-switch (LEGACY) | `sudo vision_config_manager /dev/video2` — same, video2 = Orbbec IR |
+| split (LEGACY) | `sudo vision_config_manager <dev> <dev>` — same |
+| camera-list (v2, NEW) | `vision_config_manager list --json` |
+| camera-apply (v2, NEW) | `sudo vision_config_manager apply <id-or-alias> [secondary]` |
+| camera-set-alias (v2, NEW) | `sudo vision_config_manager set-alias <id> "<name>"` |
+| camera-params | `sudo vision_config_manager set-cam-params <dev-or-id-or-alias> <res> <fps> --format <fmt>` |
+| capture-front/bottom (LEGACY) | `Rozcam -i /dev/video0` / `Rozcam -i /dev/video2` — devices stale, repoint to by-id (todos #8) |
 | reboot | `sudo systemd-run --on-active=0 systemctl reboot` |
 | shutdown | `sudo systemd-run --on-active=0 systemctl poweroff` |
 | services refresh | `systemctl is-active + is-enabled` loop |
@@ -906,13 +912,11 @@ Rewrites `/etc/vision_streaming.conf` and restarts `vision_streaming.service`. B
 
 ### Camera Device Mapping
 
-```
-Default (swap=false):  /dev/video0 = front    /dev/video2 = bottom
-Swapped  (swap=true):  /dev/video2 = front    /dev/video0 = bottom
-```
-
-The `--swap` flag is a GCS setting. Physical camera wiring determines which is correct.
-RC CH9 PWM and GCS panel both ultimately call `vision_config_manager` — keep physical wiring consistent.
+**Superseded 2026-07-19** by the multicam model (`vision_multicam_companion.md`): cameras are
+identified by stable `/dev/v4l/by-id` ids with user aliases in `/etc/vision_cameras.yaml`
+(current: `FPV` = LG Smart Cam, `NAV-COLOR` = Orbbec color, role-locked to autonomy).
+The old front/back `--swap` model no longer applies. RC CH9 and the GCS panel still call the
+same `vision_config_manager` binary; both paths migrate to aliases in phase D (todos #8).
 
 ### wifi-temp Probe (3-Layer Fallback)
 

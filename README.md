@@ -38,9 +38,9 @@ Companion computer configuration, service files, and living documentation for th
 | `system_files_sync.timer` | Daily auto-backup of config files to this repo |
 
 **Camera Switching (RC CH9):**
-- PWM 1012 → front camera `/dev/video0`
-- PWM 1514 → bottom camera `/dev/video2`
-- PWM 2014 → split/PiP (both cameras)
+- PWM 1012 / 1514 / 2014 → front / bottom / split — **STALE (2026-07-19):** device paths predate
+  the multicam upgrade (video0/2 are now Orbbec nodes; v2 guard rejects them). Migration to
+  aliases pending (todos #8). Current camera model: `vision_multicam_companion.md`
 - Config: `ros2_ws/src/rc_control/config/rc_mapping.yaml`
 
 **Vision streaming config** (remotely editable): `/etc/vision_streaming.conf`
