@@ -64,14 +64,23 @@ Location TBD (likely `/usr/local/bin/` or custom path — verify with `which vis
 
 ## Camera Device Mapping
 
+**STALE SINCE 2026-07-19 BOX-B rebuild** — old front/bottom cams removed. New layout:
+Orbbec Gemini 336L = /dev/video0-7 (video0=depth Z16, video2/4=IR, video6=color) — autonomy only;
+LG Smart Cam = FPV = video8/9 (by-id `usb-EBP...LG_Smart_Cam...-video-index0`). videoN shuffles per boot.
+
 ```
-Default (swap=false):  /dev/video0 = front   /dev/video2 = bottom
-Swapped  (swap=true):  /dev/video2 = front   /dev/video0 = bottom
+OLD Default (swap=false):  /dev/video0 = front   /dev/video2 = bottom   ← now Orbbec depth/IR!
 ```
 
-This `--swap` flag is a GCS setting — physical camera wiring determines which is correct.
-CH9 PWM (RC) also controls camera: front=1012, bottom=1514, split=2014 (see vision_streaming.service).
-Both paths (RC and GCS) ultimately call vision_config_manager — keep them in sync.
+⚠️ GCS preset buttons (front-switch/bottom-switch/split) still send /dev/video0 & /dev/video2 —
+pressing them now selects Orbbec depth/IR → ffmpeg dies (no MJPG) → silent black feed (no watchdog,
+todos #6). `camera-apply` with an explicit device from QGC works. Fix needed in PXLABS_qgroundcontrol
+presets (use by-id paths); optionally add a generic streamable-format guard in vision_config_manager.
+CH9 PWM (RC) camera switching presets have the same stale-device problem — verify rc_control_node.
+
+vision_config_manager v1.2.1 = /usr/local/bin (Python): conf /etc/vision_streaming.conf is fully
+machine-managed — it rewrites camera_name from QGC's choice + probes res/fps/format via v4l2-ctl,
+then restarts the service. Hand edits to the conf are temporary by design; by-id paths pass through fine.
 
 ---
 
