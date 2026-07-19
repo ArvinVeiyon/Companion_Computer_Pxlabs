@@ -128,6 +128,18 @@ C. QGC: dynamic list + alias UI + primary/secondary (drops front/back model).
 D. rc_control + optical_flow migration to aliases/by-id.
 E. Delete stale front/back assumptions from docs (ride along with todos #5 ch157→ch161 fix).
 
+## 4b. IMPLEMENTATION STATUS
+- **Phases A+B (companion) DONE 2026-07-19** — full doc: `codex-work/vision_multicam_companion.md`.
+  vision_config_manager v2.0.0 installed (v1 backup `.bak.2026-07-19-v1.2.1`); node watchdog+camera_id
+  in ros2_ws commit `a561e93` (main_dev, pushed); aliases seeded: FPV=LG cam, NAV-COLOR=Orbbec color
+  (role_lock autonomy) in /etc/vision_cameras.yaml. Guard verified live: `apply /dev/video0` → exit 1
+  "offers: Z16". Watchdog verified live: dead-conf retry loop with 2s→30s backoff, errors in journal.
+- 12:17 incident during dev: a QGC front-switch (`vision_config_manager /dev/video0` in sudo log)
+  killed the stream via v1 — the exact failure v2 now blocks. Conf left as user's selection
+  (video0, failing loudly) — USER must re-apply (QGC or `apply FPV`) per feedback_camera_qgc_only.
+- **Phase C (QGC, user on PC) TODO** — checklist in vision_multicam_companion.md §5.
+- **Phase D TODO** — rc_control yamls + optical_flow to aliases/by-id (todos #8).
+
 ## 5. Current state snapshot (2026-07-19)
 - FPV live: LG cam /dev/video8, 960x540 MJPG 30fps 2000K → rtp 127.0.0.1:5602 (conf applied
   via vision_config_manager, standard QGC format).

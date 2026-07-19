@@ -1,37 +1,57 @@
 #!/usr/bin/env python3
 """
-Vision Manager Script
+Vision Manager Script — multi-camera edition
+
+Camera identity model (v2):
+  - Stable key = /dev/v4l/by-id symlink basename ("id"), survives reboots and
+    /dev/videoN shuffles (see 2026-07-19 BOX-B incident: Orbbec claimed video0-7).
+  - User-facing name = alias, stored in /etc/vision_cameras.yaml (set from QGC).
+  - /etc/vision_streaming.conf gets BOTH camera_id (stable) and camera_name
+    (resolved /dev/videoN); the streaming node prefers camera_id at startup.
+
+QGC contract (see memory/project_vision_multicam_upgrade.md):
+  vision_config_manager list --json          -> camera inventory for the QGC picker
+  vision_config_manager set-alias <id> <name>
+  vision_config_manager apply <primary> [secondary]   (id | alias | /dev/videoN)
+  legacy:  vision_config_manager /dev/videoN [/dev/videoM]   (old QGC buttons)
+
+Guard: apply/legacy refuse devices with no MJPG/YUYV capture format, so a wrong
+selection (e.g. Orbbec depth node) errors visibly instead of writing a config
+ffmpeg dies on (silent black feed, 2026-07-19).
 
 Changelog:
-- v1.2.1 (2025-09-21)
-  * Legacy switch: probe live mode for PRIMARY (no service stop) and update fields if known.
-  * Two-camera switch: also probe SECONDARY and ensure resolution/fps/format are written,
-    plus default PiP params. Removes [secondary] entirely when not provided.
-  * No other behavior changes. Added --version.
-
-- v1.2.0
-  * Earlier iteration of switching logic.
-
-- v1.1.0
-  * Hardened switching.
-
-- v1.0.0
-  * Baseline you shared.
+- v2.0.0 (2026-07-19)
+  * Multi-camera: list/--json, alias store, apply by id/alias, camera_id in conf,
+    streamable-format guard, role_lock warning. Legacy modes preserved.
+- v1.2.1 (2025-09-21) Legacy switch: probe live mode; two-camera PiP handling.
+- v1.2.0 / v1.1.0 / v1.0.0 — earlier iterations.
 """
 
-__version__ = "v1.2.1"
+__version__ = "v2.0.0"
 
 import subprocess
 import os
 import sys
 import argparse
+import json
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 from configparser import ConfigParser
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 CONFIG_FILE = "/etc/vision_streaming.conf"
+CAMERAS_FILE = "/etc/vision_cameras.yaml"
 TEMP_FILE = "/tmp/vision_streaming.conf"
+CAMERAS_TEMP = "/tmp/vision_cameras.yaml"
+BY_ID_DIR = "/dev/v4l/by-id"
 SERVICE_NAME = "vision_streaming.service"
+
+# Formats the streaming node can actually ingest (ffmpeg -input_format)
+STREAMABLE_FORMATS = {"MJPG", "YUYV"}
 
 # ---------------- Core helpers ----------------
 
@@ -48,15 +68,16 @@ def validate_device(device: str) -> None:
         print(f"Error: Device {device} does not exist.")
         sys.exit(1)
 
+def root_write(temp_path: str, final_path: str) -> None:
+    """Atomic root-owned write via sudo cp (works for both roz+sudoers and root)."""
+    subprocess.run(['sudo', 'cp', temp_path, final_path], check=True)
+    try:
+        os.remove(temp_path)          # temp is ours; sudo rm is not in NOPASSWD
+    except OSError:
+        pass
+
 def get_current_mode_safe(device: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """
-    Probe live V4L2 mode without stopping the service.
-    Returns (resolution_str, fps_str, fmt_str) or (None, None, None).
-    Matches:
-      Width/Height : 640/480
-      Pixel Format : 'MJPG'  OR Pixel Format FourCC : 'MJPG'
-      Frames per second: 120.000  OR Frame rate: 120.000
-    """
+    """Probe live V4L2 mode without stopping the service."""
     res, fps, fmt = None, None, None
     try:
         out = subprocess.run(
@@ -83,17 +104,160 @@ def get_current_mode_safe(device: str) -> Tuple[Optional[str], Optional[str], Op
         pass
     return res, fps, fmt
 
-# --------------- Legacy switch ---------------
+# ---------------- Camera discovery (v2) ----------------
 
-def edit_camera_config(primary_device: str, secondary_device: Optional[str] = None) -> None:
+def probe_formats(device: str) -> Dict[str, List[str]]:
+    """Map of capture pixel formats -> resolution list. Empty for metadata nodes."""
+    formats: Dict[str, List[str]] = {}
+    out = subprocess.run(
+        ['v4l2-ctl', '--device', device, '--list-formats-ext'],
+        capture_output=True, text=True, check=False
+    )
+    if out.returncode != 0:
+        return formats
+    current = None
+    for line in out.stdout.splitlines():
+        m_fmt = re.search(r"\[\d+\]:\s+'(\w+)\s*'", line)
+        if m_fmt:
+            current = m_fmt.group(1)
+            formats.setdefault(current, [])
+            continue
+        m_size = re.search(r'Size:\s+\w+\s+(\d+x\d+)', line)
+        if m_size and current:
+            if m_size.group(1) not in formats[current]:
+                formats[current].append(m_size.group(1))
+    return {f: sizes for f, sizes in formats.items() if sizes}
+
+def hw_name(device: str) -> str:
+    node = os.path.basename(os.path.realpath(device))
+    try:
+        with open(f"/sys/class/video4linux/{node}/name") as f:
+            return f.read().strip()
+    except OSError:
+        return "unknown"
+
+def load_camera_store() -> Dict[str, dict]:
+    if yaml is None or not os.path.exists(CAMERAS_FILE):
+        return {}
+    try:
+        with open(CAMERAS_FILE) as f:
+            data = yaml.safe_load(f) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        print(f"Warning: cannot read {CAMERAS_FILE}: {e}", file=sys.stderr)
+        return {}
+
+def save_camera_store(store: Dict[str, dict]) -> None:
+    if yaml is None:
+        print("Error: PyYAML not available; cannot save aliases.")
+        sys.exit(1)
+    with open(CAMERAS_TEMP, 'w') as f:
+        f.write("# Camera alias/role store — managed by vision_config_manager (QGC-driven).\n"
+                "# Key = /dev/v4l/by-id symlink basename (stable across reboots).\n")
+        yaml.safe_dump(store, f, default_flow_style=False, sort_keys=True)
+    root_write(CAMERAS_TEMP, CAMERAS_FILE)
+
+def discover_cameras() -> List[dict]:
+    """All by-id capture nodes, with formats probed. Metadata nodes excluded."""
+    cameras = []
+    if not os.path.isdir(BY_ID_DIR):
+        return cameras
+    store = load_camera_store()
+    for entry in sorted(os.listdir(BY_ID_DIR)):
+        if '-video-index' not in entry:
+            continue
+        path = os.path.join(BY_ID_DIR, entry)
+        dev = os.path.realpath(path)
+        formats = probe_formats(dev)
+        if not formats:          # metadata node — not a camera
+            continue
+        meta = store.get(entry, {}) if isinstance(store.get(entry, {}), dict) else {}
+        cameras.append({
+            "id": entry,
+            "dev": dev,
+            "hw_name": hw_name(dev),
+            "alias": meta.get("alias"),
+            "streamable": bool(STREAMABLE_FORMATS & set(formats)),
+            "formats": formats,
+            "role_lock": meta.get("role_lock"),
+        })
+    return cameras
+
+def active_selection(cameras: List[dict]) -> Dict[str, Optional[str]]:
+    """Resolve current conf back to stable ids (falls back to raw device path)."""
+    active: Dict[str, Optional[str]] = {"primary": None, "secondary": None}
+    cfg = ConfigParser(strict=False)
+    if not os.path.exists(CONFIG_FILE):
+        return active
+    cfg.read(CONFIG_FILE)
+    by_dev = {c["dev"]: c["id"] for c in cameras}
+    for role in ("primary", "secondary"):
+        if not cfg.has_section(role):
+            continue
+        cam_id = cfg.get(role, "camera_id", fallback=None)
+        if cam_id:
+            active[role] = cam_id
+            continue
+        name = cfg.get(role, "camera_name", fallback=None)
+        if name:
+            active[role] = by_dev.get(os.path.realpath(name), name)
+    return active
+
+def resolve_camera(target: str) -> Tuple[Optional[str], str]:
     """
-    Legacy mode switch:
-      - Probe live mode for PRIMARY; update fields if known (no service stop).
-      - Update [primary].camera_name; keep bitrate if already set (else default).
-      - If ONE device: REMOVE [secondary] section entirely (no comments).
-      - If TWO devices: CREATE/UPDATE [secondary] and also PROBE it to fill
-        resolution/fps/format (plus PiP defaults), so the node always has complete values.
-      - Restart service to apply changes.
+    Resolve id | alias | /dev path -> (id or None, /dev/videoN).
+    Exits with a clear message if nothing matches.
+    """
+    cameras = discover_cameras()
+    if target.startswith('/dev/'):
+        validate_device(target)
+        real = os.path.realpath(target)
+        for c in cameras:
+            if c["dev"] == real:
+                return c["id"], c["dev"]
+        return None, real            # device exists but has no by-id entry
+    for c in cameras:
+        if c["id"] == target:
+            return c["id"], c["dev"]
+    matches = [c for c in cameras if (c["alias"] or "").lower() == target.lower()]
+    if len(matches) == 1:
+        return matches[0]["id"], matches[0]["dev"]
+    if len(matches) > 1:
+        print(f"Error: alias '{target}' is ambiguous ({len(matches)} cameras). Use the id.")
+        sys.exit(1)
+    print(f"Error: no camera matches '{target}' (not a device, id, or alias). "
+          f"Run 'vision_config_manager list' to see cameras.")
+    sys.exit(1)
+
+def guard_streamable(dev: str, label: str) -> None:
+    """Refuse devices the streaming node cannot ingest (prevents silent black feed)."""
+    formats = probe_formats(dev)
+    if not (STREAMABLE_FORMATS & set(formats)):
+        got = ', '.join(sorted(formats)) or 'no capture formats'
+        print(f"Error: {label} {dev} is not streamable (offers: {got}; "
+              f"need one of: {', '.join(sorted(STREAMABLE_FORMATS))}). "
+              f"Depth/IR nodes cannot be used for video streaming.")
+        sys.exit(1)
+
+def warn_role_lock(cam_id: Optional[str], dev: str) -> None:
+    if not cam_id:
+        return
+    meta = load_camera_store().get(cam_id, {})
+    lock = meta.get("role_lock") if isinstance(meta, dict) else None
+    if lock:
+        print(f"WARNING: camera '{meta.get('alias') or cam_id}' is role-locked "
+              f"'{lock}' (reserved for the autonomy pipeline). Streaming it may "
+              f"steal the device from ROS2.")
+
+# ---------------- apply (v2) / legacy switch ----------------
+
+def edit_camera_config(primary_device: str, secondary_device: Optional[str] = None,
+                       primary_id: Optional[str] = None,
+                       secondary_id: Optional[str] = None) -> None:
+    """
+    Write conf for primary [+ secondary PiP] and restart the service.
+    Probes live mode so the node always has complete values.
+    camera_id keys carry the stable by-id identity when known.
     """
     validate_device(primary_device)
     if secondary_device:
@@ -102,26 +266,24 @@ def edit_camera_config(primary_device: str, secondary_device: Optional[str] = No
     cfg = ConfigParser(strict=False)
     if os.path.exists(CONFIG_FILE):
         cfg.read(CONFIG_FILE)
-    else:
-        cfg.add_section('general')
-        cfg['general']['rtp_ip'] = '127.0.0.1'
-        cfg['general']['rtp_port'] = '5602'
 
     if not cfg.has_section('general'):
         cfg.add_section('general')
-        if 'rtp_ip' not in cfg['general']:
-            cfg['general']['rtp_ip'] = '127.0.0.1'
-        if 'rtp_port' not in cfg['general']:
-            cfg['general']['rtp_port'] = '5602'
+    if 'rtp_ip' not in cfg['general']:
+        cfg['general']['rtp_ip'] = '127.0.0.1'
+    if 'rtp_port' not in cfg['general']:
+        cfg['general']['rtp_port'] = '5602'
 
     if not cfg.has_section('primary'):
         cfg.add_section('primary')
 
-    # Probe live primary mode
     p_res, p_fps, p_fmt = get_current_mode_safe(primary_device)
 
-    # Update primary
     cfg['primary']['camera_name'] = primary_device
+    if primary_id:
+        cfg['primary']['camera_id'] = primary_id
+    elif cfg.has_option('primary', 'camera_id'):
+        cfg.remove_option('primary', 'camera_id')
     if p_res:
         cfg['primary']['resolution'] = p_res
     if p_fps:
@@ -131,13 +293,15 @@ def edit_camera_config(primary_device: str, secondary_device: Optional[str] = No
     if not cfg.has_option('primary', 'bitrate'):
         cfg['primary']['bitrate'] = '3000K'
 
-    # Secondary handling: add/remove section (no commenting). Also probe secondary to ensure it is complete.
     if secondary_device:
         if not cfg.has_section('secondary'):
             cfg.add_section('secondary')
         cfg['secondary']['camera_name'] = secondary_device
+        if secondary_id:
+            cfg['secondary']['camera_id'] = secondary_id
+        elif cfg.has_option('secondary', 'camera_id'):
+            cfg.remove_option('secondary', 'camera_id')
 
-        # Probe and fill secondary mode so node won't crash in PiP
         s_res, s_fps, s_fmt = get_current_mode_safe(secondary_device)
         if s_res:
             cfg['secondary']['resolution'] = s_res
@@ -146,7 +310,6 @@ def edit_camera_config(primary_device: str, secondary_device: Optional[str] = No
         if s_fmt:
             cfg['secondary']['format'] = s_fmt
 
-        # PiP defaults
         if not cfg.has_option('secondary', 'pip_position'):
             cfg['secondary']['pip_position'] = 'bottom-right'
         if not cfg.has_option('secondary', 'pip_size'):
@@ -157,15 +320,72 @@ def edit_camera_config(primary_device: str, secondary_device: Optional[str] = No
         if cfg.has_section('secondary'):
             cfg.remove_section('secondary')
 
-    # Atomic write
     with open(TEMP_FILE, 'w') as f:
         cfg.write(f)
-    subprocess.run(['sudo', 'cp', TEMP_FILE, CONFIG_FILE], check=True)
-    subprocess.run(['sudo', 'rm', TEMP_FILE], check=True)
+    root_write(TEMP_FILE, CONFIG_FILE)
     print("Configuration file updated from live camera probe.")
     control_service('restart')
 
-# ----------------------------- (unchanged helpers) -----------------------------
+def cmd_apply(primary: str, secondary: Optional[str]) -> None:
+    p_id, p_dev = resolve_camera(primary)
+    guard_streamable(p_dev, "primary camera")
+    warn_role_lock(p_id, p_dev)
+    s_id, s_dev = (None, None)
+    if secondary:
+        s_id, s_dev = resolve_camera(secondary)
+        if s_dev == p_dev:
+            print("Error: primary and secondary are the same camera.")
+            sys.exit(1)
+        guard_streamable(s_dev, "secondary camera")
+        warn_role_lock(s_id, s_dev)
+    edit_camera_config(p_dev, s_dev, p_id, s_id)
+
+def cmd_list(as_json: bool, show_all: bool) -> None:
+    cameras = discover_cameras()
+    if not show_all:
+        cameras = [c for c in cameras if c["streamable"]]
+    result = {"cameras": cameras, "active": active_selection(cameras)}
+    if as_json:
+        print(json.dumps(result, indent=2))
+        return
+    if not cameras:
+        print("No cameras found.")
+        return
+    act = result["active"]
+    for c in cameras:
+        marks = []
+        if c["id"] == act.get("primary"):
+            marks.append("PRIMARY")
+        if c["id"] == act.get("secondary"):
+            marks.append("SECONDARY")
+        if c["role_lock"]:
+            marks.append(f"lock:{c['role_lock']}")
+        if not c["streamable"]:
+            marks.append("NOT-STREAMABLE")
+        fmts = ' '.join(f"{f}({sizes[0]}..)" for f, sizes in c["formats"].items())
+        print(f"{c['alias'] or '-':<12} {c['dev']:<14} {c['hw_name'][:28]:<28} "
+              f"{fmts:<28} {' '.join(marks)}")
+        print(f"{'':<12} id: {c['id']}")
+
+def cmd_set_alias(target: str, alias: str) -> None:
+    cam_id, _dev = resolve_camera(target)
+    if cam_id is None:
+        print("Error: camera has no /dev/v4l/by-id entry; cannot alias a bare "
+              "device path (identity would not survive reboots).")
+        sys.exit(1)
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}', alias):
+        print("Error: alias must be 1-32 chars: letters, digits, space, _ . -")
+        sys.exit(1)
+    store = load_camera_store()
+    entry = store.get(cam_id)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["alias"] = alias
+    store[cam_id] = entry
+    save_camera_store(store)
+    print(f"OK {cam_id} = {alias}")
+
+# ----------------------------- (v1 helpers, device arg now id/alias-aware) -----------------------------
 
 def update_resolution_only_config(device, resolution):
     validate_device(device)
@@ -201,8 +421,7 @@ def update_resolution_only_config(device, resolution):
     try:
         with open(TEMP_FILE, "w") as file:
             file.writelines(new_lines)
-        subprocess.run(['sudo', 'cp', TEMP_FILE, CONFIG_FILE], check=True)
-        subprocess.run(['sudo', 'rm', TEMP_FILE], check=True)
+        root_write(TEMP_FILE, CONFIG_FILE)
         print("Configuration file updated successfully with new resolution.")
     except subprocess.CalledProcessError as e:
         print(f"Error updating config file: {e}")
@@ -265,8 +484,7 @@ def update_cam_params_config(device, resolution, fps, cam_format):
     try:
         with open(TEMP_FILE, "w") as file:
             file.writelines(new_lines)
-        subprocess.run(['sudo', 'cp', TEMP_FILE, CONFIG_FILE], check=True)
-        subprocess.run(['sudo', 'rm', TEMP_FILE], check=True)
+        root_write(TEMP_FILE, CONFIG_FILE)
         print("Configuration file updated successfully with new camera parameters.")
     except subprocess.CalledProcessError as e:
         print(f"Error updating config file: {e}")
@@ -352,47 +570,69 @@ def list_details(device):
 
 # --------------------------------- CLI ---------------------------------
 
+SUBCOMMANDS = {"list", "apply", "set-alias",
+               "set-resolution-only", "set-cam-params", "list-details",
+               "--version", "-V"}
+
 def main():
-    # Legacy mode: if first argument is not one of the new subcommands,
-    # assume legacy behavior.
-    if len(sys.argv) > 1 and sys.argv[1] not in {"set-resolution-only", "set-cam-params", "list-details", "--version", "-V"}:
-        if len(sys.argv) < 2:
-            print("Usage: vision_config_manager <primary_device> [secondary_device]")
-            sys.exit(1)
-        primary_device = sys.argv[1]
-        secondary_device = sys.argv[2] if len(sys.argv) > 2 else None
-        edit_camera_config(primary_device, secondary_device)
+    # Legacy mode: first arg is a device path (old QGC front/bottom buttons).
+    # Now runs through the same resolve+guard path, so a stale preset pointing
+    # at a depth/IR node errors clearly instead of writing a dead config.
+    if len(sys.argv) > 1 and sys.argv[1] not in SUBCOMMANDS:
+        primary = sys.argv[1]
+        secondary = sys.argv[2] if len(sys.argv) > 2 else None
+        cmd_apply(primary, secondary)
         return
 
     parser = argparse.ArgumentParser(
-        description="Vision Manager App with camera parameter controls"
+        description="Vision Manager App with multi-camera controls"
     )
     parser.add_argument('--version', '-V', action='version', version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Subcommand: set-resolution-only
+    parser_list = subparsers.add_parser("list", help="List cameras (stable id, alias, formats)")
+    parser_list.add_argument("--json", action="store_true", help="Machine-readable output for QGC")
+    parser_list.add_argument("--all", action="store_true",
+                             help="Include non-streamable capture nodes (depth/IR)")
+
+    parser_apply = subparsers.add_parser("apply", help="Select primary [and secondary PiP] camera")
+    parser_apply.add_argument("primary", help="Camera id, alias, or /dev/videoN")
+    parser_apply.add_argument("secondary", nargs="?", default=None,
+                              help="Optional secondary (PiP) camera")
+
+    parser_alias = subparsers.add_parser("set-alias", help="Name a camera (stored by stable id)")
+    parser_alias.add_argument("camera", help="Camera id, alias, or /dev/videoN")
+    parser_alias.add_argument("alias", help="New alias (1-32 chars)")
+
     parser_res_only = subparsers.add_parser("set-resolution-only", help="Set only the resolution for a camera")
-    parser_res_only.add_argument("device", help="Video device (e.g. /dev/video0)")
+    parser_res_only.add_argument("device", help="Camera id, alias, or /dev/videoN")
     parser_res_only.add_argument("resolution", help="Desired resolution (e.g. 1920x1080)")
 
-    # Subcommand: set-cam-params
     parser_cam_params = subparsers.add_parser("set-cam-params", help="Set resolution, fps, and format for a camera")
-    parser_cam_params.add_argument("device", help="Video device (e.g. /dev/video0)")
+    parser_cam_params.add_argument("device", help="Camera id, alias, or /dev/videoN")
     parser_cam_params.add_argument("resolution", help="Desired resolution (e.g. 1920x1080)")
     parser_cam_params.add_argument("fps", help="Desired fps (e.g. 60)")
     parser_cam_params.add_argument("--format", required=True, help="Video format (e.g. MJPG)")
 
-    # Subcommand: list-details
     parser_list_details = subparsers.add_parser("list-details", help="Display detailed information for a camera including supported formats")
-    parser_list_details.add_argument("device", help="Video device (e.g. /dev/video0)")
+    parser_list_details.add_argument("device", help="Camera id, alias, or /dev/videoN")
 
     args = parser.parse_args()
-    if args.command == "set-resolution-only":
-        set_resolution_only(args.device, args.resolution)
+    if args.command == "list":
+        cmd_list(args.json, args.all)
+    elif args.command == "apply":
+        cmd_apply(args.primary, args.secondary)
+    elif args.command == "set-alias":
+        cmd_set_alias(args.camera, args.alias)
+    elif args.command == "set-resolution-only":
+        _id, dev = resolve_camera(args.device)
+        set_resolution_only(dev, args.resolution)
     elif args.command == "set-cam-params":
-        set_cam_params(args.device, args.resolution, args.fps, args.format)
+        _id, dev = resolve_camera(args.device)
+        set_cam_params(dev, args.resolution, args.fps, args.format)
     elif args.command == "list-details":
-        list_details(args.device)
+        _id, dev = resolve_camera(args.device)
+        list_details(dev)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
