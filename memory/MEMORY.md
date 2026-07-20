@@ -21,11 +21,13 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `project_codexwork_branches.md` — codex-work origin/main stale, left as-is; + auto-sync doesn't git-add NEW memory files, add manually after creating one
 - `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
 - `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4, mgmt ssh vind-admin@192.168.1.221 pass 1987) built 2026-07-12. OPEN: WFB/EU card browns out Pi4 USB budget → kills uplink too; fix=powered hub (debug 2026-07-14, continue)
+- `feedback_use_dds_not_mavlink.md` — RULE: talk to FC over DDS topics, not MAVLink probing (it disturbs the link / kills px4_ros2 modes)
+- `project_gcs_link_degraded.md` — OPEN 2026-07-20: GCS link — downlink ~15% delivered, uplink commands 0/8; real cause of QGC "Unknown mode"
 - `feedback_camera_qgc_only.md` — RULE: camera config only via QGC by user; never run vision_config_manager/edit conf myself
 - `feedback_wlan0_persistent_name.md` — onboard uplink naming: MAC pin raced vs USB WFB adapters ("Failed to rename: File exists") — fix = rename to wifi0, 2026-07-19 pending reboot verify
 - `project_boxb_pcie_usb.md` — BOX-B PCIe→USB3.2 board RESOLVED+verified 2026-07-19 (FFC reseat): VL805 xHCI up, Orbbec=/dev/video0-7, LG cam=8/9, dual-NIC WFB restored, user confirmed all cameras visible
 - `project_ros2ws_tag_cleanup.md` — ros2_ws tag scheme: annotated semver vX.Y.Z only, baseline v1.1.0@5bace1b; cleanup DONE 2026-07-19, branches consolidated: `main` is THE working branch (main_dev fast-forwarded into it + deleted; GitHub default=main). Final refs: main + release/2026-02-22 + v1.0.0,v1.0.2,v1.0.3,v1.1.0,release-20260222,archive/*; nothing orphaned
-- `project_rover_autonav.md` — **ACTIVE** rover autonomous nav: Nav2 full stack + px4_ros2 lib bridge + Orbbec depth, indoor GPS-denied first; spec = ros2_ws/docs/rover_autonav_requirements.md; milestones M0-M7, next=M0 (installs+PX4 rover params+offboard bench test)
+- `project_rover_autonav.md` — **ACTIVE, RESUME HERE (2026-07-20 session 3)**: rover autonav. L0+L1 DONE (mode control via DDS: `~/ros2_ws/tools/dds_setmode.py`, nav_state 23=AutoNav). L2 blocked → **L3 FIRST**. Accel blocker CLEARED (quick cal, param5=4 — big vehicles never need rotating). rover_odometry bug FIXED (absolute msg.timestamp vs boot-relative nested esc[].timestamp) → /odom live @99.9Hz. New pkg **rover_ekf_bridge** built+running: /odom → EKF2 EV velocity @40Hz (must send velocity_z or EKF2 drops the sample). **L3 VERIFIED**: EKF2_EV_CTRL=4 set → cs_ev_vel true, xy_valid+v_xy_valid TRUE, dead_reckoning false, preflight passes, AutoNav holds nav_state 23. Both arm blockers cleared. **L2 run: ARMED + wheels turned + watchdog OK, but PARTIAL** — yaw drives all 4 correctly, FORWARD only turns addr 13 and does not scale with speed; magnitudes meaningless on stands (closed-loop control has no body motion). Manual RC test then proved ALL 4 wheels drive both directions (±1500 ERPM) → hardware/allocation GOOD, fault is in the closed-loop speed path (invalid feedback on stands). Next: FLOOR test + check RO_* speed gains. RC: ch2=throttle, ch4=steer, ch3 unused. QGC "Unknown mode" is NOT a QGC bug — dead GCS uplink, see project_gcs_link_degraded.md. Uncommitted: src/autonav_mode, src/rover_odometry, src/rover_ekf_bridge, tools/
 - `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: phases A+B+C DONE, FPV UP (LG 720p); discovery v2.1 DONE 2026-07-19 (by-id index NOT boot-stable → sysfs usbcam-<vidpid>-<serial>-i<iface> ids, codex-work 9e61729 + ros2_ws 5bace1b, store migrated; reboot-stability check pending next power cycle) — **REMAINING: Phase D (rc_control+optflow→aliases) + udev rule cleanup, go-ahead given, see file**
 
 ## [KNOWN_FIXES]
@@ -45,7 +47,8 @@ OS: Ubuntu 24.04.1 LTS aarch64 | kernel 6.8.0-1048-raspi | hostname: Vind-Roz
 
 ## [FLIGHT_CONTROLLER]
 Custom Pixhawk 6X-RT (in-house PCB, NOT Holybro) | MCU: NXP i.MX RT1176 Cortex-M7+M4
-PX4 v1.16.0-rc1 custom | commit c5b8445ffc | target: px4_fmu-v6xrt
+PX4 **pxlabs-v1.17.0-2.0.0** custom | git-hash a52c38b07d | built 2026-05-31 | target: px4_fmu-v6xrt
+(verified via NuttShell `ver all` 2026-07-19 — was wrongly recorded as v1.16.0-rc1 c5b8445 before; FC reflashed 2026-05-31. Local ~/PX4-Autopilot @ c5b8445 is upstream clone, NOT the firmware source — pxlabs fork not on companion)
 
 ## [UART_MAP]
 → full table: reference_uart_map.md
@@ -53,7 +56,9 @@ AMA0=MAVLink 921600 | AMA2=TFmini 115200 | AMA3=STL19 230400(disabled) | AMA4=DD
 
 ## [SOFTWARE_VERSIONS]
 ROS2: Jazzy | Python: 3.12.3 | Ollama: v0.17.7 / phi3:mini 2.2GB | AIDE: 0.18.6
-mavlink-router: c20337b | MicroXRCEAgent: v3.0.0-2-gb9d84ac | wfb-ng: 1b88185 | PX4-Autopilot: c5b8445ffc
+mavlink-router: c20337b | MicroXRCEAgent: v3.0.0-2-gb9d84ac | wfb-ng: 1b88185
+~/PX4-Autopilot: upstream clone @ c5b8445 + remote `pxlabs` (ArvinVeiyon/PXLABS_PX4-Autopilot) + branch `pxlabs-fw`=a52c38b (real FC firmware source)
+px4_msgs: pinned release/1.17 @ 86d8239 (branch pinned-pxlabs-1.17, exact match vs FC fw) | px4-ros2-interface-lib: release/1.17 @ 4a3370f (branch pinned-1.17; has rover setpoints; 2.x needs newer fw)
 
 ## [SERVICES]
 → full detail: reference_services.md
