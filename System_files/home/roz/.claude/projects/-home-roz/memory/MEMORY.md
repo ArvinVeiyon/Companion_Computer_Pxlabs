@@ -29,7 +29,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `project_boxb_pcie_usb.md` — BOX-B PCIe→USB3.2 board RESOLVED+verified 2026-07-19 (FFC reseat): VL805 xHCI up, Orbbec=/dev/video0-7, LG cam=8/9, dual-NIC WFB restored, user confirmed all cameras visible
 - `project_ros2ws_tag_cleanup.md` — ros2_ws tag scheme: annotated semver vX.Y.Z only, baseline v1.1.0@5bace1b; cleanup DONE 2026-07-19, branches consolidated: `main` is THE working branch (main_dev fast-forwarded into it + deleted; GitHub default=main). Final refs: main + release/2026-02-22 + v1.0.0,v1.0.2,v1.0.3,v1.1.0,release-20260222,archive/*; nothing orphaned
 - `project_rover_autonav.md` — **ACTIVE, RESUME HERE (2026-07-20 session 3)**: rover autonav. L0+L1 DONE (mode control via DDS: `~/ros2_ws/tools/dds_setmode.py`, nav_state 23=AutoNav). L2 blocked → **L3 FIRST**. Accel blocker CLEARED (quick cal, param5=4 — big vehicles never need rotating). rover_odometry bug FIXED (absolute msg.timestamp vs boot-relative nested esc[].timestamp) → /odom live @99.9Hz. New pkg **rover_ekf_bridge** built+running: /odom → EKF2 EV velocity @40Hz (must send velocity_z or EKF2 drops the sample). **L3 VERIFIED**: EKF2_EV_CTRL=4 set → cs_ev_vel true, xy_valid+v_xy_valid TRUE, dead_reckoning false, preflight passes, AutoNav holds nav_state 23. Both arm blockers cleared. **L2 run: ARMED + wheels turned + watchdog OK, but PARTIAL** — yaw drives all 4 correctly, FORWARD only turns addr 13 and does not scale with speed; magnitudes meaningless on stands (closed-loop control has no body motion). Manual RC test then proved ALL 4 wheels drive both directions (±1500 ERPM) → hardware/allocation GOOD, fault is in the closed-loop speed path (invalid feedback on stands). Full chain re-verified companion-side (tools/autonav_chain_check.py): register mode_id=23 → arming handshake can_arm_and_run=True → DO_SET_MODE ACCEPTED → ARM ACCEPTED → onActivate emits ~30Hz rover speed+rate setpoints at 0.000. **ROOT CAUSE OF FORWARD FAILURE FOUND: `RO_SPEED_LIM=0.01` m/s** clamps every speed setpoint (DifferentialSpeedControl.cpp:119) → 0.2 and 0.4 m/s both clamp identically, only least-loaded wheel creeps. FIX (not applied): `param set RO_SPEED_LIM 1.0` + `param save`, then FLOOR test. Yaw params sane. **MAVLink link WEDGED** after mavlink_shell sessions (FC heartbeat gone from tcp:5760, DDS unaffected, QGC cannot connect) → needs `sudo systemctl restart mavlink.router`. RC: ch2=throttle, ch4=steer, ch3 unused. QGC "Unknown mode" is NOT a QGC bug — dead GCS uplink, see project_gcs_link_degraded.md. ALL COMMITTED 2026-07-20 on ros2_ws main (a72f1b9..2fa1097: px4_msgs pin, autonav_mode, rover_odometry+rover_ekf_bridge, tools, docs, chain-check) + PUSHED to origin/main.
-- `project_l4_gemini_nav2_prereqs.md` — L4/L5 deps audit 2026-07-20: Gemini 336L on USB3 OK but NO Orbbec SDK/wrapper/udev; Nav2+slam_toolbox not installed; 7 build deps missing; disk 82%
+- `project_l4_gemini_nav2_prereqs.md` — **L4 DONE 2026-07-21**: Orbbec wrapper built + `/scan` live @20Hz (`~/ros2_ws/launch/depth_to_scan.launch.py`); Nav2 1.3.12 + slam_toolbox 2.8.5 installed → L5 ready. OPEN: camera mount TF is a placeholder; OrbbecSDK untracked in git. Disk 85%→49% (20.4G cleanup). **RESUME EVENING OF 2026-07-21** — next: measured camera mount TF from user → then L5 slam_toolbox+Nav2
 - `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: phases A+B+C DONE, FPV UP (LG 720p); discovery v2.1 DONE 2026-07-19 (by-id index NOT boot-stable → sysfs usbcam-<vidpid>-<serial>-i<iface> ids, codex-work 9e61729 + ros2_ws 5bace1b, store migrated; reboot-stability check pending next power cycle) — **REMAINING: Phase D (rc_control+optflow→aliases) + udev rule cleanup, go-ahead given, see file**
 
 ## [KNOWN_FIXES]
@@ -44,7 +44,7 @@ goal: continuous presence — develop, maintain, autonomize this platform
 
 ## [PLATFORM]
 Vind-Roz: aerial drone + ground rover | same RPi5 companion, different PX4 airframe config
-HW: RPi5 BCM2712 Cortex-A76 quad-core 8GB LPDDR4X | 64GB SD (**82% used, 11G free — 2026-07-20**)
+HW: RPi5 BCM2712 Cortex-A76 quad-core 8GB LPDDR4X | 64GB SD (**49% used, 29G free — 2026-07-21 after 20.4G log cleanup**; card fully partitioned, no unallocated space)
 OS: Ubuntu 24.04.1 LTS aarch64 | kernel 6.8.0-1048-raspi | hostname: Vind-Roz
 
 ## [FLIGHT_CONTROLLER]
@@ -92,7 +92,7 @@ ros2_ws: ~/ros2_ws | branch: main (main_dev merged+deleted 2026-07-19) | release
 4. Check GS TX power (uplink severely worse than downlink)
 5. Antenna tracker hardware (script ready on relay port 14551, HW pending)
 6. ✅ DONE 2026-07-19: ffmpeg watchdog in vision_streaming node (a561e93)
-7. Orbbec autonomy pipeline: OrbbecSDK_ROS2 → depth/pointcloud → obstacle avoidance (phase 3 prep)
+7. ✅ Orbbec wrapper + /scan DONE 2026-07-21 (L4); remains: wire /scan → obstacle_distance/Nav2. NEW: #15 measure camera mount TF (blocks L5), #16 pin OrbbecSDK in git, #17 delete camera_sw_node_obsolute.py
 8. QGC half ✅ DONE (dynamic picker, phase C); REMAINING = multicam Phase D: rc_control yamls + optical_flow → aliases/usbcam ids, then delete 99-usb-cameras.rules (see project_vision_multicam_upgrade.md)
 
 ## [AI_STACK]
