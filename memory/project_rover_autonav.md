@@ -1,16 +1,73 @@
 ---
 name: project-rover-autonav
-description: "Rover autonomous navigation (Nav2 + px4_ros2 lib + Orbbec depth) — requirements agreed 2026-07-19, milestones M0-M7, next = M0"
+description: "Rover autonomous navigation (Nav2 + px4_ros2 lib + Orbbec depth). L0-L4 done; L2 armed floor test PASSED 2026-07-22/23 + reflex collision-stop built/validated/pushed (b38e413). NEXT = yaw-gain tuning then L5 (slam_toolbox+Nav2)"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-07-20T16:50:53.513Z
+  modified: 2026-07-23T18:01:11.292Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
 
-Full spec: `~/ros2_ws/docs/rover_autonav_requirements.md` (commit e6a3a0d on main) — read it before any autonav work.
+## ⏭ RESUME HERE — 2026-07-23 (planning/alignment session; #20 yaw tuning deferred by user to a floor session)
+**L2 IS DONE. Reflex collision-stop built, validated end-to-end, committed + pushed. Next = yaw-gain tuning (#20), then L5.**
+Full session detail in [[project-l2-floortest-wheel0-reversed]].
+
+### Session 2026-07-23 (realignment — no hardware)
+- **Created `ros2_ws/docs/roadmap.md` = the tracked SOURCE OF TRUTH for direction** (goal definition +
+  L0-L7 ladder + critical path + supporting debt). Committed + **pushed origin/main**: `8f5c522` roadmap,
+  `ae647a4` dds_topics next-flash note. Tree clean, main even with origin.
+- **Goal restated (in roadmap.md §1)**: North Star = dual aerial+ground GPS-denied autonomy on one RPi5;
+  current campaign = rover indoor Nav2. Ladder status: **L0-L4 DONE, L5 (Nav2 goal+avoidance) = next big
+  milestone**, then L6 SLAM/routing, L7 safety. Interstitial before L5: #20 yaw tuning + gyro-yaw
+  drive-validation + `/scan` tape check.
+- **Live topic audit (ros2 topic list + hz)**: everything Nav2/slam_toolbox/L5-L7 needs is already
+  exposed AND flowing — `/scan` 25 Hz, `/tf`+`/tf_static`, `/cmd_vel`, `vehicle_attitude` 100 Hz,
+  `vehicle_local_position_v1` 50 Hz, `esc_status` 50 Hz, `failsafe_flags`, `collision_constraints`,
+  `home_position_v1`. **No firmware reflash needed to reach the first autonomous drive.**
+  - `/odom` was SILENT during the audit → **rover motor bus unpowered** (rover parked/off), NOT a bug;
+    `esc_status` streams regardless, `/odom` only publishes when all 4 VESCs report online.
+  - **`/fmu/out/vehicle_angular_velocity` confirmed ABSENT from dds_topics.yaml** (matches prior note).
+    Recorded in roadmap supporting-debt as an "add on next flash" nice-to-have (helps #20 yaw tuning +
+    gyro-yaw odometry; today worked around via `vehicle_attitude` deltas + raw `sensor_combined.gyro_rad`).
+    Optional companion: `sensors_status_imu` for IMU-health diagnostics over DDS (uplink is dead).
+- **#20 yaw tuning NOT started** — user deferred to a session with the rover on the floor. When resuming:
+  floor + RC-ready → start `rover-ekf-bridge` by hand → **baseline `l2_test.py` first** (measure yaw-vs-fwd
+  rpm against the fixed 0.31 track before changing gains) → adjust `RO_YAW_RATE_P/I` (2.0/0.1) via pymavlink
+  `PARAM_SET` on tcp:5760 (NOT mavlink_shell.py). FC left disarmed/Hold, bridge stopped.
+
+What got done 2026-07-22/23:
+- **L2 armed floor run PASSED.** First-ever armed floor drive. All 4 wheels respond to fwd+yaw, watchdog
+  zeroes motors, auto-disarm+Hold clean. Wheel-0 "reverse" was a FALSE ALARM (mirrored ESC sign, all 4
+  physically go forward — the old sign check is removed).
+- **Reflex collision-stop built INSIDE the executor** (can't be bypassed): ±20° front cone, block <0.60m /
+  clear >0.75m hysteresis, stale-scan fail-safe, `collision.*` params. Validated passively on stands AND
+  **fired armed end-to-end** — stopped the rover ~0.59m from a real wall. See
+  `~/ros2_ws/docs/rover_autonav_collision_stop.md`.
+- **Committed + pushed: ros2_ws origin/main @ `b38e413`.** Tree clean.
+
+**ARM WORKFLOW (important, use this every time):** AutoNav (external mode) CANNOT be armed via RC — RC
+arming lands in Manual. So: operator **arms in Manual via RC (throttle neutral)**, THEN software
+`DO_SET_MODE main=4 sub=11` → AutoNav, which HOLDS. `l2_test.py --live` does this (tolerates an
+already-armed-in-Manual start; never software-arms). **Kill (ch8) confirmed working armed in AutoNav.**
+
+State left behind: FC **disarmed, Hold (nav 4)**, `rover-ekf-bridge` **stopped** (start by hand on the
+floor only; wheels-up + bridge = limit cycle). Other services auto-start from boot (camera/scan/odometry/
+autonav-mode). ros2_ws tree clean @ b38e413.
+
+Next session, in order:
+1. `systemctl is-active rover-camera rover-scan rover-odometry rover-autonav-mode` (all active from boot).
+2. **Yaw-gain tuning (todos #20)** — armed yaw drove wheels MUCH harder (~700-850 rpm) than forward (~156).
+   Revisit RO_YAW_RATE_P/I (2.0/0.1) — they were tuned against the old oversized track. Re-run l2_test on
+   the floor after each change (arm in Manual → it switches to AutoNav; bridge on the floor only).
+3. (opt) validate gyro yaw — turn a known angle vs floor marks, compare `/odom` yaw, A/B `yaw_source:=wheels`.
+4. **L5**: slam_toolbox on `/scan`+`/odom`, then Nav2 — the real routing/avoidance/reroute brain (the
+   collision-stop is only the safety floor). Camera TF measured, Nav2+slam_toolbox installed → unblocked.
+
+Nav2 footprint must follow the **0.405 m top plate**, not the 0.31 m track — wheels sit inboard.
+Full spec: `~/ros2_ws/docs/rover_autonav_requirements.md`; collision-stop + arm workflow:
+`~/ros2_ws/docs/rover_autonav_collision_stop.md`. Read both before any autonav work.
 
 ## Agreed scope (user-aligned 2026-07-19)
 Indoor GPS-denied FIRST · Nav2 full stack · forward-only depth v1 (Gemini 336L depth stream only, never ffmpeg).
@@ -87,6 +144,96 @@ L0 transport+msg alignment ▸ L1 custom mode skeleton in QGC ▸ L2 mode I/O + 
 - **NEXT**: 1) L2 wheels-up bench — BLOCKED on hardware: only 1/4 VESCs online (`esc_online_flags=8`) and RC transmitter off (`rc_lost=true`), needs user to power the rover bus; then arm → onActivate fires → publish /cmd_vel small speed/yaw, verify wheel response. 2) resolve/set RC mode mapping (RC_MAP_FLTMODE=0 still). 3) uplink fix per [[project-gcs-link-degraded]]. Relaunch node: `source install/setup.bash && ros2 run autonav_mode autonav_mode`. FC left in **Hold (nav_state 4)**, disarmed. ALL COMMITTED 2026-07-20 on ros2_ws `main` (a72f1b9 px4_msgs pin, 915304e autonav_mode, 16353d7 rover_odometry+rover_ekf_bridge, 5fc9f9c tools, 2c46e5e docs, 2fa1097 chain-check) — **pushed to origin/main 2026-07-20**. `src/ldlidar_stl_ros2/` deliberately left untracked (nested git repo).
 - UNCOMMITTED in ros2_ws: src/autonav_mode/, src/rover_odometry/, docs edits after commit b08766e (layered L0-L7 flow + status log in requirements doc). Commit when L1 verified.
 - rover_odometry pkg built, tests at L3. Nav2 apt install still pending user sudo (`sudo apt install -y ros-jazzy-navigation2 ros-jazzy-nav2-bringup ros-jazzy-slam-toolbox`).
+
+## SESSION 2026-07-21 (evening) — ALL COMMITTED + PUSHED to origin/main (3bcba10..b5a9408)
+Commits: `2075ddd` track width 0.31 fix · `0bd5bf6` depth_to_scan + measured camera TF ·
+`642f50d` systemd units · `b5a9408` docs + OrbbecSDK gitignore (docs/third_party.md).
+Working tree clean. Remote is SSH (`git@github.com:ArvinVeiyon/ros2_ws.git`) — no PAT embedded,
+unlike codex-work.
+
+## SESSION 2026-07-21 (evening) — stack restored after companion reboot, RO_SPEED_LIM FIXED
+Pi rebooted (FC did NOT — it stayed up throughout). All detached `setsid` nodes were wiped.
+- **`RO_SPEED_LIM` FIX APPLIED by user: 0.01 → 0.70**, `param save` confirmed by MAVLink readback
+  (`0.699999988`). 0.70 is *below* autonav_mode's own 0.8 m/s clamp, so the **FC is now the binding
+  cap** — safer ordering than the 1.0 originally proposed, and above the ~0.58-0.60 m/s the drivetrain
+  actually reaches. The L2 forward root cause is therefore CLOSED pending the floor test.
+- **MAVLink link healed by the reboot** — FC heartbeat back on tcp:127.0.0.1:5760 (sys1/comp1,
+  autopilot=12, type=10). Reading params via **pymavlink PARAM_REQUEST_READ did NOT re-wedge it**
+  (unlike `mavlink_shell.py`, which did). Prefer PARAM_REQUEST_READ for future param reads.
+- **Param-readback gotcha**: `EKF2_EV_CTRL` reads as `5.605e-45` — that is INT32 **4** carried in
+  PARAM_VALUE's float field (bit pattern), NOT a corrupt value. Don't "fix" it.
+- **`pre_flight_checks_pass=false` episode — REAL CAUSE WAS THE RC TRANSMITTER BEING OFF.**
+  Observed: preflight false while everything else looked healthy — xy_valid / v_xy_valid true,
+  dead_reckoning false, cs_ev_vel true, local_position_invalid + local_velocity_invalid both false,
+  all SYS_STATUS health bits green, **zero STATUSTEXT**, accel fused fine (|a|=9.852, tilt 1.1°).
+  I hypothesised a stale external-mode registration (FC kept AutoNav in slot 0 while its
+  `autonav_mode` component died with the Pi) because preflight flipped true right after restarting
+  the node — **but the user then reported the RC transmitter had only just been connected**, which is
+  the simpler explanation and the timing is ambiguous. User confirmed QGC shows all-green in Manual.
+  **Check the RC transmitter FIRST for unexplained preflight failures.** The stale-registration
+  theory is UNCONFIRMED — do not treat it as fact; note that SYS_STATUS's `rc` health bit read
+  `True` even while the transmitter was off, so that bit is not a reliable RC indicator.
+- Restored + verified live: `/scan` ~25Hz · `/odom` ~100Hz (all 4 VESCs, esc_online_flags=15) ·
+  rover_ekf_bridge → `/fmu/in/vehicle_visual_odometry` ~39Hz (its 1s "no /odom received yet" warning
+  is a harmless startup transient) · autonav_mode registered clean. FC left **disarmed, nav_state 0**.
+- Reminder: `/odom` silent with `esc_online_flags=8` + `incomplete wheel data (L:1 R:0)` = **rover
+  motor bus unpowered**, not a software bug (8 = only addr 13, a LEFT wheel — hence L:1 R:0).
+- **NEXT: the L2 low-speed forward test ON THE FLOOR** — all blockers now cleared. Stop
+  rover_ekf_bridge or treat results as plumbing-only if wheels are up (see hazard note above).
+- ✅ **RESOLVED same session: systemd units installed 2026-07-21**, replacing the manual `setsid`
+  bring-up that a reboot had wiped twice. rover-camera / rover-scan / rover-odometry /
+  rover-autonav-mode enabled+active; **rover-ekf-bridge installed but DISABLED on purpose**.
+  Full detail in [[services]]. `Restart=always` also covers the autonav_mode 4 s watchdog aborts.
+
+## RC MAPPING RESOLVED 2026-07-21 — the long-open "RC discrepancy" is CLOSED, user was right
+Read via pymavlink PARAM_REQUEST_READ on tcp:5760 (values are INT32 in a float field — decode the
+bit pattern, don't read the float): **RC_MAP_KILL_SW=8 · RC_MAP_ARM_SW=5 · RC_MAP_FLTMODE=6 ·
+NAV_RCL_ACT=6 (Disarm on RC loss) · COM_RC_IN_MODE=3.** Memory previously recorded
+RC_MAP_FLTMODE=0/"nothing mapped" — that is now STALE; kill, arm and mode channels are all mapped.
+**PHYSICALLY TESTED + WORKING 2026-07-21 (user-verified on the bench): kill switch (ch8), arm and
+disarm all confirmed functional.** Safety gate for floor driving is therefore CLOSED.
+Still untested: kill *while in AutoNav* specifically (bench test was in Manual — AutoNav could not
+arm at the time because rover_ekf_bridge was deliberately stopped). Worth confirming opportunistically
+on the floor, since AutoNav is the mode that will actually be driving autonomously.
+Also: SYS_STATUS's `rc` health bit read True while the transmitter was OFF → not a reliable RC check.
+Param reads sometimes return `<no reply>` when QGC is attached to the same link — retry, and send
+several requests spaced ~0.3 s; it recovers without wedging.
+
+## WHEELS-UP LIMIT CYCLE 2026-07-21 — observed, root-caused, and how to avoid it
+**Symptom (user-reported + measured):** armed on stands in **Position mode (nav_state 2)** is quiet
+at first. Arming alone does nothing. But the instant a **forward/reverse stick input** is given, all
+four wheels start swinging **full range ±1500 ERPM with a ~1.2 s period** and **never stop — even
+with the stick back at centre — until disarm**. Measured: addr10 -1450/+1510, addr11 -1516/+1507,
+addr12 -1565/+1536, addr13 -1527/+1518; EKF2 meanwhile reported **x=-4.25 m, y=+3.06 m of phantom
+travel** on a vehicle that never moved.
+**Root cause = positive feedback through `rover_ekf_bridge` while the wheels are off the ground.**
+Zero is a *stable equilibrium* (stopped wheels → 0 odom → 0 correction), which is why arming is
+harmless. A stick input *perturbs* it: wheels spin → rover_odometry reports it as real velocity →
+bridge integrates it into EKF2 → the rover believes it has travelled. Centring the stick does NOT
+help because **Position mode is a position HOLD** — it now thinks it is ~0.5 m off station and drives
+back to "return", which spins the wheels, which manufactures displacement the other way → overshoot
+→ undamped **limit cycle**. The only corrective action available is the same action that creates the
+error; on stands there is no body motion, so no friction/load damping. `RO_SPEED_I=0.1` winds up and
+guarantees the overshoot. Disarm is the only thing that breaks it.
+**This does NOT indicate a fault** — it re-confirms all 4 motors drive both directions at full range.
+**It will NOT happen on the floor**, where driving back actually arrives and real dynamics damp it.
+**Avoidance on stands — either:** use **Manual (nav_state 0) only** (open-loop, no estimator in the
+path), **or stop `rover_ekf_bridge`** before arming. With the bridge stopped, `cs_ev_vel=false`,
+xy_valid/v_xy_valid=false, dead_reckoning=true → Position/AutoNav **cannot arm at all**, only Manual.
+That is the correct safe stands configuration (verified 2026-07-21).
+**Never stop the bridge while ARMED in Position/AutoNav** — dropping v_xy_valid under a mode that
+requires it triggers a PX4 failsafe. Disarm first, then stop it.
+**FC restart clears the corrupted estimate** (x went 4.25 m → ~0.5) but the FC may come back **still
+armed in Position mode**, restarting the loop immediately — check arming_state after any FC reboot.
+`autonav_mode` dies on FC restart (4 s FMU watchdog, expected) and re-registers cleanly on relaunch.
+
+## SHELL GOTCHA — killed this session's shell THREE times (exit 144), extends the known note
+`pkill -f`/`pgrep -f` match **the invoking shell's own command line**, including **text inside
+`echo` strings**. `pkill -f "[r]over_ekf_bridge"` still self-killed because a later
+`echo "rover_ekf_bridge STOPPED"` in the SAME command line contained the literal name. The bracket
+trick alone is NOT enough — **the target name must not appear anywhere in the command line, echo
+text included**. Reliable form used successfully:
+`N='rover_ekf'; N="[${N:0:1}]${N:1}_bridge"; pkill -f "$N"` and never echo the literal name.
 
 ## Safety invariants (never weaken)
 RC override PX4-native; rov_collision_stop node stays active independent of Nav2; cmd_vel>500ms / scan>1s watchdog stops; no reverse into unseen space (forward-only sensing).

@@ -28,8 +28,16 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `feedback_wlan0_persistent_name.md` — onboard uplink naming: MAC pin raced vs USB WFB adapters ("Failed to rename: File exists") — fix = rename to wifi0, 2026-07-19 pending reboot verify
 - `project_boxb_pcie_usb.md` — BOX-B PCIe→USB3.2 board RESOLVED+verified 2026-07-19 (FFC reseat): VL805 xHCI up, Orbbec=/dev/video0-7, LG cam=8/9, dual-NIC WFB restored, user confirmed all cameras visible
 - `project_ros2ws_tag_cleanup.md` — ros2_ws tag scheme: annotated semver vX.Y.Z only, baseline v1.1.0@5bace1b; cleanup DONE 2026-07-19, branches consolidated: `main` is THE working branch (main_dev fast-forwarded into it + deleted; GitHub default=main). Final refs: main + release/2026-02-22 + v1.0.0,v1.0.2,v1.0.3,v1.1.0,release-20260222,archive/*; nothing orphaned
-- `project_rover_autonav.md` — **ACTIVE, RESUME HERE (2026-07-20 session 3)**: rover autonav. L0+L1 DONE (mode control via DDS: `~/ros2_ws/tools/dds_setmode.py`, nav_state 23=AutoNav). L2 blocked → **L3 FIRST**. Accel blocker CLEARED (quick cal, param5=4 — big vehicles never need rotating). rover_odometry bug FIXED (absolute msg.timestamp vs boot-relative nested esc[].timestamp) → /odom live @99.9Hz. New pkg **rover_ekf_bridge** built+running: /odom → EKF2 EV velocity @40Hz (must send velocity_z or EKF2 drops the sample). **L3 VERIFIED**: EKF2_EV_CTRL=4 set → cs_ev_vel true, xy_valid+v_xy_valid TRUE, dead_reckoning false, preflight passes, AutoNav holds nav_state 23. Both arm blockers cleared. **L2 run: ARMED + wheels turned + watchdog OK, but PARTIAL** — yaw drives all 4 correctly, FORWARD only turns addr 13 and does not scale with speed; magnitudes meaningless on stands (closed-loop control has no body motion). Manual RC test then proved ALL 4 wheels drive both directions (±1500 ERPM) → hardware/allocation GOOD, fault is in the closed-loop speed path (invalid feedback on stands). Full chain re-verified companion-side (tools/autonav_chain_check.py): register mode_id=23 → arming handshake can_arm_and_run=True → DO_SET_MODE ACCEPTED → ARM ACCEPTED → onActivate emits ~30Hz rover speed+rate setpoints at 0.000. **ROOT CAUSE OF FORWARD FAILURE FOUND: `RO_SPEED_LIM=0.01` m/s** clamps every speed setpoint (DifferentialSpeedControl.cpp:119) → 0.2 and 0.4 m/s both clamp identically, only least-loaded wheel creeps. FIX (not applied): `param set RO_SPEED_LIM 1.0` + `param save`, then FLOOR test. Yaw params sane. **MAVLink link WEDGED** after mavlink_shell sessions (FC heartbeat gone from tcp:5760, DDS unaffected, QGC cannot connect) → needs `sudo systemctl restart mavlink.router`. RC: ch2=throttle, ch4=steer, ch3 unused. QGC "Unknown mode" is NOT a QGC bug — dead GCS uplink, see project_gcs_link_degraded.md. ALL COMMITTED 2026-07-20 on ros2_ws main (a72f1b9..2fa1097: px4_msgs pin, autonav_mode, rover_odometry+rover_ekf_bridge, tools, docs, chain-check) + PUSHED to origin/main.
-- `project_l4_gemini_nav2_prereqs.md` — L4/L5 deps audit 2026-07-20: Gemini 336L on USB3 OK but NO Orbbec SDK/wrapper/udev; Nav2+slam_toolbox not installed; 7 build deps missing; disk 82%
+- `project_rover_autonav.md` — **ACTIVE. RESUME 2026-07-23: L2 DONE (armed floor run PASSED) + reflex collision-stop built/validated/pushed b38e413. NEXT = yaw-gain tuning (#20) then L5 (slam_toolbox+Nav2).** Arm workflow: arm in Manual via RC → software DO_SET_MODE→AutoNav (can't arm AutoNav via RC). Left disarmed/Hold, bridge stopped. See [[project-l2-floortest-wheel0-reversed]].
+  **First 3 commands next session** (stack auto-starts on boot except the bridge): `systemctl is-active rover-camera rover-scan rover-odometry rover-autonav-mode` → rover ON THE FLOOR, clear run-out → `printf '1987\n' | sudo -S systemctl start rover-ekf-bridge` (**AutoNav CANNOT ARM without it** — that is deliberate, not a fault) → verify `cs_ev_vel`/`v_xy_valid` true → `python3 ~/ros2_ws/tools/l2_test.py` at 0.2 m/s.
+  **The question L2 must answer**: does 0.4 m/s give ~DOUBLE the wheel speed of 0.2? (The old `RO_SPEED_LIM=0.01` clamp made both identical; now 0.70.) Expect it to SETTLE, not oscillate — on the floor odometry is real.
+  **Also do in the same session**: (a) validate gyro yaw by turning a known angle vs floor marks, and A/B against `yaw_source:=wheels` to quantify the slip error; (b) test the kill switch INSIDE AutoNav (proven only in Manual so far).
+  **Fixed 2026-07-21**: RO_SPEED_LIM 0.01→**0.70** · track_width + RD_WHEEL_TRACK 0.43→**0.31** (0.43 was the WHEELBASE; both consumers wrong so the errors CANCELLED) · camera mount TF measured (**x −0.125 y 0 z 0.420**, pitch/roll from the camera's own IMU) · heading now from GYRO not wheels (skid-steer wheels cannot observe rotation) · stack under systemd · MAVLink link healed · RC kill/arm/mode all mapped + physically tested.
+  **Two hazards to remember**: wheels-up + rover_ekf_bridge + any closed-loop mode = self-sustaining front/back limit cycle, only disarm stops it (use Manual on stands, or leave the bridge stopped). And `pkill -f`/`pgrep -f` self-match the invoking shell INCLUDING echo text — killed this session's shell 3×.
+  RC: ch2=throttle, ch4=steer, ch3 unused, ch5=arm, ch6=mode, ch8=kill. QGC "Unknown mode" = dead GCS uplink, not a QGC bug (see project_gcs_link_degraded.md).
+  ALL COMMITTED + PUSHED to origin/main through **ae647a4** (b38e413 collision-stop · 8f5c522 roadmap.md · ae647a4 dds_topics next-flash note; earlier: 2075ddd track · 0bd5bf6 camera TF · 642f50d systemd · 3fdf2fc gyro yaw). Tree clean, main even w/ origin. **Direction source-of-truth = `ros2_ws/docs/roadmap.md`** (2026-07-23). Topic audit 2026-07-23: L5/L6 fully covered by exposed topics, no reflash needed; `vehicle_angular_velocity` absent→next-flash nice-to-have.
+- `project_l2_floortest_wheel0_reversed.md` — **L2 DONE + reflex collision-stop built/validated/committed. Committed+PUSHED ros2_ws origin/main @ b38e413 + docs/rover_autonav_collision_stop.md. Wheel-0 "reversal" = FALSE ALARM (mirrored ESC sign, all 4 go fwd). Collision-stop lives INSIDE autonav_mode executor (can't be bypassed); ±20° cone, block<0.60m/clear>0.75m, stale-scan fail-safe, collision.* params. ARM WORKFLOW: AutoNav can't arm via RC → arm in MANUAL then software DO_SET_MODE→AutoNav (holds). l2_test.py: --live, never software-arms, tolerates already-armed-in-Manual. VALIDATED: passive on stands + armed floor L2 PASS + collision-stop fired end-to-end (stopped 0.59m from real wall). Kill(ch8) works armed in AutoNav (#19). TODO: yaw-gain tune (#20); L5 Nav2+SLAM**
+- `project_l4_gemini_nav2_prereqs.md` — **2026-07-21 eve: stack restored after Pi reboot** (/scan ~25Hz, /odom ~100Hz, ekf_bridge 39Hz, autonav_mode registered, preflight PASS); RO_SPEED_LIM fixed 0.01→0.70 + MAVLink healed; **only remaining L5 blocker = camera mount TF still unmeasured**. **L4 DONE 2026-07-21**: Orbbec wrapper built + `/scan` live @20Hz (`~/ros2_ws/launch/depth_to_scan.launch.py`); Nav2 1.3.12 + slam_toolbox 2.8.5 installed → L5 ready. OPEN: camera mount TF is a placeholder; OrbbecSDK untracked in git. Disk 85%→49% (20.4G cleanup). **RESUME EVENING OF 2026-07-21** — next: measured camera mount TF from user → then L5 slam_toolbox+Nav2
 - `project_vision_multicam_upgrade.md` — multi-camera+alias upgrade: phases A+B+C DONE, FPV UP (LG 720p); discovery v2.1 DONE 2026-07-19 (by-id index NOT boot-stable → sysfs usbcam-<vidpid>-<serial>-i<iface> ids, codex-work 9e61729 + ros2_ws 5bace1b, store migrated; reboot-stability check pending next power cycle) — **REMAINING: Phase D (rc_control+optflow→aliases) + udev rule cleanup, go-ahead given, see file**
 
 ## [KNOWN_FIXES]
@@ -44,7 +52,7 @@ goal: continuous presence — develop, maintain, autonomize this platform
 
 ## [PLATFORM]
 Vind-Roz: aerial drone + ground rover | same RPi5 companion, different PX4 airframe config
-HW: RPi5 BCM2712 Cortex-A76 quad-core 8GB LPDDR4X | 64GB SD (**82% used, 11G free — 2026-07-20**)
+HW: RPi5 BCM2712 Cortex-A76 quad-core 8GB LPDDR4X | 64GB SD (**49% used, 29G free — 2026-07-21 after 20.4G log cleanup**; card fully partitioned, no unallocated space)
 OS: Ubuntu 24.04.1 LTS aarch64 | kernel 6.8.0-1048-raspi | hostname: Vind-Roz
 
 ## [FLIGHT_CONTROLLER]
@@ -66,6 +74,7 @@ px4_msgs: pinned release/1.17 @ 86d8239 (branch pinned-pxlabs-1.17, exact match 
 → full detail: reference_services.md
 last verified 2026-05-09: mavlink.router + microxrce-agent active, FC connected, DDS negotiated
 core: mavlink.router | microxrce-agent | rc_control_node | tfmini | vision_streaming | block-traffic | wifibroadcast@drone | system_files_sync.timer | ollama | ldlidar(disabled)
+autonav (added 2026-07-21, replaces manual setsid): rover-camera | rover-scan | rover-odometry | rover-autonav-mode — all enabled+active; **rover-ekf-bridge installed but DISABLED on purpose** (wheels-up limit-cycle hazard; start by hand on the floor, AutoNav can't arm without it)
 
 ## [WFB_NG]
 → full detail: reference_wfb_ng.md
@@ -86,13 +95,18 @@ ros2_ws: ~/ros2_ws | branch: main (main_dev merged+deleted 2026-07-19) | release
 
 ## [TODOS]
 → See memory/todos.md (full detail + commands)
+**NEW 2026-07-23 outdoor section [ROVER OUTDOOR — PRIMARY TARGET] O1-O5**: O1 re-integrate STL-19 lidar (needs unit back; lidar owns /scan, remap depth→/scan_depth) · O2 DroneCAN GPS (UAVCAN_ENABLE+EKF2_GPS_CTRL; model TBD) · O3 lidar SLAM · O4 GPS-waypoint Nav2 · O5 outdoor safety. Come AFTER indoor L5/L6.
+**2026-07-23: #18 L2 floor test DONE (armed, PASSED) · #19 kill-in-AutoNav DONE (confirmed working armed).
+Reflex collision-stop built+validated+pushed b38e413. Next action = #20 re-tune yaw gains (armed yaw
+~700-850 rpm vs fwd ~156), then L5 (slam_toolbox+Nav2). #21 gyro-yaw odometry still open (highest-value
+accuracy win, replaces slip-prone wheel-derived yaw)**
 1. Fix relay clock for real (local NTP via companion) — OPEN, recurred 2026-07-11, see project_relay_ntp_setup.md
 2. Disable drone onboard Wi-Fi wifi0/ex-wlan0 (5GHz interference with WFB-NG ch161)
 3. Increase WFB rx_ring_size on GS (EAGAIN crashes, 19 restarts observed)
 4. Check GS TX power (uplink severely worse than downlink)
 5. Antenna tracker hardware (script ready on relay port 14551, HW pending)
 6. ✅ DONE 2026-07-19: ffmpeg watchdog in vision_streaming node (a561e93)
-7. Orbbec autonomy pipeline: OrbbecSDK_ROS2 → depth/pointcloud → obstacle avoidance (phase 3 prep)
+7. ✅ Orbbec wrapper + /scan DONE 2026-07-21 (L4); remains: wire /scan → obstacle_distance/Nav2. NEW: #15 measure camera mount TF (blocks L5), #16 pin OrbbecSDK in git, #17 delete camera_sw_node_obsolute.py
 8. QGC half ✅ DONE (dynamic picker, phase C); REMAINING = multicam Phase D: rc_control yamls + optical_flow → aliases/usbcam ids, then delete 99-usb-cameras.rules (see project_vision_multicam_upgrade.md)
 
 ## [AI_STACK]
@@ -104,10 +118,14 @@ SSH login: b+Enter=bash | Enter/4s+internet=Claude | no internet=Phi-3
 TFmini: ttyAMA2 downward 0.3-12m 50Hz → distance_sensor
 VL53L1X: I2C 0x29 front 20-400cm 10Hz → obstacle_distance
 OptFlow: /dev/video3 Farneback 10Hz → sensor_optical_flow (manual launch)
-STL-19: ttyAMA3 360° — TESTING ONLY, hw moved to other team 2026-04-17
+STL-19: ttyAMA3 360° 0.02-25m ~10Hz LaserScan — **NOW A PRIMARY-TARGET SENSOR** (outdoor 360°+SLAM, user re-fitting 2026-07-23); hw was moved to another team 2026-04-17 → needs the unit back; driver ready in ros2_ws; on re-integration lidar owns `/scan` (remap depth→/scan_depth). See roadmap O1.
 Cameras (roles set 2026-07-19): LG Smart Cam=FPV alias FPV, id usbcam-30c9009d-01.00.00-i00 (video8 today, 1280x720 MJPG user-applied from QGC; stable ids survive boot shuffles since v2.1) | Orbbec Gemini 336L=autonomy-only, color alias NAV-COLOR role_lock, id usbcam-2bc50807-CPC7B53000AB-i04 (video6 today; video0=depth Z16, video2/4=IR; up to 1280x800 MJPG; USB3 on BOX-B; ROS2 wrapper for phase3/4, never ffmpeg) | old front/bottom cams removed | NEVER key cameras by /dev/v4l/by-id (index order not boot-stable)
 
 ## [AUTONOMY_ROADMAP]
+> **SOURCE OF TRUTH for direction = `~/ros2_ws/docs/roadmap.md`** (tracked, ros2_ws main @ 375f5d2, 2026-07-23). **PRIMARY TARGET = OUTDOOR autonomous nav** (rover drives itself to a GPS waypoint in open space, 360° avoidance) — reframed 2026-07-23 by user. INDOOR GPS-denied (what's built through L4) = stepping-stone + GPS-loss fallback, NOT the end goal.
+> **Two hardware additions the user is fitting**: (1) **LDRobot STL-19 360° 2D lidar** — 0.02-25m ~10Hz LaserScan, UART ttyAMA3 230400 RX-only (uart3-pi5); driver `ldlidar_stl_ros2` already in ros2_ws w/ both fixes applied; hw was moved to another team 2026-04-17 so needs the unit BACK; **on re-integration lidar OWNS `/scan`, remap depth_to_scan → `/scan_depth`** (conflict). (2) **DroneCAN GPS** — CAN bus already live (VESCs addr 10-13); set UAVCAN_ENABLE + EKF2_GPS_CTRL (FC param path, MAVLink-only); model TBD from user.
+> **Correction: Gemini 336L IS outdoor-capable** (active-stereo + global shutter, D456-class) — earlier "blind in sun" note was wrong (that's structured-light). It's the forward 3D costmap layer; STL-19 does 360° + SLAM.
+> Ladder: **autonomy-brain L0-L7 (indoor, L0-L4 DONE, L5 Nav2 next)** proves the brain first; **outdoor track O1(STL-19)→O2(GPS)→O3(lidar SLAM)→O4(GPS-waypoint Nav2)→O5(outdoor safety)** adds hardware+tuning. Interstitial before L5: #20 yaw tuning + gyro-yaw drive-validation. Aerial phase1-6 below = deferred.
 phase1 ✅ sensor pipeline + offboard interface
 phase2 TODO: offboard mission node + collision stop + battery RTH
 phase3 TODO: 360° obstacle avoidance
