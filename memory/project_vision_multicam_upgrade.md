@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 41726602-da8e-4edf-b5e2-8b266624ecfa
-  modified: 2026-07-19T07:49:38.234Z
+  modified: 2026-07-19T12:08:53.237Z
 ---
 
 # Vision System Upgrade: Multi-Camera with Aliases (design 2026-07-19)
@@ -149,16 +149,37 @@ E. Delete stale front/back assumptions from docs (ride along with todos #5 ch157
   table, --swap section) — legacy RC/Rozcam entries marked STALE pending phase D, not
   deleted, because rc_control really still sends /dev/video0 (v2 guard rejects loudly).
 
-### NEXT SESSION PICKUP (written 2026-07-19 ~13:15 before session reset)
-1. User is implementing Phase C in PXLABS_qgroundcontrol on PC (camera-list/apply/set-alias
-   per vision_multicam_companion.md §2+§5). A background conf-watcher was running here —
-   it dies with the session; instead just check on resume:
-2. Has /etc/vision_streaming.conf been rewritten in v2 format (camera_id key present)?
-   If yes → verify FPV recovered: journalctl -u vision_streaming (want ffmpeg stable >60s,
-   backoff reset), stream = LG cam 960x540 MJPG → rtp 127.0.0.1:5602.
-   If no → FPV still down in watchdog retry loop (expected, not a new bug); wait for user.
-3. Then likely next: phase D (rc_control rc_mapping.yaml + optical_flow to aliases/by-id,
-   todos #8) — only on user go-ahead.
+### PHASE C DONE — FPV RECOVERED (verified 2026-07-19 ~17:00)
+Conf rewritten in v2 format (camera_id=LG index0, camera_name=/dev/video8), ffmpeg stable,
+user chose 1280x720 MJPG from QGC (not the old 960x540). QGC side complete per user.
+
+### TASK 1 DONE (2026-07-19 ~17:40) — discovery v2.1 deployed
+QGC-side confirmed ids opaque/unparsed/unpersisted → no coordination needed; went ahead.
+- **vision_config_manager v2.1.0** (codex-work `9e61729`, deployed, DEPLOYED==REPO): walks
+  /dev/video* + sysfs; stable id = `usbcam-<vidpid>-<serial>-i<bInterfaceNumber>`; Orbbec
+  depth+IR share iface 00 → function-tag suffixes (-depth0/-ir0/-cap0, derived from pixel
+  formats so they follow function not node order); streamable cams alone on iface → bare
+  keys. Legacy by-id ids accepted everywhere (resolve/active/conf); new `migrate-store`
+  subcommand run on-device: FPV=`usbcam-30c9009d-01.00.00-i00` (video8),
+  NAV-COLOR=`usbcam-2bc50807-CPC7B53000AB-i04` (video6, role_lock kept).
+- **vision_streaming node** (ros2_ws `5bace1b` main_dev, built, service restarted): resolves
+  usbcam ids via sysfs, legacy by-id fallback (proven live — conf still holds old LG id
+  until next QGC apply rewrites it). Stream stable post-restart, 0 errors.
+- Harness-tested: alias/legacy-id//dev-path resolution, depth-node guard reject, bad target.
+- Found: Orbbec color offers up to 1280x800 MJPG/YUYV (design assumed 640x480 max).
+- QGC next: pull, parse-check my sample JSON, live two-camera test, then v3.3.0 release.
+- NOT yet verified: key stability across an actual reboot (check on next power cycle:
+  `vision_config_manager list` ids unchanged, NAV-COLOR still on the MJPG/YUYV color node).
+
+### REMAINING (user's prioritized list, go-ahead given for the set)
+2. **Phase D** (todos #8) — verified stale refs: rc_mapping.yaml:55-56 front=/dev/video0
+   bottom=/dev/video2; optical_flow_node.py:36 /dev/video3, optical_flow_node1.py:36
+   /dev/video2 — all land on Orbbec depth/IR today. Migrate to aliases/ids via the v2.1
+   resolver (CH9: low=FPV primary, mid=FPV+NAV-COLOR PiP, high=spare). Which camera optical
+   flow should use is an OPEN user decision (its original camera was removed).
+3. **Cleanup** — delete /etc/udev/rules.d/99-usb-cameras.rules (pins removed Waveshare
+   0ede:8093→video0, See3CAM 2560:c1d1→video2; dormant — matches absent VID:PIDs, NOT the
+   cause of the by-id shuffle). Removal condition met: QGC has no hardcoded presets anymore.
 
 ## 5. Current state snapshot (2026-07-19 13:00)
 - **FPV currently DOWN**: /etc/vision_streaming.conf is stale v1 format (camera_name=/dev/video0

@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 2d8c9512-eb8c-4b27-b518-3de2ce63ad22
+  modified: 2026-07-21T18:57:54.165Z
 ---
 
 # Rover Wheel Odometry — Implementation Plan
@@ -44,9 +45,12 @@ Verified against live test data:
 - addr 13: ERPM 881 → 0.335 m/s ✓
 
 ## Odometry Parameters
-- Track width: **430mm = 0.43m**
+- **Track width (left↔right hub centres): 310mm = 0.31m — MEASURED 2026-07-21. NOT 0.43.**
+  0.43 m is the **WHEELBASE** (front hub ↔ rear hub) and was wrongly sitting in the track slot
+  until 2026-07-21, under-reporting every yaw rate by ~28%. Do not reintroduce it.
+- Wheelbase (front↔rear hub centres): **0.43m** — used only for the camera mount TF, never odometry.
 - Wheel diameter: **0.1524m**
-- ERPM → m/s: **× 0.000380**
+- ERPM → m/s: **× 0.000380** (unaffected by the track error — straight-line odom was always correct)
 
 ## Differential Odometry Math
 ```python
@@ -54,7 +58,11 @@ v_left  = avg(ERPM addr 11, 13) × 0.000380
 v_right = avg(ERPM addr 10, 12) × 0.000380
 
 v_linear  = (v_left + v_right) / 2.0
-v_angular = (v_right - v_left) / 0.43   # track_width
+v_angular = (v_right - v_left) / 0.31   # LEGACY wheel yaw — only used when yaw_source='wheels'
+# DEFAULT SINCE 2026-07-21 is yaw_source='gyro': heading comes from the FC's
+# /fmu/out/vehicle_attitude (~92 Hz), integrated as DELTAS. Skid-steer can only
+# turn by scrubbing all four tyres sideways, so the wheels cannot observe true
+# rotation at all — no track_width value can fix that. Wheels = distance, gyro = heading.
 
 # Midpoint integration (each dt):
 theta_mid = theta + v_angular * dt / 2
@@ -63,7 +71,9 @@ y     += v_linear * sin(theta_mid) * dt
 theta += v_angular * dt
 ```
 
-Note: right side motors may need ERPM sign inversion depending on VESC m_invert_direction setting — add parameter to toggle.
+**Sign map VERIFIED 2026-07-19** (all 4 wheels hand-spun forward, wheels-up, deadband-filtered capture — every sample sign-consistent):
+`ERPM_SIGN = {10: -1, 11: +1, 12: +1, 13: +1}` — only addr 10 inverted. Apply as per-wheel parameter (not per-side).
+**Idle noise VERIFIED 2026-07-19**: all ESCs jitter ±1..±35 ERPM at standstill (Hall noise) → node needs deadband param, default ±40 ERPM (≈0.015 m/s), else stationary drift.
 
 ## ROS2 Node Plan
 - **Package**: `rover_odometry` (new, Python, ament_python — follow rc_control pattern)
@@ -97,7 +107,7 @@ Vehicle confirmed: CA_AIRFRAME=6 (Rover), MAV_TYPE=10, SYS_AUTOSTART=50000 (diff
 ### Parameters needing correction — ALL ZERO / WRONG:
 | Parameter        | Current | Target  | Notes                        |
 |-----------------|---------|---------|------------------------------|
-| RD_WHEEL_TRACK  | 0.50    | 0.43    | Wrong track width            |
+| RD_WHEEL_TRACK  | ✅ 0.31 | 0.31    | **FIXED + saved + readback-verified 2026-07-21.** Was 0.43 on the FC — the WHEELBASE in a track-width param. PX4 differential allocation uses it as Δv = ω × track, so 0.43 commanded a ~39% oversized differential (the gyro-closed yaw-rate loop masks much of it in steady state; error shows in feedforward/transient). **Note: odometry ALSO used 0.43, so the two errors were cancelling and the system looked self-consistent.** Both now 0.31. |
 | RO_MAX_THR_SPEED| 0.0     | ~3.0    | Speed at full throttle m/s   |
 | RO_SPEED_P      | 0.0     | ~0.5    | Speed controller P           |
 | RO_SPEED_I      | 0.0     | ~0.1    | Speed controller I           |
