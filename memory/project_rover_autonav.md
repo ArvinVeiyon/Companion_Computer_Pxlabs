@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-07-23T18:01:11.292Z
+  modified: 2026-07-23T18:33:34.690Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
@@ -36,6 +36,9 @@ Full session detail in [[project-l2-floortest-wheel0-reversed]].
   floor + RC-ready → start `rover-ekf-bridge` by hand → **baseline `l2_test.py` first** (measure yaw-vs-fwd
   rpm against the fixed 0.31 track before changing gains) → adjust `RO_YAW_RATE_P/I` (2.0/0.1) via pymavlink
   `PARAM_SET` on tcp:5760 (NOT mavlink_shell.py). FC left disarmed/Hold, bridge stopped.
+  **FIELD CHECKLIST is now a tracked doc: `~/ros2_ws/docs/yaw_tuning_session.md`** (ros2_ws main @ 8f84bf1) —
+  full preconditions/bring-up/baseline-then-tune/opportunistic(gyro-yaw + /scan tape)/safety/teardown +
+  a results-log table to fill in on the floor. Open it and work down the checkboxes when at the rover.
 
 What got done 2026-07-22/23:
 - **L2 armed floor run PASSED.** First-ever armed floor drive. All 4 wheels respond to fwd+yaw, watchdog

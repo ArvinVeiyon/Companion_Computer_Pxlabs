@@ -130,6 +130,8 @@ Full detail in [[project-l2-floortest-wheel0-reversed]]. Committed+pushed ros2_w
 User killed the rover mid-AutoNav (first floor attempt) before a wall — kill (ch8) latched, motors stopped.
 
 ### 20. Revisit RO_YAW_RATE_P / RO_YAW_RATE_I after the floor test — ← NEXT ACTION (added 2026-07-21)
+**FIELD CHECKLIST tracked at `~/ros2_ws/docs/yaw_tuning_session.md` (ros2_ws main @ 8f84bf1)** — preconditions,
+bring-up, baseline-then-tune, opportunistic gyro-yaw + /scan checks, safety, teardown, results-log table.
 CONFIRMED NEEDED by the L2 run: armed yaw drove wheels MUCH harder (~700-850 rpm) than forward (~156 rpm).
 Those gains were tuned while `RD_WHEEL_TRACK` was 0.43 — a ~39% oversized track, which sized the
 commanded wheel differential (Δv = ω × track). The allocation they were implicitly compensating for
