@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cf514875-1225-439c-98e9-08753257c44a
-  modified: 2026-07-19T04:14:45.369Z
+  modified: 2026-07-25T05:21:53.988Z
 ---
 
 # BOX-B PCIe→USB3.2 expansion — link training failure (OPEN, started 2026-07-19)
@@ -65,5 +65,22 @@ connector (PCIE1). Planned devices on it: **Orbbec Gemini 336L** depth camera (V
   (had been narrowed to single BOX-B NIC during rebuild, file mtime 01:01). Backup:
   /etc/default/wifibroadcast.bak-20260719-dualnic. Verified after restart: both wlx UP,
   TX antenna selector switching 0↔1 (RSSI -35/-43 dB), relay ping 13 ms 0% loss.
-  Note one NIC is on BOX-B USB2 hub, the other on RP1 native USB.
 - Watch VL805 power budget: Gemini 336L + WFB TX share the BOX-B board (cf. [[project_relay2_relaystn]]).
+
+## CORRECTED USB topology 2026-07-25 (verified via sysfs, user-confirmed)
+Earlier note "one WFB NIC on BOX-B, the other on RP1 native" was WRONG. Full accurate map:
+- **BOX-B = VL805 controller `0000:01:00.0`** (VIA VL805/806 xHCI, external FFC PCIe domain).
+  Presents Bus 1 (480M/USB2 side) + Bus 2 (5000M/USB3 side). **Everything WFB + Orbbec is on it:**
+  - Orbbec Gemini 336L (2bc5:0807) → Bus 2, syspath **2-3**, **5000M USB3** ✅ (needs it for depth+IR+color)
+  - VIA USB2.0 Hub (2109:3431) → Bus 1, syspath 1-1, 480M
+  - WFB NIC #1 (0bda:a81a) → syspath **1-1.1**, 480M, behind that hub → `wlx782288d993c0`
+  - WFB NIC #2 (0bda:a81a) → syspath **1-1.2**, 480M, behind that hub → `wlx782288d98f91`
+- **RPi5 onboard RP1 USB** (controllers `xhci-hcd.0/.1`) carries the other two:
+  - LG Smart Cam / FPV (30c9:009d) → Bus 4, syspath 4-2, 480M
+  - RTL8821CU internet uplink (0bda:c811) → Bus 6, syspath 6-2, 480M → `wlx90de80d824d6`
+- **KEY: 480M on the Realtek radios is NOT a fault or a wrong-port issue.** Both `0bda:a81a`
+  (RTL8812AU, WFB pair) and `0bda:c811` (RTL8821CU, uplink) are **USB 2.0 silicon** — 802.11ac ≠ USB3.
+  480M is their inherent ceiling regardless of port. Moving the uplink to a USB3 port gains nothing.
+  480 Mbps far exceeds what WFB actually pushes → no USB bottleneck for the radios.
+- The ~23 Mbps symmetric internet ceiling (measured 2026-07-25) is therefore an RF/Wi-Fi/AP-side
+  limit, NOT a USB bus limit — see [[companion-network-degraded]].

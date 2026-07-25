@@ -10,18 +10,11 @@
 Real fix needs a **local NTP server** the relay can actually reach — companion (10.5.5.87) is reachable from relay (10.5.5.77) over the WFB tunnel and has real internet+correct time. Plan: install `chrony` on companion in server mode, allow 10.5.5.0/24, then point relay's `systemd-timesyncd` `NTP=` at 10.5.5.87.
 Attempted 2026-07-11, aborted mid-install — see `project_relay_ntp_setup.md` and `project_companion_network_degraded.md`.
 
-### 2. Disable drone onboard Wi-Fi (wifi0, ex-wlan0) during WFB-NG operation (Drone)
-Onboard uplink renamed wlan0 → `wifi0` on 2026-07-19 (see feedback_wlan0_persistent_name.md).
-`wifi0` connected to "Nilan" 5GHz AP — possible interference with WFB-NG on ch 157.
-First verify channel:
-```bash
-iw dev wifi0 link | grep freq
-```
-If 5GHz, disable:
-```bash
-sudo ip link set wifi0 down
-```
-Consider making this persistent (disable wifi0 in netplan or add pre-start to wifibroadcast service).
+### 2. ✅ DONE 2026-07-25 — Disable drone onboard Wi-Fi (Drone)
+Onboard radio (wlan0/phy0 brcmfmac) fully disabled: removed from netplan + `dtoverlay=disable-wifi`
+in /boot/firmware/config.txt (beside disable-bt), rebooted → radio gone at firmware level, no more
+5GHz WFB interference. Uplink replaced by external USB RTL8821CU `wlx90de80d824d6` @ static
+192.168.1.240 (onboard was blocked by metal enclosure lid anyway). See project_external_wifi_uplink.md.
 
 ### 3. Increase WFB ring buffer on GS OR reduce drone video bitrate (Relay station)
 Root cause: GS wfb-server crashes with BlockingIOError EAGAIN (socket buffer overflow).
