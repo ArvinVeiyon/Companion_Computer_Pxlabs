@@ -22,6 +22,7 @@ All files live in ~/.claude/projects/-home-roz/memory/ and are mirrored in ~/cod
 - `project_codexwork_token_in_remote.md` — SECURITY: codex-work origin URL embeds a plaintext GitHub PAT; rotate + switch to SSH/credential helper
 - `project_codexrelay_divergence.md` — codex-relay master diverged from GitHub; merge-reconciled, relay still behind
 - `project_relay2_relaystn.md` — 2nd relay RELAY-STN (RPi4, mgmt ssh vind-admin@192.168.1.221 pass 1987) built 2026-07-12. OPEN: WFB/EU card browns out Pi4 USB budget → kills uplink too; fix=powered hub (debug 2026-07-14, continue)
+- `project_external_wifi_uplink.md` — 2026-07-25: external USB RTL8821CU (wlx90de80d824d6) = PRIMARY uplink, netplan Nilan STATIC 192.168.1.240/24 metric50. **Onboard wlan0 DISABLED (netplan out + dtoverlay=disable-wifi, rebooted) — finalizes TODO #2, radio gone**
 - `feedback_use_dds_not_mavlink.md` — RULE: talk to FC over DDS topics, not MAVLink probing (it disturbs the link / kills px4_ros2 modes)
 - `project_gcs_link_degraded.md` — OPEN 2026-07-20: GCS link — downlink ~15% delivered, uplink commands 0/8; real cause of QGC "Unknown mode"
 - `feedback_camera_qgc_only.md` — RULE: camera config only via QGC by user; never run vision_config_manager/edit conf myself
