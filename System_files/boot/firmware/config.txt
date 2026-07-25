@@ -62,7 +62,7 @@ dtoverlay=dwc2,dr_mode=host
 
 enable_uart=1
 dtoverlay=disable-bt
-dtoverlay=disable-wifi  # onboard WiFi off: metal enclosure + 5GHz WFB interference (2026-07-25)
+# dtoverlay=disable-wifi  # RE-ENABLED 2026-07-25: external RTL8821CU unplugged to test 5V sag. Re-comment to kill onboard radio again.
 dtoverlay=uart0
 dtoverlay=uart2
 dtoverlay=uart3-pi5

@@ -20,15 +20,15 @@
 
      wifis:
 
-         # wlan0 (onboard brcmfmac) DISABLED 2026-07-25 — blocked by metal
-         # enclosure lid + competes with external uplink & 5GHz WFB ch161.
-         # Firmware-level kill staged via dtoverlay=disable-wifi (next reboot).
-         #    wlan0:
-         #         access-points:
-         #              Nilan:
-         #               password: 6ab183855b00d5acd59eabd12437edb1caae60016c58bc41391cb1a9b0948124
-         #         dhcp4: true
-         #         optional: true
+         # wlan0 (onboard brcmfmac) RE-ENABLED 2026-07-25 — external RTL8821CU
+         # physically disconnected by user to test the 5V rail sag. NOTE: this
+         # radio is known to be attenuated by the metal enclosure top plate.
+         wlan0:
+              access-points:
+                   Nilan:
+                    password: 6ab183855b00d5acd59eabd12437edb1caae60016c58bc41391cb1a9b0948124
+              dhcp4: true
+              optional: true
 
          # External USB adapter (RTL8821CU) added 2026-07-25 — onboard wlan0
          # blocked by metal enclosure top plate; this is the primary uplink now.
