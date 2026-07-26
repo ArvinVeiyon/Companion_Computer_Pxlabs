@@ -219,3 +219,44 @@ plan to a GPS coordinate, local costmap from lidar+depth, controller → `/cmd_v
 Terrain handling, dynamic obstacles, and **GPS-loss failsafe → wheel/gyro dead-reckoning + reflex stop,
 never an uncontrolled state**. Caveat to design around: STL-19 is a **2D** lidar (fixed-height plane) — on
 uneven terrain it can miss low obstacles or read a slope as a wall; the forward 3D 336L covers that gap.
+
+## [2026-07-26 SESSION — OPENED / CLOSED]
+
+### Closed today
+- ✅ **Companion doc staleness audit.** All 13 non-memory docs checked against live state; 5 had stale
+  facts. Fixed + pushed: `codex-work` 3b4b41d + 880787c, `ros2_ws` 1f9ee48 + 03b8634. Biggest ones:
+  PX4 firmware still recorded as v1.16.0-rc1/c5b8445 in `system_companion.md` §3 *and* the pinned-commit
+  table *and* README (real: pxlabs-v1.17.0-2.0.0 @ a52c38b07d); camera identity still documented as
+  `/dev/v4l/by-id` in 3 places (v2.1 replaced it with `usbcam-*` sysfs ids because by-id is not
+  boot-stable); README/§18 release tables listed *content* commits instead of the commits the tags
+  point at (v1.0.8 a60791f→96816fc, v1.0.9 →9e172fb, v1.1.0/v1.2.0 missing from README).
+- ✅ **tfmini disabled** (drone-only sensor; was the real cause of camera degradation — 38% CPU,
+  214 log lines/sec, SD thrash). `/scan` 15-19 Hz → **29 Hz**, jitter down 9×.
+- ✅ **AIDE daily timer disabled**, fresh db promoted. Was `COPYNEWDB=no` ⇒ Feb-22 baseline ⇒
+  304k-line diff per run, ~3.5 h/day of a core.
+- ✅ **Journal vacuumed** 3.6 G → 469 M (disk 58% → 53%).
+- ✅ **USB/power cleared of blame**: Orbbec at full 5000 Mbps USB3, no resets, no over-current,
+  `throttled=0x0`, EXT5V 5.09 V, SoC 63 °C. The XL4015 fix is holding.
+- ✅ **Camera mount geometry decided + committed** (cam_x 0 / cam_z 0.305 / range_max 5.0).
+
+### Opened today
+1. **Verify `dtoverlay=disable-wifi` after the next reboot** — fix applied 2026-07-26 (inline `#`
+   comment was swallowing the overlay name) but NOT yet rebooted. Check `ip link show wlan0` (should
+   not exist) + `lsmod | grep brcmfmac` (empty). **TODO #2 stays open until this passes.**
+2. **Establish what NIC RELAY-STN actually has.** `wlx90de80d824d6` is on the companion now, so the
+   relay's documented uplink is gone and `.221` does not answer. See [[project_relay2_relaystn]].
+3. **Fit the printed camera bracket, then run the 4-step as-built check** at the foot of
+   `ros2_ws/launch/depth_to_scan.launch.py` (measure to the left IR imager, re-derive pitch/roll from
+   `/camera/accel/sample`, restart rover-scan, tape-measure a `/scan` return). **Blocks L5.**
+4. **Crop the rover's own deck out of the depth cloud before the L5 Nav2 voxel layer** — at cam_z
+   0.305 with cam_x 0 the top plate fills the bottom ~third of the frame (11.5°/83 px). Harmless for
+   `/scan` (±20 px band) but Nav2 would mark a permanent obstacle around its own nose.
+5. **Profile `wheel_odometry_node`** — 26.9% CPU for 100 Hz arithmetic is high, and it is in the
+   autonomy path where L5 will need the headroom. Suspect the same unthrottled per-message logging
+   pattern as tfmini / ros2_ws todo #17.
+6. **Watch whether the VESCs doze off mid-session.** At rest only ESC 13 stays awake
+   (`esc_online_flags 8`); a nudge brings all four (→15). If they can sleep again *while armed*,
+   `/odom` would drop out under the EKF bridge. Unknown — check on the first long run.
+7. **Delete `/var/lib/aide/aide.db.feb22.bak`** (117 MB) once the Feb baseline is definitely not wanted.
+8. **Fix `system_files_sync`'s armed-skip** — it skips entirely when the FC reports armed, so it is
+   an unreliable backstop during work sessions (this is how the WFB_NICS mitigation was lost on 07-25).

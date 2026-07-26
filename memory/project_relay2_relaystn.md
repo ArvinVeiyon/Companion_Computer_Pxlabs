@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
+  modified: 2026-07-26T08:28:55.442Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -39,9 +40,16 @@ sudo resets PWD and wfb-ng's Makefile uses `ENV ?= $(PWD)/env` → empty PWD mad
 (virtualenv "destination . is not write-able at /"). Fix: `bash -c "cd <src> && make deb"`.
 
 **Networking (configured 2026-07-12, mirrors vind-rly/Pi5):**
-- Internet uplink = USB adapter `wlx90de80d824d6` (rtw_8821cu / RTL8821CU) on SSID `Nilan`,
-  DHCP `192.168.1.221`, holds default route (netplan `/etc/netplan/60-relay-uplink.yaml`).
-  This is the mgmt path (reach relay at .221, NOT .132 anymore).
+- ⚠️ **STALE AS OF 2026-07-26 — THAT ADAPTER IS NOW ON THE DRONE COMPANION.** `wlx90de80d824d6`
+  (MAC 90:de:80:d8:24:d6) is currently the companion's primary uplink at static `192.168.1.240/24`
+  (see [[project_external_wifi_uplink]]). A MAC belongs to one physical adapter, so **RELAY-STN no
+  longer has this NIC** — and its `.221` DHCP lease is exactly why the companion was deliberately
+  moved off `.221` to `.240`. `192.168.1.221` does not answer ping from the companion.
+  **Confirm what NIC RELAY-STN actually has before following the section below.** A warning block is
+  also in `codex-work/relay/RELAY_STATION_SETUP.md`.
+- Internet uplink (as built 2026-07-12) = USB adapter `wlx90de80d824d6` (rtw_8821cu / RTL8821CU) on
+  SSID `Nilan`, DHCP `192.168.1.221`, holds default route (netplan
+  `/etc/netplan/60-relay-uplink.yaml`). This was the mgmt path (reach relay at .221, NOT .132).
 - Onboard `wlan0` = P2P GO for the GS: `p2p-wlan0-0` @ `10.5.6.101/24`, SSID/device_name
   `RELAY-STN01`. The P2P password lives in the network block of
   `/etc/wpa_supplicant/wpa_supplicant.conf` (like the Pi5): `psk="Nilan@2409"`, plus

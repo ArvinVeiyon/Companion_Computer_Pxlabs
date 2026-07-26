@@ -70,7 +70,9 @@ px4_msgs: pinned release/1.17 @ 86d8239 (branch pinned-pxlabs-1.17, exact match 
 ## [SERVICES]
 → full detail: reference_services.md
 last verified 2026-05-09: mavlink.router + microxrce-agent active, FC connected, DDS negotiated
-core: mavlink.router | microxrce-agent | rc_control_node | tfmini | vision_streaming | block-traffic | wifibroadcast@drone | system_files_sync.timer | ollama | ldlidar(disabled)
+core: mavlink.router | microxrce-agent | rc_control_node | vision_streaming | block-traffic | wifibroadcast@drone | system_files_sync.timer | ollama | ldlidar(disabled)
+**AIDE `dailyaidecheck.timer` DISABLED 2026-07-26** (pkg kept, on-demand only) — was worthless: `COPYNEWDB=no` discarded every fresh db so the baseline sat at Feb 22 → 304k-line diff each run; cost ~3.5 h/day of a core + SD hashing. Fresh db promoted. **⚠️ if re-enabling set `COPYNEWDB=yes` + Nice=19/IOSchedulingClass=idle.** Real need already met by `system_files_sync`. → [[reference_services]]
+**tfmini DISABLED 2026-07-26 — drone-only sensor. ⚠️ MUST `systemctl enable --now tfmini` for the DRONE airframe.** With no sensor it burned 38% CPU + 214 log lines/sec and thrashed the SD; disabling took /scan 15-19 → **29 Hz**. Journal 3.6G→469M. Node bug left unfixed by choice. → [[reference_services]]
 autonav (added 2026-07-21, replaces manual setsid): rover-camera | rover-scan | rover-odometry | rover-autonav-mode — all enabled+active; **rover-ekf-bridge installed but DISABLED on purpose** (wheels-up limit-cycle hazard; start by hand on the floor, AutoNav can't arm without it)
 
 ## [WFB_NG]
