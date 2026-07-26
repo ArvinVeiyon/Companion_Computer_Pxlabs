@@ -91,3 +91,58 @@ no unallocated space) — 58G rootfs is just GiB-vs-GB plus ext4 overhead.
 
 Related: [[project-rover-autonav]], [[project-vision-multicam-upgrade]], [[project-boxb-pcie-usb]],
 [[feedback-camera-qgc-only]].
+
+---
+
+## 2026-07-26 — camera remount on a custom printed bracket (70 mm above the top plate)
+
+Geometry **already written** to `~/ros2_ws/launch/depth_to_scan.launch.py`; `rover-scan.service`
+launches that file with **no argument overrides**, so its defaults ARE the live TF and they apply on
+the next `systemctl restart rover-scan`.
+
+| | old (07-21) | new (07-26) |
+|---|---|---|
+| `cam_x` | −0.125 | **0.00** — on the rotation centre |
+| `cam_y` | 0.00 | 0.00 |
+| `cam_z` | 0.42 | **0.305** = 0.235 plate + 0.070 bracket |
+| `range_max` | 8.0 | **5.0** |
+
+**Rover dims re-measured 2026-07-26 — these SUPERSEDE 07-21:** top plate 730 × 450 mm (07-21 said
+405 wide), ground-to-plate **235 mm** (07-21 said 180 — wrong; the 0.42 total was a direct measure to
+the lens, so the old mast stood 185 mm above the plate), front tip → front axle **130 mm** (was 150),
+wheelbase 430, track 310. Plate decomposition checks: 130 + 430 + 170 = 730.
+**Rotation centre = 345 mm back from the front tip.**
+
+**Why `cam_x 0`:** skid-steer rotates about that point, so a centred sensor sees pure rotation when
+spinning in place — off-centre it traces an arc and injects fake translation into scan matching, and
+the error recurs on every turn. Centring also drops the ~0.3 m sensor minimum range *inside* the
+footprint (0.345 − 0.30 = 45 mm behind the bumper), so there is **no blind strip ahead**; a front
+mount would have opened a 300 mm one.
+
+**Why the height came DOWN — the key insight:** `scan_height: 40` is not a wide fan. With the live
+depth intrinsics (fx = fy = 409.85, 848×480 → HFOV 91.9°, VFOV 60.7°) it is **±2.79°**, so `/scan` is
+a thin slab covering `cam_z ± 0.049·d`. **`cam_z` chooses which horizontal plane the rover senses.**
+At 0.42 it was blind to anything under 371 mm at 1 m — most obstacles shorter than its own 235 mm
+chassis. At 0.305 that becomes 256 mm. Floor enters the band at 20.5·cam_z = 6.25 m, hence
+`range_max` 5.0. **Do NOT raise `scan_height` to compensate** — 120 rows would see 0.20 m at 1.5 m but
+pull floor detection in to 2.9 m, forcing range_max to ~2.5 m. The real fix is STL-19 owning `/scan`.
+
+**Why 70 mm and not 55:** the USB exits downward and plug + cable occupy ~60 mm; at 60 mm the plug
+lands on the plate and the camera rocks on the connector — an unmeasurable pitch error plus cable
+strain. Hard floor is **17 mm** (= 0.345·tan 2.79°): below that the rover's own deck appears in
+`/scan` as a permanent obstacle ~0.35 m ahead and the reflex collision-stop never releases. 70 mm is
+~4× that.
+
+**FOV vs the deck (user asked):** the deck IS in frame — full VFOV lower edge drops below plate level
+120 mm ahead, and the plate tip sits 11.5° below the axis = 83 px, so the bottom ~third of the depth
+image is rover. Harmless for `/scan` (±20 px band, 4× clearance). **Must be cropped for the L5 Nav2
+voxel layer**, which consumes the full cloud, or Nav2 marks a permanent obstacle round its own nose.
+
+**AFTER FITTING — all four, none optional** (checklist also at the foot of the launch file):
+1. Measure ground → lens, set `cam_z`. Measure to the **left IR imager** (the 336L's depth origin),
+   not the housing centre — else a silent ~20 mm offset lands in the whole map.
+2. Re-derive pitch/roll from `/camera/accel/sample` — **targets, not measurements**, until done.
+   (07-21 method: gravity 9.785 of 9.787 on one axis, orthogonals −0.7° / +0.9° ⇒ level within ~1°.)
+   5° of downward tilt drags the floor into the band from 3.1 m and it reads as a wall dead ahead.
+3. `systemctl restart rover-scan`
+4. Tape-measure one `/scan` return — still outstanding from the 07-24 checklist.

@@ -242,3 +242,24 @@ text included**. Reliable form used successfully:
 RC override PX4-native; rov_collision_stop node stays active independent of Nav2; cmd_vel>500ms / scan>1s watchdog stops; no reverse into unseen space (forward-only sensing).
 
 Related: [[rover-odometry]] (all odom math/params), [[project-vision-multicam-upgrade]] (camera ids/roles), [[feedback-camera-qgc-only]].
+
+
+## 2026-07-26 — VESC wake-on-nudge (confirmed by user)
+
+At rest **only ESC address 13 stays awake** — `esc_status.esc_online_flags == 8` (bit 3 only), the
+other three report `timestamp 0 / address 0`. `wheel_odometry_node` is configured `L=[11,13]
+R=[10,12]`, so it sees `L:1 R:0`, cannot form a differential pair, and **`/odom` stays silent**.
+Every one of the 3846 warnings in the journal is `L:1 R:0` — never any other combination.
+
+**A small physical nudge wakes the other three**: flags go `8 → 15` and `/odom` comes up at ~100 Hz.
+User: *"only one motor is always on, then I move it a little bit and the rest are powered on."*
+
+**This is normal, not a fault.** Do not go hunting CAN wiring or loose connectors for it (I did,
+2026-07-26 — cost ~15 min). `/fmu/out/esc_status` flowing at ~50 Hz with `esc_count 4` proves the
+bus is fine; the flags are what matter.
+
+**Check `esc_online_flags == 15` before trusting `/odom`** — and before starting
+`rover-ekf-bridge`, since no `/odom` means no EV aiding and AutoNav cannot arm.
+Open question, worth watching during the first long run: do the wheels **stay** awake, or can they
+doze off mid-session? `/odom` dropping out under the EKF bridge while armed would be nasty — though
+the collision-stop's stale-scan fail-safe covers the `/scan` side of that.
