@@ -62,7 +62,11 @@ dtoverlay=dwc2,dr_mode=host
 
 enable_uart=1
 dtoverlay=disable-bt
-dtoverlay=disable-wifi  # onboard brcmfmac OFF 2026-07-25: 5GHz interference w/ WFB ch161 + attenuated by enclosure. Uplink = external RTL8821CU wlx90de80d824d6. Comment out to restore.
+# onboard brcmfmac OFF 2026-07-25: 5GHz interference w/ WFB ch161 + attenuated by enclosure.
+# Uplink = external RTL8821CU wlx90de80d824d6. Comment out the next line to restore.
+# NOTE: config.txt has NO inline-comment support - a trailing "#..." on the same line is parsed
+# as part of the overlay name, so the overlay is SILENTLY IGNORED. That bug was live 07-25..07-26.
+dtoverlay=disable-wifi
 dtoverlay=uart0
 dtoverlay=uart2
 dtoverlay=uart3-pi5
