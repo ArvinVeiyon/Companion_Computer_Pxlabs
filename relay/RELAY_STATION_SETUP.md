@@ -23,6 +23,13 @@ the **same WFB keys and channel** so it pairs with the existing drone.
 | Mgmt IP | `192.168.1.221` (USB adapter `wlx…24d6`, SSID `Nilan`) |
 | Role | WFB-NG GS relay (`ROLE=gs`) |
 
+> ⚠️ **Stale-hardware warning (2026-07-26):** the USB adapter documented here as the relay's uplink,
+> `wlx90de80d824d6` (RTL8821CU, MAC 90:de:80:d8:24:d6), is **currently installed on the drone
+> companion** (Vind-Roz), where it is the primary uplink at static `192.168.1.240/24`. A MAC is
+> unique to one physical adapter, so RELAY-STN no longer has this NIC — its `.221` DHCP lease is why
+> the companion was deliberately moved off `.221` to `.240`. `192.168.1.221` does not answer ping
+> from the companion. **Before following this doc, confirm what NIC RELAY-STN actually has.**
+
 ---
 
 ## 2. Addressing / link plan

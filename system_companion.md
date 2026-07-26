@@ -18,14 +18,19 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - Board model: Raspberry Pi 5 Model B Rev 1.0
 - CPU/SoC: Broadcom BCM2712, ARM Cortex-A76 quad-core, aarch64
 - RAM: 8 GB LPDDR4X
-- Storage: ~64 GB SD card (`/dev/mmcblk0p2` 58 G, 63% used as of 2026-03-08)
+- Storage: ~64 GB SD card (`/dev/mmcblk0p2` 58 G, 58% used / 24 G free as of 2026-07-26)
 - OS: Ubuntu 24.04.1 LTS (Noble Numbat), kernel 6.8.0-1048-raspi
 
 **Sensors:**
 - GNSS: (document port/model)
 - IMU (if external): (document)
-- Camera(s) (2026-07-19, see `vision_multicam_companion.md`): LG Smart Cam = FPV (by-id `usb-EBP...LG_Smart_Cam...-index0`, 960×540 MJPG); Orbbec Gemini 336L = autonomy-only (depth/IR/color, ROS2 wrapper, never ffmpeg). Old front/bottom cams removed. `/dev/videoN` shuffles per boot — always use `/dev/v4l/by-id` ids.
-- Lidar/sonar: TFmini (ROS2 node: `tfmini.service`)
+- Camera(s) (updated 2026-07-26, see `vision_multicam_companion.md`): LG Smart Cam = FPV, id
+  `usbcam-30c9009d-01.00.00-i00`, 1280×720 MJPG 30fps; Orbbec Gemini 336L = autonomy-only, color id
+  `usbcam-2bc50807-CPC7B53000AB-i04` (depth/IR/color, ROS2 wrapper, never ffmpeg). Old front/bottom
+  cams removed. `/dev/videoN` shuffles per boot — key cameras by the **`usbcam-<vidpid>-<serial>-i<iface>`
+  sysfs ids** (v2.1, 2026-07-19). **Never** key them by `/dev/v4l/by-id` — that index order is *not*
+  boot-stable (that was the v2.0 scheme; legacy by-id ids still resolve, but must not be used for new work).
+- Lidar/sonar: TFmini (ROS2 node: `tfmini.service`) | Orbbec depth → `/scan` (rover-scan.service)
 - Other: Optical flow node in ros2_ws
 
 **Power:**
@@ -36,9 +41,12 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 
 ## 3) Firmware / Software Versions
 **PX4:**
-- Version: v1.16.0-rc1
-- Build type: custom pre-release
-- Git commit: c5b8445ffc (586 commits past v1.16.0-rc1 tag)
+- Version: pxlabs-v1.17.0-2.0.0
+- Build type: custom (PXLABS fork), built 2026-05-31, FC reflashed same day
+- Git commit: a52c38b07d (branch `pxlabs-fw`, remote `pxlabs` = ArvinVeiyon/PXLABS_PX4-Autopilot)
+- Verified 2026-07-19 via NuttShell `ver all`
+- Note: earlier records said v1.16.0-rc1 @ c5b8445ffc — that is **wrong**. `~/PX4-Autopilot`
+  (@ c5b8445) is an upstream clone used for tools/reference only, NOT the firmware source.
 
 **Companion Software:**
 - OS: Ubuntu 24.04.1 LTS, kernel 6.8.0-1048-raspi
@@ -49,11 +57,16 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - WFB-NG: `~/wfb-ng` (WiFi broadcast link)
 - AIDE: 0.18.6 (integrity monitoring)
 
-**ROS2 Workspace packages** (`~/ros2_ws/src/`):
-- arm_drone, collision_manual_mode, obstacle_distance, optical_flow
+**ROS2 Workspace packages** (`~/ros2_ws/src/`, verified 2026-07-26):
+- arm_drone, autonav_mode, collision_manual_mode, obstacle_distance, optical_flow
+- OrbbecSDK_ROS2 (Gemini 336L wrapper — untracked in git, see ros2_ws todo #16)
 - px4_msgs, px4-ros2-interface-lib, px4_ros_com
 - rc_control, rov_collision_stop, rov_ext, rov_manual
+- rover_ekf_bridge, rover_odometry
 - tfmini_sensor, vision_streaming
+- ldlidar_stl_ros2 (nested repo, deliberately untracked — STL-19 driver)
+
+**Autonomy stack (added 2026-07-21):** Nav2 `1.3.12` + slam_toolbox `2.8.5` (apt, `ros-jazzy-*`).
 
 > See Section 6b for detailed per-package documentation.
 
@@ -73,7 +86,10 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - GNSS: (document)
 - Radio/Telemetry: WFB-NG via WiFi adapter (wfb-ng)
 - Camera: CSI (auto-detect)
-- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node) | STL-19 LiDAR: tested, hardware moved to other team (2026-04-17), not installed on this platform
+- Sonar/Lidar: TFmini (UART, via tfmini_sensor ROS2 node) | STL-19 LiDAR: **hardware still with the
+  other team (moved 2026-04-17) — but as of 2026-07-23 it is a PRIMARY-TARGET sensor again** (outdoor
+  360° + SLAM, roadmap item O1); user is re-fitting, unit needs to come back. On re-integration the
+  lidar **owns `/scan`** and `depth_to_scan` remaps to `/scan_depth`.
 
 **RPi5 UART Map (full):**
 | ttyAMA   | UART   | GPIO TX | GPIO RX | Phys TX | Phys RX | Use                              | Baud   |
@@ -168,11 +184,25 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
 | `microxrce-agent.service` | uXRCE-DDS bridge FC ↔ ROS2 |
 | `ros2_px4_translation_node.service` | ROS2/PX4 message translation |
 | `rc_control_node.service` | RC input handling |
-| `ros2_external_node_reg.service` | External ROS2 node registration |
+| `ros2_external_node_reg.service` | External ROS2 node registration — **DISABLED** (verified 2026-07-26) |
 | `tfmini.service` | TFmini lidar ROS2 node |
-| `ldlidar.service` | LDRobot STL-19 LiDAR — **DISABLED** (hardware moved to other team 2026-04-17, for future use) |
+| `ldlidar.service` | LDRobot STL-19 LiDAR — **DISABLED** (hardware with other team since 2026-04-17; re-fit planned, roadmap O1) |
 | `vision_streaming.service` | Camera/vision streaming ROS2 node |
 | `block-traffic.service` | Firewall: block DDS multicast on WFB iface |
+| `wifibroadcast.service` + `wifibroadcast@drone.service` | WFB-NG (oneshot setup + drone profile instance) |
+| `system_files_sync.timer` | Config auto-backup to codex-work (boot + daily) |
+| `ollama.service` | Offline AI (phi3:mini) |
+| `ext5v-logger.service` | Power watchdog — logs EXT5V / `throttled` / per-NIC TX drops @2 s to `/var/log/ext5v/` (added 2026-07-25, see §2 Power) |
+| `dailyaidecheck.timer` | AIDE integrity check (§13) |
+
+**Rover autonomy services** (added 2026-07-21, replace the old manual `setsid` launches):
+| Service | State | Description |
+|---|---|---|
+| `rover-camera.service` | enabled, active | Orbbec Gemini 336L ROS2 wrapper |
+| `rover-scan.service` | enabled, active | depth → `/scan` LaserScan (~20 Hz) |
+| `rover-odometry.service` | enabled, active | wheel/gyro odometry → `/odom` (~100 Hz) |
+| `rover-autonav-mode.service` | enabled, active | `autonav_mode` px4_ros2 mode + reflex collision-stop |
+| `rover-ekf-bridge.service` | **installed but DISABLED on purpose** | EV velocity → EKF2. Wheels-up + closed-loop = self-sustaining limit cycle; start by hand only with the rover on the floor. **AutoNav cannot arm without it — that is deliberate, not a fault.** |
 
 **Video Pipeline:**
 ```
@@ -180,11 +210,14 @@ FPV cam (LG, by-id → /dev/videoN) ─► FFmpeg (libx264 ultrafast) ─► RTP
 optional secondary cam ────────────┘    PiP overlay
 ```
 - ROS2 node: `vision_streaming_node` (Python, package `vision_streaming`)
-- Config file: `/etc/vision_streaming.conf` — written by `vision_config_manager` v2 (2026-07-19):
-  each section carries `camera_id` (stable /dev/v4l/by-id key) + `camera_name` (resolved /dev/videoN);
-  node prefers `camera_id`, re-resolves on every (re)start, so boot-time /dev/videoN shuffles can't break the stream
+- Config file: `/etc/vision_streaming.conf` — written by `vision_config_manager` **v2.1.0** (2026-07-19):
+  each section carries `camera_id` (stable **`usbcam-<vidpid>-<serial>-i<iface>` sysfs key**; legacy
+  by-id keys still resolve but are deprecated — by-id index order is not boot-stable) + `camera_name`
+  (resolved /dev/videoN); node prefers `camera_id`, re-resolves on every (re)start, so boot-time
+  /dev/videoN shuffles can't break the stream
 - ffmpeg watchdog in node: dead ffmpeg is reaped, error logged to journal, restart with 2s→30s backoff (no more silent black feed)
-- Typical FPV: LG cam 960×540 MJPG 30fps 2000K — full detail: `vision_multicam_companion.md`
+- Current FPV (live `/etc/vision_streaming.conf`, 2026-07-26): LG cam **1280×720 MJPG 30fps 2000K**
+  (user-applied from QGC) — full detail: `vision_multicam_companion.md`
 - Encoder: `libx264 ultrafast`, output format `yuv420p`
 - RTP destination: `127.0.0.1:5602` → picked up by WFB-NG `drone_video` stream
 
@@ -203,13 +236,22 @@ optional secondary cam ────────────┘    PiP overlay
 - Binary: `/usr/local/bin/usr/bin/mavlink-routerd` (unusual path — installed with bad `--prefix`, but correct and working as-is)
 - UART endpoint: `/dev/ttyAMA0` @ 921600 baud (FC MAVLink)
 - TCP server: port 5760 (GCS)
-- UDP → `192.168.1.100:14550` (local net)
-- UDP → `127.0.0.1:14550` (WFB-NG mavlink stream)
+- UDP → `127.0.0.1:14550` (WFB-NG mavlink stream) — **the only active UDP endpoint**
+- The `192.168.1.100` / `192.168.1.215` / ZeroTier UDP endpoints are **commented out** in the live
+  `main.conf` (verified 2026-07-26) — kept as reference blocks only
 
-**Network:**
-- WFB tunnel drone side: `10.5.5.87/24`
+**Network (updated 2026-07-25):**
+- WFB tunnel drone side: `10.5.5.87/24` (`drone-wfb`)
 - WFB tunnel relay side: `10.5.5.77/24`
-- Local LAN (mavlink UDP): `192.168.1.100`
+- **Mgmt / internet uplink: external USB RTL8821CU `wlx90de80d824d6`, netplan STATIC
+  `192.168.1.240/24` on SSID `Nilan`, route metric 50** — this is the PRIMARY uplink
+- **Onboard Wi-Fi (`wlan0`, brcmfmac): removed from netplan → link is DOWN and never associates.**
+  ⚠️ **The `dtoverlay=disable-wifi` in `/boot/firmware/config.txt` is NOT in effect** (verified after
+  the 2026-07-26 07:57 boot: `wlan0` still exists and `brcmfmac` is still bound). Cause: the line
+  carries a **trailing `#` comment on the same line** — `config.txt` has no inline-comment support,
+  so the whole remainder is parsed as part of the overlay name and the overlay is silently dropped.
+  Fix = put the comment on its own line above it. Until then the radio is present but idle.
+- WFB NICs (`/etc/default/wifibroadcast`): `WFB_NICS="wlx782288d993c0 wlx782288d98f91"` — both
 - ROS2 DDS: multicast blocked on WFB interface (block-traffic.service)
 
 ## 6b) ROS2 Node Details
@@ -342,9 +384,11 @@ optional secondary cam ────────────┘    PiP overlay
 ## 6d) System Files Auto-Backup
 - **Script:** `codex-work/scripts/system_files_sync.sh`
 - **Timer:** `system_files_sync.timer` — enabled, runs on boot + once daily (24 h)
-- **Last run:** 2026-03-08 10:41 IST (exit code 0, success)
-- **Next run:** 2026-03-09 10:41 IST
+- **Run cadence:** on boot + every 24 h (see the *Auto Sync Log* at the end of this file for the real
+  run history — the last entries there are always current; do not record a "last/next run" here)
 - **Crontab:** No user crontab entries (`crontab -l` → no crontab for roz)
+- ⚠️ **Not a reliable backstop during work sessions:** the sync **skips entirely** whenever the FC
+  reports armed (see *Flight safety* below). Do not rely on it to capture an `/etc` change you just made.
 - **What is backed up:** Files listed in `System_files_list.txt`:
   - All active systemd service files (mavlink-router, microxrce-agent, rc_control, tfmini, vision_streaming, ros2 nodes, block-traffic)
   - `/etc/mavlink-router/main.conf`
@@ -493,7 +537,8 @@ python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
 ### Key Source Versions (pinned commits)
 | Component | Repo | Commit |
 |---|---|---|
-| PX4-Autopilot | github.com/PX4/PX4-Autopilot | `c5b8445ffc` |
+| PX4 firmware (real) | github.com/ArvinVeiyon/PXLABS_PX4-Autopilot (branch `pxlabs-fw`) | `a52c38b07d` |
+| PX4-Autopilot (upstream clone, tools/reference only — **not** the firmware) | github.com/PX4/PX4-Autopilot | `c5b8445ffc` |
 | mavlink-router | github.com/mavlink-router/mavlink-router | `c20337b` |
 | Micro-XRCE-DDS-Agent | github.com/eProsima/Micro-XRCE-DDS-Agent | `b9d84ac` |
 | wfb-ng | github.com/svpcom/wfb-ng | `1b88185` |
@@ -897,7 +942,7 @@ G-Control.exe  (Windows GCS, 10.5.6.50)
 | camera-apply (v2, NEW) | `sudo vision_config_manager apply <id-or-alias> [secondary]` |
 | camera-set-alias (v2, NEW) | `sudo vision_config_manager set-alias <id> "<name>"` |
 | camera-params | `sudo vision_config_manager set-cam-params <dev-or-id-or-alias> <res> <fps> --format <fmt>` |
-| capture-front/bottom (LEGACY) | `Rozcam -i /dev/video0` / `Rozcam -i /dev/video2` — devices stale, repoint to by-id (todos #8) |
+| capture-front/bottom (LEGACY) | `Rozcam -i /dev/video0` / `Rozcam -i /dev/video2` — devices stale, repoint to `usbcam-*` ids / aliases (todos #8) |
 | reboot | `sudo systemd-run --on-active=0 systemctl reboot` |
 | shutdown | `sudo systemd-run --on-active=0 systemctl poweroff` |
 | services refresh | `systemctl is-active + is-enabled` loop |
@@ -913,7 +958,8 @@ Rewrites `/etc/vision_streaming.conf` and restarts `vision_streaming.service`. B
 ### Camera Device Mapping
 
 **Superseded 2026-07-19** by the multicam model (`vision_multicam_companion.md`): cameras are
-identified by stable `/dev/v4l/by-id` ids with user aliases in `/etc/vision_cameras.yaml`
+identified by stable **`usbcam-<vidpid>-<serial>-i<iface>` sysfs ids** (v2.1 — the earlier v2.0
+`/dev/v4l/by-id` scheme proved *not* boot-stable) with user aliases in `/etc/vision_cameras.yaml`
 (current: `FPV` = LG Smart Cam, `NAV-COLOR` = Orbbec color, role-locked to autonomy).
 The old front/back `--swap` model no longer applies. RC CH9 and the GCS panel still call the
 same `vision_config_manager` binary; both paths migrate to aliases in phase D (todos #8).
@@ -1052,10 +1098,16 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 | `v1.0.5` | `release` | `74f3c48` | 2026-03-09 | auto-sync: include scripts/px4_mavlink.py in git add step |
 | `v1.0.6` | `release` | `6bf1749` | 2026-03-09 | wfb-ng: fix mavlink streams, increase video+mavlink FEC (SID-2 2026-03-09) |
 | `v1.0.7` | `release` | `b1236a9` | 2026-03-15 | Security: replace hardcoded PAT with SSH URL in relay_git_sync.sh; remove sudo password from docs |
-| `v1.0.8` | `master` | `a60791f` | 2026-04-17 | WFB-NG channel updated 157→161; system_companion.md + MEMORY.md synced |
-| `v1.0.9` | `master` | `ea17fe4` | 2026-05-10 | WFB-NG multi-adapter: video service_type udp_direct_tx→udp_proxy, dual NIC (wlx782288d993c0 + wlx782288d98f91) in WFB_NICS, fwmark table documented, peer restored in drone_tunnel/gs_tunnel |
-| `v1.1.0` | `master` | `474e05e` | 2026-07-10 | GCS interface docs (Section 15), WFB-NG full drone config reference (Section 7), memory backup sync (MEMORY.md, GCS interface ref, rover odometry) |
+| `v1.0.8` | `master` | `96816fc` | 2026-04-17 | WFB-NG channel updated 157→161 (content commit `a60791f`, 2026-04-16); stale kernel version fixed + missing memory backups added |
+| `v1.0.9` | `master` | `9e172fb` | 2026-05-10 | WFB-NG multi-adapter: video service_type udp_direct_tx→udp_proxy, dual NIC (wlx782288d993c0 + wlx782288d98f91) in WFB_NICS, fwmark table documented, peer restored in drone_tunnel/gs_tunnel (content commit `ea17fe4`) |
+| `v1.1.0` | `master` | `474e05e` | 2026-07-10 | GCS interface docs (Section 15, content commit `2087fce`), WFB-NG full drone config reference (Section 7), memory backup sync (MEMORY.md, GCS interface ref, rover odometry) |
 | `v1.2.0` | `master` | `740ebc7` | 2026-07-12 | WFB safe-apply watchdog (wfb-cfg-apply, 755 root:root) + wifibroadcast.cfg.default added to tracked System_files (§7) |
+
+> **Commit column = the commit the tag points at** (`git rev-list -n1 <tag>`), re-verified 2026-07-26.
+> `v1.0.8`/`v1.0.9` previously listed their *content* commits (`a60791f` / `ea17fe4`), which are one
+> commit behind the tags. Latest tag: **`v1.2.0`** (2026-07-12) — everything after it is auto-sync
+> commits only. Also note there are three older non-semver tags: `release-2026-02-22` (`cef1fba`),
+> `release-2026-03-08` (`a4b2426`), `release-2026-03-08-full` (`36cd704`, same commit as `v1.0.0`).
 **2026-04-17 02:12**
 - M	System_files/boot/firmware/config.txt
 - M	System_files/etc/vision_streaming.conf
