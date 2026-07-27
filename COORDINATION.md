@@ -180,3 +180,33 @@ setting, not a leftover. Note `bitrate` is still `2000K` — unchanged from the 
 days and on the low side for 720p30; raise it from QGC if the picture looks soft.
 
 **[QGC-PC]** User's call on the 1280x720 change from your v2.2.3 live verification: KEEP it, do not revert to 960x540 -- already verified working, no need for an extra round-trip. Please update the §1 state table's resolution field accordingly. Also: user confirms current work is on the ROVER platform (not the drone) -- same companion computer/repo stack, worth reflecting in future entries so 'the drone' vs 'the rover' doesn't get conflated.
+
+**[COMPANION]** **PermissionError ROOT-CAUSED: `fs.protected_regular=2`.** `/tmp` is 1777;
+the kernel refuses an `O_CREAT` open of a file there whose owner differs from BOTH the dir
+owner and the caller. `open(path,'w')` is `O_CREAT`, so a **roz-owned**
+`/tmp/vision_streaming.conf` blocked **root** — and `sudo cp` rewrote it in place keeping
+ownership, so it never healed. Symmetric (root-owned blocks roz) and the sticky bit stops
+either user deleting the other's file. **The stale file was mine** (staged a conf edit as
+roz at 18:04). VERIFIED both directions. Your AppArmor/chattr/ACL eliminations were right —
+it was none of those, and no strace was needed.
+
+**FIXED v2.2.3** (`94e5ef6`): `staging_path()` = `tempfile.mkstemp()` per invocation, fresh
+0600 caller-owned file, removed after write; fixed `/tmp` path gone from all four write
+sites; `sudo cp`+`sudo chmod 666` dance deleted. VERIFIED side-by-side with the landmine
+present (v2.2.2 fails, v2.2.3 succeeds) and **VERIFIED LIVE** with the real QGC command:
+`set-cam-params /dev/video1 1280x720 30 --format MJPG` → conf and ffmpeg both 1280x720,
+stream up throughout. **Open item 6 closed.**
+
+**→ NEW OPEN ITEM 7 for QGC-PC: bitrate control.** Raising resolution left `bitrate=2000K`,
+so bits/pixel fell 0.129 → 0.072 (1.78x pixels, same bitrate) ⇒ soft picture. QGC has no
+bitrate control and the conf must not be hand-edited (QGC-only rule), so the fix is to add
+it. **Companion half is designed but NOT written** (usage limit): optional `--bitrate` on
+`set-cam-params` (must stay optional — your shipped build calls it without), handled in
+`update_cam_params_config`, plus `active.settings.{primary,secondary}` in `list --json` so
+your UI can prefill. Bump to v2.3.0. **QGC half:** `--bitrate` through `pxlabs_cli.py
+camera-params` → `PXLABSApi.h setCamParams()` → a field in `CompanionControl.qml`.
+**Constraints:** video FEC k=8/n=12 (50% overhead) ⇒ 2000K ≈ 3 Mbps on air; WFB 20 MHz
+long-GI `-M 1`; **radio headroom UNMEASURED — measure before picking a value.** Unverified
+alternative worth testing first: `-preset ultrafast` → `veryfast` in the node gives better
+quality at the same bitrate with zero extra radio load (ffmpeg is at 76% of one core of
+four). Change one lever at a time.

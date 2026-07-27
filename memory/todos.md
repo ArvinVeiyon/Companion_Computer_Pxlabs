@@ -260,3 +260,12 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
 7. **Delete `/var/lib/aide/aide.db.feb22.bak`** (117 MB) once the Feb baseline is definitely not wanted.
 8. **Fix `system_files_sync`'s armed-skip** — it skips entirely when the FC reports armed, so it is
    an unreliable backstop during work sessions (this is how the WFB_NICS mitigation was lost on 07-25).
+
+## 2026-07-28 — camera bitrate control (OPEN, agreed, not started)
+Raising the camera to 1280x720 left `bitrate = 2000K`, dropping bits/pixel 0.129 → 0.072
+(soft picture). QGC has no bitrate control and the conf must not be hand-edited
+(QGC-only rule). Add it: companion = optional `--bitrate` on `set-cam-params` +
+`active.settings` in `list --json` (→ v2.3.0); QGC = `--bitrate` through
+pxlabs_cli/PXLABSApi/CompanionControl.qml. Full design + constraints (FEC k=8/n=12,
+radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) in
+project_ffmpeg_hung_alive_gap.md. Stopped here 2026-07-28: usage limit.

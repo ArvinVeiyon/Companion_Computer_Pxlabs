@@ -313,3 +313,58 @@ the camera Apply button until inventory is loaded, and surfaces captured stdout/
 instead of "exit 1" — the last was the SAME copy-pasted bug in **five** settings pages
 (CompanionControl, ConnectionControl, PXLABSSettings, RelayControl, WFBConfig).
 Verified from here: `shlex`+`sys` imported, file compiles.
+
+---
+
+## 2026-07-28 — v2.2.3 (root cause of the write failure) + OPEN TODO: bitrate control in QGC
+
+**ROOT CAUSE of "camera resolution changes silently fail to persist" = `fs.protected_regular=2`.**
+`/tmp` is 1777 (sticky, world-writable); the kernel refuses an `O_CREAT` open of a file
+there whose owner differs from BOTH the dir owner and the caller. `open(path,'w')` is
+`O_WRONLY|O_CREAT|O_TRUNC`, so a **roz-owned** `/tmp/vision_streaming.conf` blocked **root**
+with EACCES, and `sudo cp` rewrote it *in place* preserving ownership so it never healed.
+Trap is symmetric (root-owned file blocks roz) and the sticky bit stops either user
+deleting the other's file. **I created the stale file** (staged a conf edit with
+`> /tmp/vision_streaming.conf` as roz at 18:04). VERIFIED both directions with `sudo tee`.
+Not AppArmor/chattr/ACL — the QGC side had already ruled those out.
+
+**FIXED v2.2.3:** `staging_path()` = `tempfile.mkstemp()` per invocation (fresh 0600 file
+owned by the caller, removed after `root_write`). Fixed `/tmp` path gone from all 4 write
+sites incl. the camera store; the `sudo cp CONFIG_FILE TEMP_FILE` + `sudo chmod 666` dance
+deleted (CONFIG_FILE is world-readable — just read it). Verified side-by-side with the
+landmine present (v2.2.2 fails / v2.2.3 succeeds) and **live with the real QGC command**:
+`set-cam-params /dev/video1 1280x720 30 --format MJPG` persisted to conf AND ffmpeg,
+stream stayed up. codex-work `94e5ef6`.
+
+**Camera is now 1280x720 MJPG 30fps @ bitrate 2000K — user confirmed KEEP (07-28).**
+
+### ⚠️ OPEN TODO — add bitrate control on the QGC side (user's idea, agreed, NOT started)
+
+**Why:** raising resolution to 1280x720 left `bitrate = 2000K` untouched, so bits/pixel
+fell 0.129 → **0.072** (1.78x more pixels, same bitrate) ⇒ visibly soft picture. **QGC
+cannot set bitrate** — `set-cam-params` takes resolution/fps/format only, and the tool's
+`3000K` default only applies when the key is *missing*. Do NOT hand-edit the conf as the
+workaround ([[feedback_camera_qgc_only]]); add the control instead.
+
+**Companion half (mine, designed not written):**
+1. `set-cam-params` gains **optional** `--bitrate` (keep optional — the shipped QGC build
+   calls it without, must not break). Validate `^\d+[KM]?$`.
+2. `update_cam_params_config()` gains `bitrate=None`; replace the `bitrate` line in the
+   target section, append if absent (same pattern as resolution/fps/format).
+3. `list --json` → add `active.settings.{primary,secondary}` = current
+   resolution/fps/format/bitrate read from the conf, so QGC can prefill the field.
+   Additive only; existing `active.primary/secondary` keys unchanged.
+4. Bump to **v2.3.0** (feature, not a fix).
+
+**QGC half (theirs):** `--bitrate` in `pxlabs_cli.py camera-params`; `setCamParams()` in
+`src/Utilities/PXLABSApi.h`; a bitrate field in `CompanionControl.qml` prefilled from
+`active.settings`.
+
+**Constraints to respect:** video FEC is **k=8/n=12 (50% overhead)** ⇒ 2000K ≈ 3 Mbps on
+air; WFB is 20 MHz long-GI `-M 1`. **Radio headroom was never measured** — measure before
+recommending a value. ffmpeg uses 76% of ONE core (Pi5 has 4) at 720p.
+
+**Alternative lever, also unmeasured:** `-preset ultrafast` → `veryfast` in
+`vision_streaming_node.py` gives better quality at the SAME bitrate with **zero** extra
+radio load, costing CPU there is headroom for. Arguably the better first move; test one
+lever at a time so a link problem is attributable.
