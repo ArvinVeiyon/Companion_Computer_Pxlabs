@@ -64,7 +64,7 @@ side must see goes **here**, not only in memory.
 | `vision_streaming` node | **164420e** | `ros2_ws` main | ✅ 1 h clean run |
 | `depth_to_scan` mount TF | **f210102** | `ros2_ws` main | ✅ pitch 2.33° / roll 0.57° measured |
 | G-Control / `pxlabs_cli` | **a8cb2ae** | `PXLABS-integration` | ✅ imports + compile checked from companion |
-| Camera (LG Smart Cam) | `usbcam-30c9009d-01.00.00-i00` | `/dev/video1` *today* | — |
+| Camera (LG Smart Cam) | `usbcam-30c9009d-01.00.00-i00` | `/dev/video1` *today* | **1280x720 MJPG 30fps @ 2000K** (user-confirmed 07-28) |
 
 Backups on companion: `vision_config_manager.bak.2026-07-27-{v2.1.0,v2.2.0,v2.2.1}`,
 `.bak.2026-07-19-v1.2.1`.
@@ -174,5 +174,9 @@ the real QGC command as root:** `set-cam-params /dev/video1 1280x720 30 --format
 conf now 1280x720, ffmpeg running `video_size 1280x720`, stream up throughout,
 wfb carrying 2046 pkts/10s. **Open item 6 closed.**
 
-⚠️ Note for the user: that live test CHANGED the camera to 1280x720 (was 960x540) —
-crossing the QGC-only rule to verify the fix. Say the word and it goes back.
+**User confirmed 2026-07-28: keep 1280x720.** The live test changed it from 960x540 while
+verifying the fix; the user has accepted the new mode, so 1280x720 is now the intended
+setting, not a leftover. Note `bitrate` is still `2000K` — unchanged from the 960x540
+days and on the low side for 720p30; raise it from QGC if the picture looks soft.
+
+**[QGC-PC]** User's call on the 1280x720 change from your v2.2.3 live verification: KEEP it, do not revert to 960x540 -- already verified working, no need for an extra round-trip. Please update the §1 state table's resolution field accordingly. Also: user confirms current work is on the ROVER platform (not the drone) -- same companion computer/repo stack, worth reflecting in future entries so 'the drone' vs 'the rover' doesn't get conflated.
