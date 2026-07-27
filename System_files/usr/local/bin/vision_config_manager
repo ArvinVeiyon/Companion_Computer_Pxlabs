@@ -39,7 +39,7 @@ Changelog:
 - v1.2.0 / v1.1.0 / v1.0.0 — earlier iterations.
 """
 
-__version__ = "v2.2.2"
+__version__ = "v2.2.3"
 
 import subprocess
 import glob
@@ -48,6 +48,7 @@ import sys
 import argparse
 import json
 import re
+import tempfile
 from typing import Optional, Tuple, Dict, List
 from configparser import ConfigParser
 
@@ -58,7 +59,8 @@ except ImportError:
 
 CONFIG_FILE = "/etc/vision_streaming.conf"
 CAMERAS_FILE = "/etc/vision_cameras.yaml"
-TEMP_FILE = "/tmp/vision_streaming.conf"
+# TEMP_FILE/CAMERAS_TEMP retired in v2.2.3 -- see staging_path()
+TEMP_FILE = "/tmp/vision_streaming.conf"   # legacy, unused
 CAMERAS_TEMP = "/tmp/vision_cameras.yaml"
 SYSFS_V4L = "/sys/class/video4linux"
 SERVICE_NAME = "vision_streaming.service"
@@ -99,6 +101,29 @@ def validate_device(device: str) -> None:
     if not os.path.exists(device):
         print(f"Error: Device {device} does not exist.")
         sys.exit(1)
+
+def staging_path(final_path: str) -> str:
+    """A private, caller-owned staging file for an atomic root_write().
+
+    Deliberately NOT a fixed /tmp path. /tmp is world-writable and sticky, and
+    `fs.protected_regular=2` on this box makes the kernel refuse an O_CREAT open
+    of a file there whose owner differs from both the directory owner and the
+    caller. A single stale /tmp/vision_streaming.conf left behind by the *other*
+    user therefore bricked every config write permanently:
+
+        root  -> open('/tmp/vision_streaming.conf','w')  -> EACCES  (roz-owned)
+        roz   -> same file root-owned                    -> EACCES
+
+    and the sticky bit stops either of them deleting the other's file to
+    recover. Symptom: every QGC resolution change failed to persist, silently,
+    forever (2026-07-27). mkstemp() gives a fresh 0600 file owned by whoever is
+    running, so neither the collision nor the ownership trap can occur.
+    """
+    fd, path = tempfile.mkstemp(prefix=os.path.basename(final_path) + ".",
+                                suffix=".staging", dir="/tmp")
+    os.close(fd)
+    return path
+
 
 def root_write(temp_path: str, final_path: str) -> None:
     """Atomic root-owned write via sudo cp (works for both roz+sudoers and root)."""
@@ -224,12 +249,13 @@ def save_camera_store(store: Dict[str, dict]) -> None:
     if yaml is None:
         print("Error: PyYAML not available; cannot save aliases.")
         sys.exit(1)
-    with open(CAMERAS_TEMP, 'w') as f:
+    staging = staging_path(CAMERAS_FILE)
+    with open(staging, 'w') as f:
         f.write("# Camera alias/role store — managed by vision_config_manager (QGC-driven).\n"
                 "# Key = usbcam-<vidpid>-<serial>-i<iface> (USB descriptors; firmware-stable\n"
                 "# across boots, unlike /dev/v4l/by-id index numbers).\n")
         yaml.safe_dump(store, f, default_flow_style=False, sort_keys=True)
-    root_write(CAMERAS_TEMP, CAMERAS_FILE)
+    root_write(staging, CAMERAS_FILE)
 
 def scan_nodes() -> List[dict]:
     """
@@ -475,9 +501,10 @@ def edit_camera_config(primary_device: str, secondary_device: Optional[str] = No
         if cfg.has_section('secondary'):
             cfg.remove_section('secondary')
 
-    with open(TEMP_FILE, 'w') as f:
+    staging = staging_path(CONFIG_FILE)
+    with open(staging, 'w') as f:
         cfg.write(f)
-    root_write(TEMP_FILE, CONFIG_FILE)
+    root_write(staging, CONFIG_FILE)
     print("Configuration file updated from live camera probe.")
     control_service('restart')
 
@@ -604,18 +631,15 @@ def conf_section_for_device(device: str) -> Optional[str]:
 
 def update_resolution_only_config(device, resolution):
     validate_device(device)
-    try:
-        subprocess.run(['sudo', 'cp', CONFIG_FILE, TEMP_FILE], check=True)
-        subprocess.run(['sudo', 'chmod', '666', TEMP_FILE], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error copying config file: {e}")
-        sys.exit(1)
+    # CONFIG_FILE is world-readable; no sudo cp / chmod 666 dance needed, and
+    # staging is private per-invocation (see staging_path).
+    staging = staging_path(CONFIG_FILE)
     target = conf_section_for_device(device)
     if target is None:
         print(f"Error: no section in {CONFIG_FILE} matches {device}; "
               f"nothing written.")
         sys.exit(1)
-    with open(TEMP_FILE, "r") as file:
+    with open(CONFIG_FILE, "r") as file:
         lines = file.readlines()
     in_target = False
     new_lines = []
@@ -640,9 +664,9 @@ def update_resolution_only_config(device, resolution):
     if in_target and not res_updated:
         new_lines.append(f"resolution = {resolution}\n")
     try:
-        with open(TEMP_FILE, "w") as file:
+        with open(staging, "w") as file:
             file.writelines(new_lines)
-        root_write(TEMP_FILE, CONFIG_FILE)
+        root_write(staging, CONFIG_FILE)
         print("Configuration file updated successfully with new resolution.")
     except subprocess.CalledProcessError as e:
         print(f"Error updating config file: {e}")
@@ -651,18 +675,15 @@ def update_resolution_only_config(device, resolution):
 
 def update_cam_params_config(device, resolution, fps, cam_format):
     validate_device(device)
-    try:
-        subprocess.run(['sudo', 'cp', CONFIG_FILE, TEMP_FILE], check=True)
-        subprocess.run(['sudo', 'chmod', '666', TEMP_FILE], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error copying config file: {e}")
-        sys.exit(1)
+    # CONFIG_FILE is world-readable; no sudo cp / chmod 666 dance needed, and
+    # staging is private per-invocation (see staging_path).
+    staging = staging_path(CONFIG_FILE)
     target = conf_section_for_device(device)
     if target is None:
         print(f"Error: no section in {CONFIG_FILE} matches {device}; "
               f"nothing written.")
         sys.exit(1)
-    with open(TEMP_FILE, "r") as file:
+    with open(CONFIG_FILE, "r") as file:
         lines = file.readlines()
     in_target = False
     new_lines = []
@@ -708,9 +729,9 @@ def update_cam_params_config(device, resolution, fps, cam_format):
         if not format_updated:
             new_lines.append(f"format = {cam_format}\n")
     try:
-        with open(TEMP_FILE, "w") as file:
+        with open(staging, "w") as file:
             file.writelines(new_lines)
-        root_write(TEMP_FILE, CONFIG_FILE)
+        root_write(staging, CONFIG_FILE)
         print("Configuration file updated successfully with new camera parameters.")
     except subprocess.CalledProcessError as e:
         print(f"Error updating config file: {e}")
