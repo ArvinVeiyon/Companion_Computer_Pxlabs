@@ -1,0 +1,21 @@
+# /etc/udev/rules.d/99-usb-cameras.rules — RETIRED 2026-07-27
+#
+# Previously pinned two cameras to fixed paths for the old front/bottom model:
+#   Waveshare AF   0ede:8093 -> SYMLINK video0
+#   See3CAM_CU135  2560:c1d1 -> SYMLINK video2
+#
+# Both cameras were physically removed from the platform; neither vid:pid is
+# present on USB, so both rules had been dead for months. Retired rather than
+# left in place because a SYMLINK+="video0" rule that fires again later would
+# collide with the real kernel node -- and /dev/videoN is now known to be
+# unstable here (the LG cam moved video8 -> video0 -> video1 in one evening;
+# the Orbbec claims/releases its nodes depending on rover-camera.service).
+#
+# Cameras are identified by the stable usbcam-<vidpid>-<serial>-i<iface> id
+# via vision_config_manager / vision_cameras.yaml. Do not add path-pinning
+# rules back; see codex-work/vision_multicam_companion.md section 4b.
+#
+# NOTE: ~/ros2_ws/src/rc_control/{camera_sw_params.yaml,config/rc_mapping.yaml}
+# still name /dev/video0 and /dev/video2 for front/bottom. Those are stale and
+# now point at whatever occupies those nodes -- migrate them to aliases/ids
+# (multicam Phase D) before RC camera switching is used again.
