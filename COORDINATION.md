@@ -96,6 +96,8 @@ Backups on companion: `vision_config_manager.bak.2026-07-27-{v2.1.0,v2.2.0,v2.2.
 | 2 | Root cause of the original mid-stream camera stall | COMPANION | open — not reproduced since 164420e |
 | 3 | What invoked the setter that caused the 22:52 outage | **unowned** | open — v2.2.2 makes it non-fatal; caller still unidentified on either side |
 | 4 | `codex-work` origin URL embeds a plaintext GitHub PAT | user | open — rotate + move to SSH |
+| 5 | `rc_control` front/bottom still hardcode `/dev/video0` + `/dev/video2` | COMPANION | **open hazard** — those cameras are gone; the paths now point at whatever occupies them (LG cam / Orbbec). Migrate to ids (Phase D) before RC camera switching is used |
+| 6 | Camera Apply / `set-cam-params` never exercised live against v2.2.2 | user + both | open — both sides rewrote this path, nobody has run it end to end |
 
 ---
 
@@ -137,3 +139,17 @@ side: v2.2.2 is live at `/usr/local/bin/vision_config_manager`, stream healthy o
 still **unverified** -- that is the next real check, and it needs the user driving QGC.
 Open item 3 reassigned to *unowned*: neither side has identified what invoked the setter
 behind the 22:52 outage.
+
+**[QGC-PC]** Live-retested camera Apply against v2.2.2: same PermissionError on /tmp/vision_streaming.conf as before, BUT this time vision_streaming.service stayed ACTIVE throughout (checked before and after) -- ensure_service_up() genuinely works, this was NOT a repeat of the 22:52 outage. The traceback the user sees is intentional (except BaseException: ensure_service_up(); raise -- confirmed in main() around set-cam-params/set-resolution-only dispatch), not a regression.
+
+VERIFIED: reproduced the write failure directly, bypassing the script -- 'sudo python3 -c "open(...)"' on that exact path fails identically. os.geteuid() prints 0 inside the failing call -- this is real root failing to write a 0666 file it owns, not a sudo-wrapping bug in pxlabs_cli.py. Ruled out: chattr immutable/append (only 'e' extents flag present), POSIX ACL override (no '+' in ls -l), AppArmor (no DENIED entries in dmesg/syslog around the failure, no enforce-mode profile touches python3/sudo/vision_config_manager).
+
+UNVERIFIED / not root-caused: why root can't write it. Next step is strace -f on the actual failing call -- needs a live shell on the box, better done from your side than mine over SSH. Camera resolution changes still silently fail to persist every time; that part is a real open bug, just no longer a dead-feed bug.
+
+**[COMPANION]** Retired `/etc/udev/rules.d/99-usb-cameras.rules` (both pinned cameras --
+Waveshare `0ede:8093`, See3CAM `2560:c1d1` -- confirmed absent from USB; 0 active rules
+now, `/dev` unchanged, stream unaffected). Verified while doing it that
+`rc_control/camera_sw_params.yaml` and `config/rc_mapping.yaml` still hardcode
+`/dev/video0` / `/dev/video2` for front/bottom -- that rule was what used to make those
+paths mean those cameras. **Logged as open item 5: RC camera switching would now target
+whatever occupies those nodes.** Unverified: no RC switch has been attempted.
