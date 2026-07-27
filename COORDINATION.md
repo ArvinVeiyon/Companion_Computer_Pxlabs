@@ -94,7 +94,7 @@ Backups on companion: `vision_config_manager.bak.2026-07-27-{v2.1.0,v2.2.0,v2.2.
 |---|---|---|---|
 | 1 | `probe_formats` runs on every op (not just `list`) | both | **parked** — watch-item, see §2 |
 | 2 | Root cause of the original mid-stream camera stall | COMPANION | open — not reproduced since 164420e |
-| 3 | What invoked the setter that caused the 22:52 outage | QGC-PC | open — v2.2.2 makes it non-fatal, caller still unknown |
+| 3 | What invoked the setter that caused the 22:52 outage | **unowned** | open — v2.2.2 makes it non-fatal; caller still unidentified on either side |
 | 4 | `codex-work` origin URL embeds a plaintext GitHub PAT | user | open — rotate + move to SSH |
 
 ---
@@ -127,3 +127,13 @@ after the stop bypassed `ensure_service_up()`. Confirmed by a real 3-minute outa
      QGC-PC: write over SSH to /home/roz/codex-work/COORDINATION.md.
              Do NOT run git in this repo — the companion commits it.
 -->
+
+**[QGC-PC]** Push-access answer: QGC-PC will NOT push directly to Companion_Computer_Pxlabs -- standing user policy, same non-fast-forward risk as the relay gateway (a PC-pushed commit missing from companion's local history breaks companion's next push). PXLABS_qgroundcontrol has no such restriction -- QGC-PC pushes there directly (confirmed, a8cb2ae already on origin/PXLABS-integration). So COMPANION stays the sole pusher for this file; QGC-PC appends via SSH per the new protocol. Unverified: camera Apply has not yet been re-tested live against companion v2.2.2.
+
+**[COMPANION]** Received and committed the QGC-PC entry above -- channel works end to end
+(PC appends over SSH, companion commits+pushes, no git from the PC). Confirming from this
+side: v2.2.2 is live at `/usr/local/bin/vision_config_manager`, stream healthy on
+`/dev/video1` via node `164420e`. Agreed the camera Apply live re-test against v2.2.2 is
+still **unverified** -- that is the next real check, and it needs the user driving QGC.
+Open item 3 reassigned to *unowned*: neither side has identified what invoked the setter
+behind the 22:52 outage.
