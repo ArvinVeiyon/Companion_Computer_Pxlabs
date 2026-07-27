@@ -279,3 +279,37 @@ v4l2-ctl output fine).
 **34+ min continuous, 0 stalls, 1 start** -- the cleanest run of the day. Orbbec connected,
 rover-camera + rover-scan up, measured mount TF live (`f210102`). QGC source cloned for
 reference at github.com/ArvinVeiyon/PXLABS_qgroundcontrol.
+
+---
+
+## 2026-07-27 late night — v2.2.2 + ⚠️ MEMORY IS SPLIT ACROSS TWO CLAUDE SCOPES
+
+**v2.2.2 — the v2.2.1 guard was too narrow (found by the QGC-side Claude, not here).**
+Both setters were wrapped with `except SystemExit:` only, so a `PermissionError`,
+`OSError` or bare subprocess failure after `control_service('stop')` propagated past
+`ensure_service_up()` and left the service down. **Real outage: 22:52:35 → 22:55:34,
+3 min of dead video, manual restart.** Now `except BaseException`. Verified for
+SystemExit/PermissionError/OSError, and live-tested (`set-cam-params /dev/video19`
+refused, same ffmpeg pid throughout). Backup `.bak.2026-07-27-v2.2.1`; codex-work `d4b3c55`.
+
+**⚠️ There is a SECOND Claude memory scope on this box:**
+`~/.claude/projects/-home-roz-codex-work/memory/` (used when Claude Code runs with cwd
+`~/codex-work`). **I do not load it** — my scope is `-home-roz`. It held three files that
+existed nowhere else and were not in git:
+`vision-streaming-outage-2026-07-27.md`, `vision-config-manager-setter-exception-gap.md`
+(the v2.2.2 bug), `probe-formats-every-op-watch-item.md`. Now mirrored into
+`~/codex-work/memory/` and pushed. **Check that directory when work has been done from
+the codex-work cwd, or findings will be invisible here.**
+
+**probe_formats decision (user-accepted, from that scope):** parked as a WATCH-ITEM, not
+a bug to fix. **Do NOT proactively refactor the probe_formats call path.** Raise it again
+only when the camera panel is exercised live, measure actual probe frequency/latency
+first, then decide.
+
+**QGC side is fixed and pushed:** `PXLABS_qgroundcontrol` `a8cb2ae` on branch
+**PXLABS-integration** — removes every `/dev/videoN` default (`camera-apply`,
+`camera-query`, `camera-params`, argparse), `shlex.quote()`s interpolated values, gates
+the camera Apply button until inventory is loaded, and surfaces captured stdout/stderr
+instead of "exit 1" — the last was the SAME copy-pasted bug in **five** settings pages
+(CompanionControl, ConnectionControl, PXLABSSettings, RelayControl, WFBConfig).
+Verified from here: `shlex`+`sys` imported, file compiles.
