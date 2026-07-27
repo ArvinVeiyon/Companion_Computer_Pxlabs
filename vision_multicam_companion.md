@@ -1,7 +1,7 @@
 # Vision Multi-Camera System — Companion Side (Vind-Roz)
 
 Implemented: **2026-07-19** &nbsp;|&nbsp; Status: **deployed & tested on companion**
-Design/contract: `memory/project_vision_multicam_upgrade.md` &nbsp;|&nbsp; QGC-side work: pending (user, PXLABS_qgroundcontrol)
+Design/contract: `memory/project_vision_multicam_upgrade.md` &nbsp;|&nbsp; QGC-side work: **see §4c — 3 REQUIRED fixes in PXLABS_qgroundcontrol** (updated 2026-07-27)
 
 Replaces the fixed two-camera front/back model with N cameras identified by a
 **stable id**, user-renamable **aliases**, and free **primary/secondary (PiP)**
@@ -23,8 +23,8 @@ selection — all driven from QGC.
 
 | Component | Version | Location | What changed |
 |---|---|---|---|
-| vision_config_manager | **v2.1.0** | `/usr/local/bin/vision_config_manager` | v2.1: sysfs discovery + usbcam ids + `migrate-store`; v2.0: `list/set-alias/apply` + guard; legacy modes kept |
-| vision_streaming node | watchdog rev | `ros2_ws` main_dev (see git log) | ffmpeg watchdog, camera_id resolution (usbcam + legacy by-id), stderr→journal |
+| vision_config_manager | **v2.2.1** | `/usr/local/bin/vision_config_manager` | v2.2.1: setter can't strand the stream; v2.2.0: conf section matched by `camera_id` (see 4c); v2.1: sysfs discovery + usbcam ids + `migrate-store`; v2.0: `list/set-alias/apply` + guard; legacy modes kept |
+| vision_streaming node | `164420e` | `ros2_ws` main | capture node picked by sysfs `index` (not lowest videoN); stall watchdog; camera_id resolution; stderr→journal |
 | camera store | new | `/etc/vision_cameras.yaml` | alias + role_lock per stable camera id |
 | stream conf | extended | `/etc/vision_streaming.conf` | new optional `camera_id` key per section |
 | v1 backup | v1.2.1 | `/usr/local/bin/vision_config_manager.bak.2026-07-19-v1.2.1` | rollback point |
@@ -108,7 +108,7 @@ front/bottom cameras **error clearly instead of writing a dead config**.
 
 ---
 
-## 3. Streaming node behavior (ros2_ws `a561e93`)
+## 3. Streaming node behavior (ros2_ws `164420e`)
 
 - **camera_id first:** at every ffmpeg (re)start the node resolves
   `camera_id` → current `/dev/videoN`. v2.1 `usbcam-*` ids resolve via sysfs
@@ -133,7 +133,7 @@ Error opening input file /dev/video0.
 
 ---
 
-## 4. Current camera map (2026-07-19, will drift — use ids!)
+## 4. Current camera map (2026-07-19 — ALREADY DRIFTED, see 4b; use ids!)
 
 | Alias | id (stable, v2.1) | Node today | Role |
 |---|---|---|---|
@@ -154,6 +154,79 @@ relied on. Remove once QGC presets are migrated.
 
 ---
 
+## 4b. ⚠️ /dev/videoN IS NOT STABLE — READ THIS BEFORE TOUCHING CAMERA CODE
+
+**The Orbbec's `/dev/video*` nodes appear and disappear depending on whether
+`rover-camera.service` is running.**
+
+| `rover-camera` | What exists |
+|---|---|
+| **running** | OrbbecSDK claims the device over libusb, uvcvideo detaches → Orbbec has **NO** `/dev/videoN`. Only the LG cam (2 nodes). |
+| **stopped** (camera plugged) | uvcvideo binds → Orbbec creates **8 nodes**, and it takes **`/dev/video0`**. |
+
+On top of that, node numbers are handed out from the lowest free slot, so the LG
+cam alone was **video8 → video0 → video1** inside one evening (2026-07-27). The
+Pi5's own `rpivid` + `pispbe-*` nodes (video19-37) also compete for numbers.
+
+**Rule: never key anything on `/dev/videoN`.** Use the stable
+`usbcam-<vidpid>-<serial>-i<iface>` id, or an alias. Code that hardcodes or
+defaults to a device path will fail intermittently and look random.
+
+---
+
+## 4c. Companion fixes 2026-07-27 (v2.2.0 / v2.2.1) + REQUIRED QGC-SIDE CHANGES
+
+### What broke (real incident: 15 min of dead video, 19:33→19:48)
+
+QGC sent `set-cam-params /dev/video0 …` — the CLI's **default** device. At that
+moment `/dev/video0` was the **Orbbec**, not the LG cam. Chain:
+
+1. `resolve_camera()` lets a raw `/dev/` path through (the Orbbec's
+   `usb_identity` is `None`, so it isn't in the camera list, and the `/dev/`
+   branch returns the path without erroring).
+2. `set_cam_params()` calls `control_service('stop')` → **stream goes down**.
+3. `v4l2-ctl --set-fmt-video pixelformat=MJPG` on an Orbbec **depth** node fails
+   (`check=True`) → `sys.exit(1)`.
+4. `control_service('restart')` is never reached → feed stays dead, silently.
+
+G-Control displayed only `ERROR: Command failed (exit 1)`; the actual message
+was discarded.
+
+### Fixed on the companion (no QGC change needed for these)
+
+- **v2.2.0** — `update_resolution_only_config()` / `update_cam_params_config()`
+  matched the conf section with `if "camera_name" in line and device in line:`,
+  i.e. by substring of the device path. Once `camera_name` went stale the match
+  failed, the file was rewritten **byte-identical**, and it still printed
+  "updated successfully" and restarted the stream. **Every resolution/format
+  change from QGC silently did nothing** while appearing to work. Both writers
+  now resolve the section via the stable `camera_id`, fall back to
+  `camera_name`, error visibly when nothing matches, and refresh the stale
+  `camera_name` as they write.
+- **v2.2.1** — the section check moved **before** `control_service('stop')`, and
+  both setters are wrapped so any `SystemExit` triggers `ensure_service_up()`
+  before re-raising. A bad device now costs nothing: it prints
+  `Error: no section in /etc/vision_streaming.conf matches <dev>; nothing done,
+  stream untouched.` and the stream keeps running. Verified live.
+
+### ✅ REQUIRED on the QGC side (`ArvinVeiyon/PXLABS_qgroundcontrol`)
+
+1. **`tools/pxlabs_cli.py` `camera-params`** —
+   `device = getattr(args, "device", "/dev/video0")`. **Delete the fallback.**
+   Make `--device` required and fail with a clear message. Audit the other
+   `getattr(..., "/dev/videoN")` defaults in that file too.
+2. **`src/UI/AppSettings/CompanionControl.qml` `_deviceKey()`** — the happy path
+   correctly returns `c.id || c.dev`, but when `_cameras` is empty it falls
+   through to `deviceCombo.currentText`, which can be a stale device path.
+   Disable Apply until a real camera is selected instead.
+3. **Surface the companion's stderr on failure.** The CLI already appends
+   `2>&1`, so the text is captured — but the UI shows only "exit 1". Printing
+   the captured output would have identified this incident in seconds.
+4. *(already tracked as B4 in `BUG_FIX.md`)* `shlex.quote()` the interpolated
+   `device`/`resolution`/`fps`/`format` at the same call site.
+
+---
+
 ## 5. QGC-side integration checklist (PC work, see design doc §3)
 
 1. `pxlabs_cli.py`: add `camera-list` → `sudo vision_config_manager list --json`
@@ -169,6 +242,11 @@ relied on. Remove once QGC presets are migrated.
 ## 6. Rollback
 
 ```
+# to v2.2.0 (keeps camera_id matching, drops the stop-guard):
+sudo cp /usr/local/bin/vision_config_manager.bak.2026-07-27-v2.2.0 /usr/local/bin/vision_config_manager
+# to v2.1.0 (WARNING: restores the silent no-op — QGC changes appear to work but don't):
+sudo cp /usr/local/bin/vision_config_manager.bak.2026-07-27-v2.1.0 /usr/local/bin/vision_config_manager
+# to v1.2.1 (pre-multicam):
 sudo cp /usr/local/bin/vision_config_manager.bak.2026-07-19-v1.2.1 /usr/local/bin/vision_config_manager
 cd ~/ros2_ws && git checkout 328461f -- src/vision_streaming && colcon build --packages-select vision_streaming
 sudo systemctl restart vision_streaming
