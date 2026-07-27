@@ -39,7 +39,7 @@ Changelog:
 - v1.2.0 / v1.1.0 / v1.0.0 — earlier iterations.
 """
 
-__version__ = "v2.2.0"
+__version__ = "v2.2.1"
 
 import subprocess
 import glob
@@ -70,6 +70,22 @@ STREAMABLE_FORMATS = {"MJPG", "YUYV"}
 OLD_ID_RE = re.compile(r'^usb-.+-video-index\d+$')
 
 # ---------------- Core helpers ----------------
+
+def ensure_service_up() -> None:
+    """Bring the stream back after a failed setter, without exiting again.
+
+    Both setters stop the service before doing work that can sys.exit(1), so
+    any failure after the stop used to leave the stream simply DOWN -- no
+    ffmpeg, no error visible to the pilot, until someone noticed. On
+    2026-07-27 a failed QGC resolution change cost 15 minutes of dead video
+    that way. Deliberately does not use control_service(): that exits on
+    failure, and this runs on the way out of an error path already.
+    """
+    try:
+        subprocess.run(['sudo', 'systemctl', 'start', SERVICE_NAME], check=False)
+    except Exception:
+        pass
+
 
 def control_service(action: str) -> None:
     try:
@@ -708,6 +724,12 @@ def set_resolution_only(device, resolution):
     except Exception:
         print("Invalid resolution format. Use e.g., 1920x1080.")
         sys.exit(1)
+    # Check the conf section BEFORE stopping anything, so an unmatched device
+    # costs nothing instead of taking the stream down with it.
+    if conf_section_for_device(device) is None:
+        print(f"Error: no section in {CONFIG_FILE} matches {device}; "
+              f"nothing done, stream untouched.")
+        sys.exit(1)
     control_service('stop')
     try:
         result = subprocess.run(['v4l2-ctl', '--device=' + device, '--get-fmt-video'],
@@ -739,6 +761,11 @@ def set_cam_params(device, resolution, fps, fmt):
         width, height = resolution.split('x')
     except Exception:
         print("Invalid resolution format. Use e.g., 1920x1080.")
+        sys.exit(1)
+    # Check the conf section BEFORE stopping anything (see set_resolution_only).
+    if conf_section_for_device(device) is None:
+        print(f"Error: no section in {CONFIG_FILE} matches {device}; "
+              f"nothing done, stream untouched.")
         sys.exit(1)
     control_service('stop')
     try:
@@ -841,10 +868,21 @@ def main():
         cmd_migrate_store()
     elif args.command == "set-resolution-only":
         _id, dev, _cam = resolve_camera(args.device)
-        set_resolution_only(dev, args.resolution)
+        # Both setters stop the stream before work that can sys.exit(1); catch
+        # that on the way out so a failed change never leaves the pilot with a
+        # dead feed and no explanation.
+        try:
+            set_resolution_only(dev, args.resolution)
+        except SystemExit:
+            ensure_service_up()
+            raise
     elif args.command == "set-cam-params":
         _id, dev, _cam = resolve_camera(args.device)
-        set_cam_params(dev, args.resolution, args.fps, args.format)
+        try:
+            set_cam_params(dev, args.resolution, args.fps, args.format)
+        except SystemExit:
+            ensure_service_up()
+            raise
     elif args.command == "list-details":
         _id, dev, _cam = resolve_camera(args.device)
         list_details(dev)
