@@ -23,7 +23,7 @@ selection — all driven from QGC.
 
 | Component | Version | Location | What changed |
 |---|---|---|---|
-| vision_config_manager | **v2.2.1** | `/usr/local/bin/vision_config_manager` | v2.2.1: setter can't strand the stream; v2.2.0: conf section matched by `camera_id` (see 4c); v2.1: sysfs discovery + usbcam ids + `migrate-store`; v2.0: `list/set-alias/apply` + guard; legacy modes kept |
+| vision_config_manager | **v2.2.2** | `/usr/local/bin/vision_config_manager` | v2.2.2: setter guard widened to BaseException; v2.2.1: setter can't strand the stream; v2.2.0: conf section matched by `camera_id` (see 4c); v2.1: sysfs discovery + usbcam ids + `migrate-store`; v2.0: `list/set-alias/apply` + guard; legacy modes kept |
 | vision_streaming node | `164420e` | `ros2_ws` main | capture node picked by sysfs `index` (not lowest videoN); stall watchdog; camera_id resolution; stderr→journal |
 | camera store | new | `/etc/vision_cameras.yaml` | alias + role_lock per stable camera id |
 | stream conf | extended | `/etc/vision_streaming.conf` | new optional `camera_id` key per section |
@@ -204,8 +204,13 @@ was discarded.
   `camera_name`, error visibly when nothing matches, and refresh the stale
   `camera_name` as they write.
 - **v2.2.1** — the section check moved **before** `control_service('stop')`, and
-  both setters are wrapped so any `SystemExit` triggers `ensure_service_up()`
-  before re-raising. A bad device now costs nothing: it prints
+  both setters are wrapped so a failure triggers `ensure_service_up()`
+  before re-raising.
+- **v2.2.2** — that wrapper originally caught only `SystemExit`, so a
+  `PermissionError` / `OSError` / bare subprocess failure after the stop still
+  stranded the service (real outage 2026-07-27 22:52→22:55, 3 min down, manual
+  restart). Now `except BaseException`. Caught by the QGC-side review, not by
+  me — verified against `SystemExit`, `PermissionError` and `OSError`. A bad device now costs nothing: it prints
   `Error: no section in /etc/vision_streaming.conf matches <dev>; nothing done,
   stream untouched.` and the stream keeps running. Verified live.
 

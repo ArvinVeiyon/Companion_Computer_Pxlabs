@@ -39,7 +39,7 @@ Changelog:
 - v1.2.0 / v1.1.0 / v1.0.0 — earlier iterations.
 """
 
-__version__ = "v2.2.1"
+__version__ = "v2.2.2"
 
 import subprocess
 import glob
@@ -873,14 +873,20 @@ def main():
         # dead feed and no explanation.
         try:
             set_resolution_only(dev, args.resolution)
-        except SystemExit:
+        except BaseException:
+            # BaseException, not SystemExit: the setters can also die on
+            # PermissionError, OSError or a bare subprocess failure after the
+            # stop, and every one of those strands the stream just as dead.
             ensure_service_up()
             raise
     elif args.command == "set-cam-params":
         _id, dev, _cam = resolve_camera(args.device)
         try:
             set_cam_params(dev, args.resolution, args.fps, args.format)
-        except SystemExit:
+        except BaseException:
+            # BaseException, not SystemExit: the setters can also die on
+            # PermissionError, OSError or a bare subprocess failure after the
+            # stop, and every one of those strands the stream just as dead.
             ensure_service_up()
             raise
     elif args.command == "list-details":
