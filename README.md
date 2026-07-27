@@ -1,5 +1,10 @@
 # Companion Computer — PX4 (Vind-Roz)
 
+> **Working on this platform with another Claude/agent?** Read and append to
+> [`COORDINATION.md`](COORDINATION.md) — the companion↔QGC-PC handoff log (current
+> versions, standing rules, open items). The two sides cannot see each other; that
+> file is the channel.
+
 Companion computer configuration, service files, and living documentation for the **Vind-Roz** platform — a Raspberry Pi 5 companion running PX4-based drone and rover builds.
 
 ## Contents
