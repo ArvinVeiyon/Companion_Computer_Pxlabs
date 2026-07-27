@@ -39,7 +39,7 @@ Changelog:
 - v1.2.0 / v1.1.0 / v1.0.0 — earlier iterations.
 """
 
-__version__ = "v2.1.0"
+__version__ = "v2.2.0"
 
 import subprocess
 import glob
@@ -550,6 +550,42 @@ def cmd_set_alias(target: str, alias: str) -> None:
 
 # ----------------------------- (v1 helpers, device arg now id/alias-aware) -----------------------------
 
+def conf_section_for_device(device: str) -> Optional[str]:
+    """Which section of CONFIG_FILE describes `device`? None if no section does.
+
+    Matched on the stable camera_id, not on camera_name.  The /dev/videoN a
+    camera lands on is reassigned from the lowest free slot on every reboot
+    and USB rebind -- this cam was video8, video0 and video1 within one
+    evening -- so camera_name goes stale.  The old test was
+
+        if "camera_name" in line and device in line:
+
+    which then matched nothing, leaving in_target False: the resolution line
+    was never replaced, the trailing fallback never fired, and the file was
+    rewritten byte-identical.  It still printed "updated successfully" and
+    still restarted the stream, so a QGC resolution change looked like it
+    worked while changing nothing at all.  camera_name stays as a fallback
+    for confs written before camera_id existed.
+    """
+    identity = usb_identity(device)
+    key = camera_key(identity) if identity else None
+    parser = ConfigParser()
+    try:
+        parser.read(CONFIG_FILE)
+    except Exception as e:
+        print(f"Warning: cannot parse {CONFIG_FILE}: {e}", file=sys.stderr)
+        return None
+    fallback = None
+    for section in parser.sections():
+        if section == "general":
+            continue
+        if key and parser.get(section, "camera_id", fallback=None) == key:
+            return section
+        if parser.get(section, "camera_name", fallback=None) == device:
+            fallback = fallback or section
+    return fallback
+
+
 def update_resolution_only_config(device, resolution):
     validate_device(device)
     try:
@@ -557,6 +593,11 @@ def update_resolution_only_config(device, resolution):
         subprocess.run(['sudo', 'chmod', '666', TEMP_FILE], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error copying config file: {e}")
+        sys.exit(1)
+    target = conf_section_for_device(device)
+    if target is None:
+        print(f"Error: no section in {CONFIG_FILE} matches {device}; "
+              f"nothing written.")
         sys.exit(1)
     with open(TEMP_FILE, "r") as file:
         lines = file.readlines()
@@ -569,12 +610,13 @@ def update_resolution_only_config(device, resolution):
             if in_target and not res_updated:
                 new_lines.append(f"resolution = {resolution}\n")
                 res_updated = True
-            in_target = False
+            in_target = stripped[1:-1].strip() == target
             new_lines.append(line)
             continue
-        if "camera_name" in line and device in line:
-            in_target = True
-        if in_target and stripped.lstrip('#').startswith("resolution"):
+        if in_target and stripped.lstrip('#').startswith("camera_name"):
+            # refresh the stale path so the conf stops lying about the device
+            new_lines.append(f"camera_name = {device}\n")
+        elif in_target and stripped.lstrip('#').startswith("resolution"):
             new_lines.append(f"resolution = {resolution}\n")
             res_updated = True
         else:
@@ -599,6 +641,11 @@ def update_cam_params_config(device, resolution, fps, cam_format):
     except subprocess.CalledProcessError as e:
         print(f"Error copying config file: {e}")
         sys.exit(1)
+    target = conf_section_for_device(device)
+    if target is None:
+        print(f"Error: no section in {CONFIG_FILE} matches {device}; "
+              f"nothing written.")
+        sys.exit(1)
     with open(TEMP_FILE, "r") as file:
         lines = file.readlines()
     in_target = False
@@ -616,12 +663,12 @@ def update_cam_params_config(device, resolution, fps, cam_format):
                     new_lines.append(f"fps = {fps}\n")
                 if not format_updated:
                     new_lines.append(f"format = {cam_format}\n")
-            in_target = False
+            in_target = stripped[1:-1].strip() == target
             new_lines.append(line)
             continue
-        if "camera_name" in line and device in line:
-            in_target = True
-            new_lines.append(line)
+        if in_target and stripped.lstrip('#').startswith("camera_name"):
+            # refresh the stale path so the conf stops lying about the device
+            new_lines.append(f"camera_name = {device}\n")
             continue
         if in_target:
             if stripped.lstrip('#').startswith("resolution"):
