@@ -1,11 +1,11 @@
 ---
 name: project-ffmpeg-hung-alive-gap
-description: "vision_streaming ffmpeg watchdog only catches process DEATH, not a hung-but-alive ffmpeg — GS video cuts off silently"
+description: "GS video cut-offs: began as a watchdog gap (hung-alive ffmpeg), ended 2026-07-28 as a PHYSICAL camera fault — alive on ep0, silent on isoc; software+radio+power all excluded by measurement, companion-side USB connector to be inspected"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 62813ffb-bde2-479e-8734-481ad4a5907b
-  modified: 2026-07-28T03:51:54.420Z
+  modified: 2026-07-28T05:02:05.594Z
 ---
 
 2026-07-26: GS video cut off with **no service error and no restart**. Root cause: the
@@ -391,3 +391,76 @@ recommending a value. ffmpeg uses 76% of ONE core (Pi5 has 4) at 720p.
 `vision_streaming_node.py` gives better quality at the SAME bitrate with **zero** extra
 radio load, costing CPU there is headroom for. Arguably the better first move; test one
 lever at a time so a link problem is attributable.
+
+---
+
+## 2026-07-28 — THE FAULT IS PHYSICAL. Whole software+radio stack excluded by measurement.
+
+GS feed died again mid-morning. **This session ended the software hunt: the camera itself stops
+delivering frames on the isochronous endpoint while staying fully enumerated and responsive.**
+Physical inspection of the companion-side USB connector scheduled for the evening of 07-28.
+
+### The one test that settles it — take it FIRST next time
+```
+sudo systemctl stop vision_streaming            # get ffmpeg off the device
+timeout 60 sudo v4l2-ctl -d <dev> --set-fmt-video=width=640,height=480,pixelformat=MJPG \
+    --stream-mmap --stream-count=1800 --stream-to=/dev/null
+```
+Hung the full 60 s with ~0 frames. **No ffmpeg, no encoder, no RTP, no WFB in the loop** — so
+none of them can be the cause. Meanwhile `v4l2-ctl --get-ctrl brightness,contrast` returns
+instantly (0 / 37). **Alive on ep0, silent on isoc.** Any theory that survives must explain that.
+
+### Ruled out THIS session, with numbers — do not re-chase
+- **Undervoltage (user's hypothesis).** `ext5v-report 40`: 1134 samples @2 s spanning every one
+  of the 15+ stalls. `throttled=0x0` (not even bit 16, "occurred since boot"), EXT5V **min
+  5.0263 V / mean 5.1322 V**, **226 mV above the 4.80 V knee**, **0 dips <4.90 V, 0 dips <4.80 V**,
+  peak core 5.37 A, peak 63.1 °C. The rail never sagged during a single stall.
+  ⚠️ **BUT `ext5v-report` measures the rail UPSTREAM at the Pi input — it physically cannot see a
+  drop at the camera's own connector.** It exonerates the buck/supply, NOT the connection. Do not
+  quote "no undervoltage" as if it cleared the cabling.
+- **WFB causing it — causation is REVERSED.** User saw "video flows → WFB degrades → video cuts →
+  WFB recovers". The radio cannot stall a v4l2 capture (see the test above). The likely truth: video
+  IS the dominant load (2000K + k=8/n=12 FEC ≈ 3 Mbps on-air, 20 MHz long-GI `-M 1`, **headroom
+  still never measured**); load on → link looks degraded, camera dies → load gone → link looks clean.
+  Radio itself healthy: both WFB NICs up, `tx_errors=0` on both, `wifibroadcast@drone` NRestarts=0.
+- **Spontaneous re-enumeration / device renumbering.** `dmesg -T | grep "usb 6-2"` over the whole
+  boot: the cam enumerated ONCE at 09:03:05 as **devnum 2** and there was **not one USB event on
+  bus 6** until my manual reset at 09:29:38. `devnum` never changed. `/dev/video8` never vanished.
+  **The cut-off involved no USB event at all.** (video8→video0 was caused BY my reset, nothing else.)
+  → User's standing point, and correct: **the device number is irrelevant** — the node resolves the
+  `usbcam-*` id every start and logs `conf says /dev/video1, resolved to /dev/videoN`. Never
+  present renumbering as a fault.
+- **A USB port reset does NOT clear the wedge.** `echo 0 | sudo tee /sys/bus/usb/devices/6-2/authorized`
+  then `1` = full remove + re-enumerate; came back clean, zero URB errors — **still zero frames.**
+  This retires agreed-fix item 3 (auto USB-reset escalation) as a *recovery* mechanism: it doesn't work.
+
+### The signature that points at the connector
+**Load-dependent failure**: works perfectly at enumeration/control current (~100 mA), dies at
+streaming current (camera declares **`bMaxPower` 500 mA**). Classic high-resistance contact —
+partial seat, corrosion, bent pin — which drops voltage locally under load and is invisible to
+every monitor on this box. Consistent with **no USB disconnect events** (D+/D− keeps integrity
+while VBUS sags) and with the degradation timeline: healthy 722 s run → after a camera-end replug,
+only **12-15 s** per attempt (`no new frames for 12s after 24s`, `for 30s after 44s` = saw frames,
+then lost them).
+
+### Evening 07-28 plan (user doing it; companion-side connector is inside the rover)
+1. **Move the camera to a different USB port — the decisive test.** Free: **bus 6 port 1**, and
+   **bus 5 / bus 7** (both 5 Gbps root hubs, completely empty). Bus 1 = VIA hub (WFB NIC d993c0 +
+   8821cu uplink), bus 2 = Orbbec, bus 4 = WFB NIC d98f91 — all occupied.
+2. Reseat + inspect the companion-side connector (corrosion / bent pin / partial seat).
+3. Eliminate any adapter / extension / pigtail in that path — at 500 mA they drop real voltage.
+4. Check cable strain at the camera end.
+
+**FALSIFIES the connector theory:** a clean reseat on a *different port* that still dies the same
+way with zero USB events in `dmesg` ⇒ it is the camera's own ISP/firmware and the unit needs
+swapping. No cabling work will help.
+
+`vision_streaming` left RUNNING with its backoff, so the feed recovers by itself the moment frames
+flow — no restart needed after the physical work.
+
+### New diagnostic worth keeping: prove the radio is idle without trusting the wfb counter
+The wfb API `video tx` counter is unreliable (documented above). Instead sample **wfb_tx CPU ticks**:
+the video instance is the one with **`-p 0 ... -k 8 -n 12`**; mavlink is `-p 16 -k 1 -n 3`, tunnel
+`-p 32 -k 2 -n 4`. During the outage the video wfb_tx burned **0 ticks in 20 s** while mavlink and
+tunnel kept ticking ⇒ nothing is being handed to the radio, and the radio is alive. Cross-checks a
+frozen `packets.incoming` honestly.
