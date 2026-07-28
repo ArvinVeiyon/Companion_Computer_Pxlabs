@@ -64,7 +64,15 @@ side must see goes **here**, not only in memory.
 | `vision_streaming` node | **164420e** | `ros2_ws` main | ✅ 1 h clean run |
 | `depth_to_scan` mount TF | **f210102** | `ros2_ws` main | ✅ pitch 2.33° / roll 0.57° measured |
 | G-Control / `pxlabs_cli` | **a8cb2ae** | `PXLABS-integration` | ✅ imports + compile checked from companion |
-| Camera (LG Smart Cam) | `usbcam-30c9009d-01.00.00-i00` | `/dev/video1` *today* | **1280x720 MJPG 30fps @ 2000K** (user-confirmed 07-28) |
+| Camera (LG Smart Cam) | `usbcam-30c9009d-01.00.00-i00` | `/dev/videoN` **varies — resolve by id** | ⚠️ **mode NOT tracked here** — see note below |
+
+> ⚠️ **Do not record the camera's resolution / fps / bitrate in this table (2026-07-28).** It is
+> operator-set from QGC and changes without notice. This row previously read "1280x720, user-confirmed
+> 07-28" while the live conf was running 640x480 — and commit `ae9e880`, titled *"camera stays at
+> 1280x720"*, actually diffs `1280x720 → 640x480`. The wrong value had also propagated into
+> `system_companion.md` and the companion memory. **Read `/etc/vision_streaming.conf` (or the running
+> ffmpeg args) at the moment you need it.** Same for `/dev/videoN`: the LG cam was video8 → video0 →
+> video1 → video8 across one day; only the `usbcam-*` id is stable.
 
 Backups on companion: `vision_config_manager.bak.2026-07-27-{v2.1.0,v2.2.0,v2.2.1}`,
 `.bak.2026-07-19-v1.2.1`.

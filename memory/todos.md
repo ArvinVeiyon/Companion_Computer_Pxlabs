@@ -59,11 +59,39 @@ migrate to aliases/usbcam ids via v2.1 resolver:
 - ros2_ws/src/rc_control/camera_sw_params.yaml:10-11 (front=/dev/video0, bottom=/dev/video2)
 - ros2_ws/src/rc_control/config/rc_mapping.yaml:55-56 (same)
   → CH9 plan per design doc: low=FPV primary, mid=FPV+NAV-COLOR PiP, high=spare
-- ros2_ws/src/optical_flow/optical_flow/optical_flow_node1.py:36 (/dev/video2 = Orbbec IR)
-- ros2_ws/src/optical_flow/optical_flow/optical_flow_node.py:36 (/dev/video3 = Orbbec IR)
+- ros2_ws/src/optical_flow/optical_flow/optical_flow_node1.py:36 (/dev/video2)
+- ros2_ws/src/optical_flow/optical_flow/optical_flow_node.py:36 (/dev/video3)
   → make device a ROS param (id/alias); WHICH camera optflow should use = open user
     decision (its original camera was physically removed).
-Then cleanup: delete /etc/udev/rules.d/99-usb-cameras.rules (dormant pins for removed cams).
+  ⚠️ The "= Orbbec IR" annotations on those paths are NOT reliable — the Orbbec only owns
+  /dev/videoN while `rover-camera.service` is STOPPED. With the wrapper running these paths
+  hit whatever else is there (or nothing). The reason to migrate is that /dev/videoN is
+  unstable, full stop — not that it specifically lands on the Orbbec.
+✅ Cleanup DONE 2026-07-27: /etc/udev/rules.d/99-usb-cameras.rules **RETIRED IN PLACE**, not
+deleted — the file now contains only a comment block explaining why (and a pointer to the
+still-stale rc_control paths above). Repo copy restored in codex-work `b80034b` after
+`d64850d` committed it empty.
+
+### 8b. Vision open items — added 2026-07-28 (audit found these tracked NOWHERE)
+From [[project_ffmpeg_hung_alive_gap]]; all three were agreed/designed but never filed:
+- **(a) backoff reset on the stall path** — `ros2_ws/src/vision_streaming/vision_streaming/
+  vision_streaming_node.py:325-326` still resets `backoff_s` to 2 s after a run >60 s that
+  **ended in a stall**. Longer waits are what actually recover the camera (16 s → 256 s of
+  good video; 2 s → 14 s, dead), so the node earns a working delay and throws it away.
+  Agreed fix = do NOT reset on the stall path. Item 2 of that list (settle delay with the
+  device closed after a kill) and item 3 (escalate to a USB port reset of 6-2 after N
+  consecutive zero-frame starts) are also unapplied.
+- **(b) USB autosuspend** — `/sys/bus/usb/devices/6-2/power/control` is still `auto`
+  (2000 ms). Pin to `on` via udev. "Fix regardless" per the 07-27 evening finding.
+- **(c) vision_config_manager v2.3.0 — bitrate control** (feature, not a fix; user's idea,
+  agreed, designed, NOT started). Companion half: optional `--bitrate` on `set-cam-params`
+  (MUST stay optional — the shipped QGC build calls it without); `update_cam_params_config()`
+  gains `bitrate=None`; `list --json` gains `active.settings.{primary,secondary}` so QGC can
+  prefill. QGC half is theirs. Constraint: video FEC is k=8/n=12 (50% overhead) and **radio
+  headroom has never been measured** — measure before recommending a value. Cheaper first
+  lever, also unmeasured: `-preset ultrafast` → `veryfast` (better quality at the SAME
+  bitrate, zero extra radio load). Test one lever at a time.
+  ⚠️ Do NOT hand-edit the conf as a workaround — [[feedback_camera_qgc_only]].
 
 ---
 
@@ -94,9 +122,13 @@ rule. Disk pressure also resolved: **85% → 49%, 29G free** after reclaiming 20
 pre-2025 `~/.ros/log` debris + 1.7 GB journal + 569 MB apt cache). SD card is fully partitioned; the
 64GB-vs-58G gap is GB-vs-GiB + ext4 overhead, not lost space.
 
-### 15. Measure the camera mount TF — ✅ DONE 2026-07-21, committed (ros2_ws 0bd5bf6)
-`base_link → camera_link` = **x −0.125, y 0.000, z 0.420**, zero rpy, verified live via `tf2_echo`.
-Pitch/roll were **measured from the camera's own IMU**, not assumed. Baked in as launch defaults.
+### 15. Measure the camera mount TF — ✅ DONE, **RE-MEASURED AS-BUILT 2026-07-27** (ros2_ws `f210102`)
+⚠️ The 07-21 figures (`0bd5bf6`: x −0.125, y 0, z 0.420, zero rpy) are **SUPERSEDED** — the camera
+was physically remounted 07-26 on a printed bracket. Current truth = the `depth_to_scan.launch.py`
+defaults: **cam_x 0.00** (camera now sits ON the rotation centre), **cam_y 0.00**, **cam_z 0.305**
+(0.235 plate + 0.070 bracket), **cam_pitch 0.0406** (2.33° nose down), **cam_roll 0.0100**,
+range_max 5.0. Pitch/roll **measured from the camera's own IMU** (`/camera/accel/sample`) on flat
+floor, not assumed. Baked in as launch defaults.
 STILL OPEN from L4 acceptance: the **tape-measure range check** ("ranges correct vs tape measure" —
 only rate and plausibility confirmed so far). Camera is level, so `scan_height: 40` needs no revisit.
 

@@ -1,11 +1,11 @@
 ---
 name: project-l4-gemini-nav2-prereqs
-description: "L4 DONE 2026-07-21: Gemini 336L wrapper built, /scan live at 20Hz via depthimage_to_laserscan; Nav2+slam_toolbox installed, L5 unblocked. Camera mount TF still a placeholder."
+description: "L4 DONE 2026-07-21: Gemini 336L wrapper built, /scan live via depthimage_to_laserscan; Nav2+slam_toolbox installed, L5 unblocked. Camera mount TF measured as-built 2026-07-27 after the remount (f210102)."
 metadata: 
   node_type: memory
   type: project
   originSessionId: 855c903a-dc57-4bd6-ad2e-825937697502
-  modified: 2026-07-21T19:02:37.169Z
+  modified: 2026-07-28T03:51:09.633Z
 ---
 
 # L4 (Gemini → /scan) — DONE 2026-07-21 · L5 (Nav2) ready
@@ -38,8 +38,10 @@ The Pi rebooted and killed both detached nodes; **both were relaunched and re-ve
 (`ros2 launch orbbec_camera gemini_330_series.launch.py`, ~25s to come up), then
 `ros2 launch ~/ros2_ws/launch/depth_to_scan.launch.py`.
 Next actions in order:
-1. ~~STILL BLOCKING L5: get the measured camera mount pose~~ ✅ **DONE 2026-07-21** — measured and
-   baked into the launch defaults (x −0.125, y 0, z 0.420, zero rpy). L5 is unblocked.
+1. ~~STILL BLOCKING L5: get the measured camera mount pose~~ ✅ **DONE** — baked into the launch
+   defaults. ⚠️ The 07-21 values quoted here (x −0.125, y 0, z 0.420, zero rpy) are **SUPERSEDED
+   by the 07-27 as-built re-measurement after the 07-26 remount** — see the ⚠️ block at the head of
+   the CAMERA MOUNT TF section below. L5 is unblocked either way.
 2. Then L5: `slam_toolbox` on `/scan` + `/odom` (odom live @~100Hz from `rover_odometry`),
    then Nav2 bringup.
 3. Housekeeping: pin OrbbecSDK as submodule, delete `camera_sw_node_obsolute.py`, add systemd units.
@@ -47,6 +49,15 @@ No longer blocking: **`RO_SPEED_LIM` fixed to 0.70** and **MAVLink link healed**
 see [[project-rover-autonav]].
 
 ## CAMERA MOUNT TF — MEASURED 2026-07-21 evening, no longer a placeholder (L5 UNBLOCKED)
+
+> ⚠️ **STALE SECTION — the camera was REMOUNTED 2026-07-26 on a printed bracket.**
+> **Current truth = `depth_to_scan.launch.py` defaults (ros2_ws `f210102`, 07-27):**
+> **cam_x 0.00 · cam_y 0.00 · cam_z 0.305 · cam_pitch 0.0406 (2.33° nose down) ·
+> cam_roll 0.0100 · range_max 5.0.** The camera now sits ON the rotation centre, and pitch/roll
+> are no longer zero. Everything below is the 07-21 pre-remount derivation — **kept only for the
+> measurement METHOD** (IMU-based pitch/roll, wheelbase cross-check), not for its numbers.
+> The comparison table further down already carries the new figures.
+
 Baked into `launch/depth_to_scan.launch.py` defaults; verified live via `tf2_echo base_link
 camera_depth_frame` → Translation **[-0.125, 0.000, 0.420]**.
 - **cam_x = -0.125** — wheelbase 0.43 m (front hub → rear hub), lens 0.34 m behind the front axle

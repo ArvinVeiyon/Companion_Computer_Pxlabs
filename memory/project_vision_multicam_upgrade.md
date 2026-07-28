@@ -5,10 +5,37 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 41726602-da8e-4edf-b5e2-8b266624ecfa
-  modified: 2026-07-19T12:08:53.237Z
+  modified: 2026-07-28T03:51:25.787Z
 ---
 
 # Vision System Upgrade: Multi-Camera with Aliases (design 2026-07-19)
+
+> ## ⚠️ READ FIRST — 2026-07-28 alignment audit
+> **This file is the ORIGINAL 07-19 DESIGN. Parts of it are now wrong.** Corrections that
+> override anything below:
+> 1. **Deployed `vision_config_manager` is `v2.2.3`**, not v2.0/v2.1. Chain since:
+>    v2.1.0 sysfs ids → v2.2.0/2.2.1 (setters stop the service before work that can fail;
+>    guard + `ensure_service_up()`) → v2.2.2 (`except BaseException`, the v2.2.1 guard was
+>    too narrow) → **v2.2.3** (`tempfile.mkstemp()` staging; the fixed `/tmp` path was
+>    blocked by `fs.protected_regular=2` — THE root cause of "resolution changes silently
+>    fail to persist"). Details in [[project_ffmpeg_hung_alive_gap]].
+> 2. **§1.1's `id` rule is SUPERSEDED.** `/dev/v4l/by-id` basenames are **NOT** boot-stable
+>    (index order shuffles). The stable key is **`usbcam-<vidpid>-<serial>-i<iface>`** from
+>    sysfs, since v2.1. Legacy by-id ids are still *accepted*, never *issued*.
+> 3. **Every Orbbec `/dev/videoN` map in this file is WRONG** (§1.1 sample JSON, §5).
+>    The Orbbec's video nodes **appear and vanish with `rover-camera.service`**: wrapper
+>    running ⇒ OrbbecSDK/libusb owns it, uvcvideo detaches, **no** Orbbec nodes; wrapper
+>    stopped ⇒ uvcvideo binds and creates 8 nodes, Orbbec taking **video0**. Never key
+>    anything on /dev/videoN.
+> 4. **§5 "Current state snapshot" is a 07-19 13:00 snapshot and is long dead** — FPV is not
+>    down, the QGC picker is not hardcoded. Ignore it.
+> 5. **Remaining item 3 (udev cleanup) is ✅ DONE 2026-07-27** — `99-usb-cameras.rules`
+>    retired *in place* (file is a comment block explaining why), not deleted.
+> 6. **Never record camera resolution/fps/bitrate as fact** — operator-set from QGC,
+>    changes without notice. Read the live conf.
+>
+> **Still accurate and still the plan: Phase D** (rc_control yamls + optical_flow →
+> aliases/ids) — the one piece of this design not yet built.
 
 **Why:** Original design assumed exactly TWO cameras (front `/dev/video0`, bottom `/dev/video2`).
 After the BOX-B rebuild the platform has N cameras of different kinds (LG FPV cam, Orbbec depth

@@ -25,7 +25,9 @@ Hostname: `Vind-Roz` | Platform: PX4 — used across aerial drone and ground rov
 - GNSS: (document port/model)
 - IMU (if external): (document)
 - Camera(s) (updated 2026-07-26, see `vision_multicam_companion.md`): LG Smart Cam = FPV, id
-  `usbcam-30c9009d-01.00.00-i00`, 1280×720 MJPG 30fps; Orbbec Gemini 336L = autonomy-only, color id
+  `usbcam-30c9009d-01.00.00-i00` (**resolution/fps/bitrate deliberately not documented — operator-set
+  from QGC, changes without notice; read `/etc/vision_streaming.conf` for the live mode**);
+  Orbbec Gemini 336L = autonomy-only, color id
   `usbcam-2bc50807-CPC7B53000AB-i04` (depth/IR/color, ROS2 wrapper, never ffmpeg). Old front/bottom
   cams removed. `/dev/videoN` shuffles per boot — key cameras by the **`usbcam-<vidpid>-<serial>-i<iface>`
   sysfs ids** (v2.1, 2026-07-19). **Never** key them by `/dev/v4l/by-id` — that index order is *not*

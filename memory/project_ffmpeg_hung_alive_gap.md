@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 62813ffb-bde2-479e-8734-481ad4a5907b
-  modified: 2026-07-27T12:07:47.322Z
+  modified: 2026-07-28T03:51:54.420Z
 ---
 
 2026-07-26: GS video cut off with **no service error and no restart**. Root cause: the
@@ -102,7 +102,14 @@ flapping *cadence* is genuinely new; the camera stall itself is not.
 **⚠️ SUPERSEDED BY THE 07-27 EVENING TEST BELOW — the "SIGKILL re-wedges the camera"
 theory is NOT the root cause. Read the 07-27 evening section first.**
 
-**AGREED FIX LIST (not yet applied):**
+**AGREED FIX LIST — status re-verified 2026-07-28: items 1, 2, 3 and 4 are ALL still unapplied.**
+(1 confirmed in code at `vision_streaming_node.py:325-326`, which still resets `backoff_s` on the
+stall path; 4 confirmed at `/sys/bus/usb/devices/6-2/power/control` = `auto`.) They were tracked
+nowhere until the 07-28 audit — now filed as **todos §8b**. Note item 3's *rationale* weakened:
+the 07-27 evening revert test showed SIGKILL is not the root cause of the stall, only of failed
+recovery. The fixes are still wanted; the diagnosis behind them is not.
+
+**AGREED FIX LIST (original wording):**
 1. `vision_streaming_node.py:314` — do NOT reset backoff on the stall path.
 2. Add a settle delay with the device closed after any kill (2 s backoff is far too
    short for the camera to be released).
@@ -202,6 +209,12 @@ Orbbec owns `video0=depth Z16, video2/4=IR` — that is wrong.**
 /etc/vision_streaming.conf`, `tee /etc/vision_streaming.conf`, `cat /etc/vision_streaming.conf`,
 `v4l2-ctl`, `dmesg`, `vision_config_manager`, plus `/usr/bin/{systemctl,journalctl,tee,cp}`.
 Earlier sessions wrongly assumed the CLI could not restart the service unattended.
+
+**⚠️ THIS "FINAL STATE" BLOCK IS SUPERSEDED — read the 07-27 night + late-night sections below.**
+By that evening the node was moved forward again to `164420e` (sysfs capture-node fix + stall
+watchdog), the **Orbbec was reconnected** and `rover-camera`/`rover-scan` restarted, and the
+mount TF was measured (`f210102`). Nothing in the block below about the reverted `1551b0b` node,
+the unplugged Orbbec, or "L5 blocked" is still true. Kept for the reasoning only.
 
 **FINAL STATE 2026-07-27 18:19 — user confirms video feed working:**
 - node reverted to **`1551b0b`** (the original 125-line version, NO watchdog at all) — built
@@ -336,15 +349,25 @@ landmine present (v2.2.2 fails / v2.2.3 succeeds) and **live with the real QGC c
 `set-cam-params /dev/video1 1280x720 30 --format MJPG` persisted to conf AND ffmpeg,
 stream stayed up. codex-work `94e5ef6`.
 
-**Camera is now 1280x720 MJPG 30fps @ bitrate 2000K — user confirmed KEEP (07-28).**
+**⚠️ DO NOT RECORD THE CAMERA MODE IN MEMORY — RULE ADDED 2026-07-28.** An earlier version of
+this line asserted "now 1280x720, user confirmed KEEP"; by the time it was written the live
+conf was already back to 640x480, and that wrong claim had propagated into MEMORY.md,
+`COORDINATION.md:67` and `system_companion.md:28`. codex-work commit `ae9e880` is even titled
+"camera stays at 1280x720" while its diff does `1280x720 → 640x480`. **Resolution/fps/bitrate
+are operator-set from QGC and change without notice** ([[feedback_camera_qgc_only]]) — the user
+has explicitly said they will set what they need. Read `/etc/vision_streaming.conf` or the
+running ffmpeg args at the moment you need the value; never quote one from memory.
 
 ### ⚠️ OPEN TODO — add bitrate control on the QGC side (user's idea, agreed, NOT started)
 
-**Why:** raising resolution to 1280x720 left `bitrate = 2000K` untouched, so bits/pixel
-fell 0.129 → **0.072** (1.78x more pixels, same bitrate) ⇒ visibly soft picture. **QGC
-cannot set bitrate** — `set-cam-params` takes resolution/fps/format only, and the tool's
-`3000K` default only applies when the key is *missing*. Do NOT hand-edit the conf as the
-workaround ([[feedback_camera_qgc_only]]); add the control instead.
+**Why:** `bitrate` is not settable from QGC at all, so it never tracks a resolution change —
+whatever mode the operator picks, `bitrate` stays at whatever it was. **QGC cannot set
+bitrate** — `set-cam-params` takes resolution/fps/format only, and the tool's `3000K` default
+only applies when the key is *missing*. Do NOT hand-edit the conf as the workaround
+([[feedback_camera_qgc_only]]); add the control instead. (The original framing of this TODO —
+"720p at 2000K gives 0.072 bits/pixel ⇒ soft picture" — assumed a resolution that was not
+actually live. The *feature* is still wanted; the specific bits/pixel argument only applies
+whenever the camera is genuinely at 720p, so re-derive it against the live mode.)
 
 **Companion half (mine, designed not written):**
 1. `set-cam-params` gains **optional** `--bitrate` (keep optional — the shipped QGC build
