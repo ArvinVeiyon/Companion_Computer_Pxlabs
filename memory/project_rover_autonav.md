@@ -5,12 +5,127 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-07-23T18:33:34.690Z
+  modified: 2026-07-28T18:49:08.321Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
 
-## ⏭ RESUME HERE — 2026-07-23 (planning/alignment session; #20 yaw tuning deferred by user to a floor session)
+## ⏭ RESUME HERE — 2026-07-28 (floor session: #20 baseline captured, WALL CONTACT, collision-stop hardened)
+
+**#20 baseline is MEASURED but NOT finished. Collision-stop hardened + committed (`7261fc7`, NOT pushed).**
+
+### Baseline numbers (floor, armed, AutoNav, gains still 2.0/0.1) — L2 re-PASS
+- forward 0.2 m/s → peak ERPM `[-169, 171, 170, 171]` (all 4 respond, tight)
+- yaw 0.3 rad/s → peak ERPM `[-868, -762, 813, -1065]` = **~5x the forward effort, ~40% L/R asymmetry**
+- watchdog zeroed motors; clean auto-disarm + Hold.
+- **STILL MISSING = achieved body yaw rate.** Commanded-vs-achieved is the number that decides whether
+  the gains are hot or whether skid-steer scrub genuinely costs that much. `l2_test.py` does not record
+  it → wrote **`tools/yaw_response_log.py`** (passive, commands nothing, run it alongside `l2_test.py --live`).
+- `l2_test.py` gained **`--speed` / `--yaw`** so 0.2 and 0.4 m/s can be swept without editing code.
+  The 0.4 m/s leg was never run.
+
+### ⚠️ TRAP 1 — EKF eph grows without bound → AutoNav/Hold refused WHILE ARMED
+`rover_ekf_bridge` feeds EKF2 **velocity only** (by design — wheel position drifts unbounded). With no
+position aiding at all, EKF2's horizontal position variance grows forever. Found this session:
+**eph = 682 m, x = 697 m, y = 1936 m** after long FC uptime, vs **`COM_POS_FS_EPH` = 5.0 m**
+⇒ `local_position_invalid = true`.
+- **While ARMED, PX4 refuses to ENTER any mode requiring local position — AutoNav (23) AND Hold (4).**
+  The rover just stays in Manual and the DO_SET_MODE looks silently ignored.
+- **While DISARMED the requirement is not enforced**, so a `--dry-run` mode switch succeeds and looks
+  fine. Armed-vs-disarmed is the whole difference — do not read a passing dry-run as proof.
+- `local_velocity_invalid` stays **false** throughout (evh ~0.06 m/s, excellent) — only *position* rots.
+- **Fix = reboot the FC** (`VehicleCommand` 246 `PREFLIGHT_REBOOT_SHUTDOWN` param1=1, over DDS; script
+  kept at scratchpad `fc_reboot.py`, refuses unless disarmed + wheels stopped). After reboot: eph
+  682 m → **0.42 m**, x/y → ~0, `local_position_invalid` → false, FC came back **disarmed** (it can come
+  back armed — always check). `autonav_mode` dies on FC restart and systemd restarts it clean.
+- **GROWTH RATE measured 07-28: eph 0.42 m → 1.61 m in ~15 min ≈ 0.08 m/min.** From a fresh reboot that
+  is a **~45-60 minute working window** before the 5.0 m gate bites. Plan floor sessions around it and
+  re-check `eph` before each armed run rather than being surprised mid-session.
+- **This WILL recur** — it is inherent to velocity-only aiding, so budget an FC reboot before floor work.
+  Durable fix is an L5/L6 item: give EKF2 a bounded position source (SLAM pose → `vehicle_visual_odometry`
+  position). Nav2 will hit this too.
+
+### 🔴 FINDING A (2026-07-29, BIGGEST OF THE SESSION) — YAW RATE RUNAWAY, ~21x COMMAND
+Commanded **0.3 rad/s** → the rover actually rotated at **~6.3 rad/s** (≈1 rev/s, **~2 full turns in the
+2 s leg**). Three agreeing sources: raw gyro `sensor_combined.gyro_rad[2]` **sustained 5.70 / peak 8.02
+rad/s**, `/odom` angular.z sustained 7.28, and **the user watching it** ("fast — roughly 2 full turns").
+- This also **exceeds the FC's own `RO_YAW_RATE_LIM` = 1.57 rad/s by ~4x**, so the FC's yaw-rate loop is
+  not controlling at all — this is NOT a gain-trim job, it is a broken/saturating loop.
+- **This is what drove the rover into a wall**, and why yaw "translates" so violently.
+- ⛔ **DO NOT run armed yaw tests until this is fixed.** Forward-only is comparatively tame
+  (~0.08-0.15 m/s).
+- Reproduced identically across 3 armed runs: yaw peak ERPM `[-868,-762,813,-1065]`,
+  `[-1021,-977,764,-1123]`, `[-1030,-993,752,-1129]` vs forward only ~170.
+- **Measure yaw rate from `sensor_combined.gyro_rad[2]`** (99.6 Hz, reads −0.004 rad/s at rest; negate
+  for ROS FLU sense). `vehicle_angular_velocity` is NOT in this FC's dds_topics.yaml.
+  Tool: **`tools/yaw_response_log.py`** — passive, commands nothing, logs gyro vs /odom vs ERPM per burst.
+
+### 🔴 FINDING B (2026-07-29) — `erpm_to_ms` IS WRONG BY ≥2.3x, /odom UNDER-REPORTS SPEED
+`src/rover_odometry/config/rover_odometry.yaml:12` has **`erpm_to_ms: 0.000380`**. Back-calculated from
+the confirmed ~6.28 rad/s spin: 0.31 m track ⇒ ~0.97 m/s per side ⇒ at the measured ~1090 ERPM the true
+scale is **≈0.00089 m/s per ERPM**. Slip only pushes the real value HIGHER, never lower, so ≥2.3x low.
+- Explains forward: commanded 0.2 m/s, `/odom` reported only **0.081 m/s** (true ≈0.15-0.19).
+- **Contaminates everything downstream**: `/odom` → EKF2 EV velocity (via rover_ekf_bridge) → and
+  Nav2 + slam_toolbox at L5. Fix this BEFORE L5; a 2.3x velocity scale error would wreck SLAM.
+- **Clean way to fix it: drive a tape-measured straight distance (e.g. 2 m) and compare `/odom`'s
+  reported travel.** That gives the scale directly, no back-calculation. Do this first next session.
+- Formula in the yaml for reference: `ERPM -> m/s = pi * wheel_diameter / (pole_pairs * gear_ratio * 60)`
+  — so one of wheel_diameter / pole_pairs / gear_ratio is wrong.
+
+### ⚠️ FINDING C — the collision-stop's ±20° cone is BLIND to the sides and rear
+Yaw translation carries the rover sideways toward obstacles the sensor **cannot see at all**. Forward
+clearance is therefore the WRONG metric when planning a yaw test — what matters is open **radius**.
+(Partial self-correction: I first called `/odom` angular.z "physically impossible garbage". Its
+*sustained* value tracks the gyro fine; only its **peaks** are differentiation noise — 47.8 vs 8.02.
+It was not inventing the rotation, the rotation was real.)
+
+### ⚠️ TRAP 1b — `eph` after an FC reboot is a LOTTERY, not a convergence
+An FC reboot usually lands eph ~0.13-0.42 m, but one reboot on 07-28 came up at **14.15 m and STAYED
+there** — flat, creeping up only 0.008 m/min at rest, never coming down. With velocity-only aiding there
+is **no position measurement that can ever shrink eph**, so a bad initial value is permanent for that
+boot. Another reboot fixed it (0.146 m).
+⇒ **Always read `eph` after a reboot before planning an armed run.** Don't wait for it to "settle" — it
+won't. If it comes up over the gate, just reboot again.
+Growth rate depends on motion: ~0.08 m/min while doing drive tests, ~0.008 m/min sitting still.
+
+### ⚠️ TRAP 1c — FC reboot can wedge the AutoNav registration into a restart loop
+After one reboot, `autonav_mode` hit `Registration failed` (it DOES get `RegisterExtComponentReply`,
+then the lib throws) and systemd `Restart=always` looped it every ~12 s forever. A 30 s stop-and-wait
+did NOT clear it — the FC holds the external-mode slot.
+⇒ **Fix = stop the service FIRST, then reboot the FC, then start the service.** Ordering matters: the
+service must not be racing the FC's boot. Rebooting while the node is restart-looping just re-wedges it.
+
+### ⚠️ TRAP 2 — the rover hit a wall WITH the collision-stop working correctly
+Not a malfunction; two design gaps, both now fixed in `7261fc7`:
+1. **Yaw was never gated** (`mode.hpp` only ever zeroed `speed`). A skid-steer spin with unequal L/R
+   wheel speeds **TRANSLATES** — the yaw leg above is 760-1065 ERPM with 40% asymmetry — so yaw drove
+   the rover into a wall the forward brake could see and had no authority over.
+   ⇒ yaw is now **capped** to `collision.blocked_yaw_rate` 0.30 rad/s while blocked (cap, not cancel —
+   it must still rotate away). Reverse still free.
+2. **Thresholds were compared against raw `/scan` range**, but `/scan` originates at `camera_link`,
+   which is BEHIND the bumper. 0.60 m of range was only ~0.26 m of real bumper clearance.
+   ⇒ new `collision.front_overhang`; distances now mean **clearance at the bumper**.
+   Defaults now **stop 0.35 / clear 0.50 at the bumper** (raw 0.69/0.84).
+- **`front_overhang` = 0.337 m is MEASURED, not assumed**: park the rover square against a flat wall
+  with ZERO gap and read the forward-sector min — 178 scans, min == max == 0.337 m, no spread. Agrees
+  with the 0.345 m `base_link`→plate-tip doc figure to within 8 mm. **Re-measure this way after ANY
+  camera remount** (scratchpad `measure_overhang.py`). This is a cheap, high-confidence calibration.
+- My planning error to not repeat: I cleared the run on "front = 1.85 m" by budgeting only the forward
+  legs (~0.7 m) and **ignored translation during the ungated yaw leg**. Budget the yaw leg too, or
+  point the rover at open space for yaw work.
+- Correction worth keeping: I first blamed the 07-26/27 remount for reducing margin. **Wrong — it
+  roughly doubled it** (old cam_x −0.125 sat 0.470 m behind the tip ⇒ 0.60 m raw was only 0.130 m of
+  bumper clearance). No damage from the contact; user confirmed.
+
+### Next session, in order
+1. Reboot the FC first if it has been up a while (check `eph` < 5 m before anything armed).
+2. Reposition facing **several metres of open floor** (the rover ended nose-to-wall).
+3. Re-run the baseline with `yaw_response_log.py` running → get **achieved vs commanded yaw rate**,
+   then sweep `--speed 0.4`. Only then change `RO_YAW_RATE_P/I` (pymavlink `PARAM_SET` on tcp:5760).
+4. Verify the new yaw cap fires armed (it has only been validated passively, disarmed, at the wall).
+5. Then L5.
+
+## ⏭ (previous) 2026-07-23 (planning/alignment session; #20 yaw tuning deferred by user to a floor session)
 **L2 IS DONE. Reflex collision-stop built, validated end-to-end, committed + pushed. Next = yaw-gain tuning (#20), then L5.**
 Full session detail in [[project-l2-floortest-wheel0-reversed]].
 
@@ -263,3 +378,9 @@ bus is fine; the flags are what matter.
 Open question, worth watching during the first long run: do the wheels **stay** awake, or can they
 doze off mid-session? `/odom` dropping out under the EKF bridge while armed would be nasty — though
 the collision-stop's stale-scan fail-safe covers the `/scan` side of that.
+
+## ESC wake-up behaviour at rest (2026-07-26) — not a fault
+At rest only ESC addr 13 stays awake (`esc_online_flags 8`), so `/odom` is **silent** and reports
+`L:1 R:0`. A small **nudge wakes the other three** (flags → 15, `/odom` resumes ~100 Hz).
+This is normal ESC sleep, **not a CAN failure**. **Always check `esc_online_flags == 15` before
+trusting `/odom`** — otherwise you will misread sleeping ESCs as an odometry bug.

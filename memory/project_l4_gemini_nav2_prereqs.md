@@ -157,3 +157,9 @@ voxel layer**, which consumes the full cloud, or Nav2 marks a permanent obstacle
    5° of downward tilt drags the floor into the band from 3.1 m and it reads as a wall dead ahead.
 3. `systemctl restart rover-scan`
 4. Tape-measure one `/scan` return — still outstanding from the 07-24 checklist.
+
+## Camera mount TF — AS-BUILT, measured 2026-07-27 (`ros2_ws f210102`)
+Truth = the defaults in `depth_to_scan.launch.py`: **cam_x 0.00, cam_y 0.00, cam_z 0.305,
+pitch 0.0406, roll 0.0100, range_max 5.0**. Pitch/roll were measured from `/camera/accel/sample`,
+not estimated. **Supersedes the 2026-07-21 figures** (x −0.125 / z 0.420 / zero rpy) — those were
+wrong. This unblocked L5.

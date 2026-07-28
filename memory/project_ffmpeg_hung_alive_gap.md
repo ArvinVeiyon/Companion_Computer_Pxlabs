@@ -1,11 +1,89 @@
 ---
 name: project-ffmpeg-hung-alive-gap
-description: "GS video cut-offs: began as a watchdog gap (hung-alive ffmpeg), ended 2026-07-28 as a PHYSICAL camera fault — alive on ep0, silent on isoc; software+radio+power all excluded by measurement, companion-side USB connector to be inspected"
+description: "INTERMITTENT, NOT closed. FPV camera stops feeding frames while staying enumerated (alive on ep0, silent on isoc). Software/radio/power excluded by measurement. Two live suspects: the LG unit itself vs contact resistance on port 6-2. Working as of 07-28 night but unproven — see the NIGHT section at the end FIRST."
 metadata: 
   node_type: memory
   type: project
   originSessionId: 62813ffb-bde2-479e-8734-481ad4a5907b
-  modified: 2026-07-28T05:02:05.594Z
+  modified: 2026-07-28T17:22:04.264Z
+---
+
+# ⚠️ NOT CLOSED — READ THE "2026-07-28 NIGHT" SECTION AT THE END OF THIS FILE FIRST.
+
+**This header used to read "CLOSED — the LG unit was faulty". That verdict was WRONG and is
+retracted.** The LG was later reconnected and works. What follows in this section is still useful
+as *evidence*, but its conclusion is void: the swap it describes confounded camera identity with
+connector condition, because the port had been mated/unmated ~4 times by then.
+**Everything except the verdict — the diagnostics, the ruled-out list, the measurement lessons —
+remains sound.**
+
+**The swap, as measured** (same port 6-2, same cable, minutes apart) — real data, wrong conclusion:
+
+| | LG Smart Cam (30c9:009d) | See3CAM_CU135 (2560:c1d1) |
+|---|---|---|
+| frames delivered | 38 → 5 → 0 (degrading per open) | continuous, 4400+ |
+| time before stall | ~1.3 s | 73 s+, `drop=0`, no stall |
+| `wfb_tx -p 0` ticks | 0 / 20 s | 27 / 15 s |
+| `bMaxPower` | 500 mA | 100 mA |
+
+**Camera in service as of the NIGHT section: back to the LG** (`usbcam-30c9009d-01.00.00-i00`).
+The See3CAM_CU135 `usbcam-2560c1d1-241D8306-i00` (2560:c1d1, sn 241D8306, 100 mA) is the **on-hand
+spare**. Both were **selected and applied by the user from the QGC camera page** —
+`vision_config_manager` rewrote the conf and restarted the service on its own, in both directions.
+**The ground-side Apply flow is verified working end to end; it is the ONLY supported way to
+change cameras.**
+
+### ⚠️ PROCESS CORRECTION — I got this wrong, don't repeat it
+When the swap left the conf pointing at the dead LG id, I offered to hand-edit
+`/etc/vision_streaming.conf` on the companion. **Wrong.** The user pushed back: the requirement is
+that ANY camera is configurable from the ground, which is what the QGC camera button is for.
+Repointing the conf is not a special case — it is exactly what Apply does. **Never propose a
+companion-side conf edit as a workaround for a camera change.** → [[feedback_camera_qgc_only]]
+
+### THE BEST SINGLE DIAGNOSTIC — reach for this FIRST next time
+Stop the service and run ffmpeg by hand with `-loglevel verbose`; read the **input** summary:
+```
+Input stream #0:0 (video): 40 packets read (6501827 bytes); 38 frames decoded; 0 decode errors
+[vost#0:0/libx264] *** 750 dup!
+frame=788 ... dup=750
+```
+`packets read` / `frames decoded` is the camera's TRUE output, and `dup!` is how many frames x264
+invented to pad the gap. This one command proved in 45 s what days of service-level debugging
+could not: the camera sent 1.3 s of video and quit. **`0 decode errors` also proved the frames it
+does send are perfectly valid** — the `unable to decode APP fields` warning is a benign APP-marker
+complaint, NOT corruption, and was a red herring for days.
+**Corollary — why the flapping looked like "no feed":** x264 keeps emitting RTP from duplicated
+frames, so the GS shows a FROZEN PICTURE, not a black one, and wfb counters keep moving. A live
+RTP stream does not mean a live camera.
+
+### Measurement reliability — learned the hard way this session
+- ✅ **`wfb_tx -p 0` CPU tick delta is the trustworthy signal.** 0 ticks/20 s broken vs 27 ticks/15 s
+  working. It discriminated correctly every time.
+- ❌ **`tcpdump -i lo udp port 5602 | wc -l` is USELESS here** — it read **0 in BOTH states**,
+  including while video demonstrably flowed. `timeout` SIGTERMs tcpdump and its buffered output is
+  discarded; the `-c` form needs a password not in the NOPASSWD set. I cited a 0 from it as
+  evidence; that was unsound. Do not use it.
+- ❌ **ffmpeg CPU ticks alone are NOT a health signal.** A stalled ffmpeg burned ~102 ticks/s
+  (higher than a healthy one) spinning on x264 duplicate frames. I briefly read that as "healthy".
+
+### Ruled out BY TEST, not by assumption — never re-chase
+- **USB autosuspend.** Was `control=auto`, `runtime_status=suspended`. Pinned to `on` (→ `active`),
+  retested 640x480 MJPG: **still zero frames.** Retires agreed-fix item 4 as a *cause* (still fine
+  as hygiene; the pin is NOT persistent, it reverts on reboot without a udev rule).
+- **Bandwidth/resolution.** Failed identically at 1280x720 MJPG, 640x480 MJPG **and 640x480 YUYV** —
+  the lowest-demand mode. Kills the "only dies at high bitrate" theory.
+- ~~**Cable / connector / port.**~~ **RETRACTED — see the NIGHT section.** The replacement camera
+  working on the same port/cable does NOT clear them: the connector had been re-mated ~4 times, and
+  the See3CAM draws 100 mA vs the LG's 500 mA. Contact resistance is still a live suspect.
+- **VBUS note that explains every failed software recovery:** `echo 0/1 > .../authorized` and port
+  resets **do not cut VBUS** on the Pi, so they can never clear a camera's internal state. Only a
+  physical unplug does — which is why a replug bought 22 s and every software reset bought nothing.
+
+### Open, non-blocking follow-up
+**The See3CAM is throttled by its port.** It is a USB 3.0 camera on **bus 6, a 480 Mbps root hub**,
+so 720p MJPG runs ~16 fps and ffmpeg duplicates most frames to pad. **Bus 5 and bus 7 are empty
+5 Gbps root hubs** — moving it there should give full frame rate for free. Not urgent; video works.
+
 ---
 
 2026-07-26: GS video cut off with **no service error and no restart**. Root cause: the
@@ -458,9 +536,98 @@ swapping. No cabling work will help.
 `vision_streaming` left RUNNING with its backoff, so the feed recovers by itself the moment frames
 flow — no restart needed after the physical work.
 
+### 2026-07-28 EVENING — replug done on the SAME port; fault UNCHANGED and now WORSE
+
+User unplugged/replugged the camera (and rebooted, boot 21:58). **It is still on bus 6 port 2** —
+the decisive different-port test was NOT performed. Result: no improvement.
+
+**Measured 22:02-22:12, this boot:**
+- Camera enumerates perfectly at 21:58:20, `devnum 2`, 480 Mbps, `bMaxPower 500mA`, direct on the
+  **root hub — no intermediate hub** in the companion-side path (`lsusb -t`).
+- **ZERO RTP on 5602** — `tcpdump -i lo udp port 5602` for 15 s = **0 packets**. Video `wfb_tx`
+  (`-p 0`) burned **0 ticks/20 s** while mavlink (`-p 16`) and tunnel (`-p 32`) kept ticking.
+- **Pure v4l2, ffmpeg out of the loop, ZERO frames in ALL THREE modes:** 1280x720 MJPG,
+  640x480 MJPG, **and 640x480 YUYV**. Each hung the full timeout. Control transfers on ep0 stayed
+  instant throughout (`brightness 0 / contrast 37`).
+- **Zero uvcvideo / URB / USB errors in `dmesg` across every failed attempt.** (The only kernel
+  WARN this boot is `rtw_mlmeext_disconnect` in `8812eu` at 22:06:02 — WFB NIC driver, unrelated.)
+- Power clean: `throttled=0x0`, 0 dips <4.80 V, 0 dips <4.90 V.
+
+**Autosuspend RULED OUT (fix item 4 tested, not just applied).** `/sys/bus/usb/devices/6-2/power/`
+was `control=auto`, `runtime_status=suspended`. Pinned to `on` (→ `active`) and retested 640x480
+MJPG: **still zero frames.** Worth pinning anyway for hygiene, but it is NOT the cause — do not
+re-chase it. (The pin is not persistent; it reverts on reboot until a udev rule exists.)
+
+**⚠️ Failure at 640x480 YUYV weakens the pure-bandwidth version of the load theory** — the lowest-
+demand mode fails identically. What is still common to every failing case is that *any* streaming
+mode switches the camera to its 500 mA alt-setting and powers the sensor/ISP.
+
+**The degradation shape is the new signal — it points at the camera's own state machine.**
+After the physical replug the camera DID work briefly: 22:02 event was `no new frames for 32s
+after 54s` (= frames seen, then lost). Every later event is `for 30s after 30s` / `for 32s after
+32s` (= `saw_frames` False, **never got frame 1**). So: **fresh physical power-on → works briefly
+(22 s here, up to 722 s previously) → wedges permanently.**
+**Key mechanism note:** `echo 0/1 > .../authorized` and a port reset **do not cut VBUS** on the Pi,
+so they can never clear the camera's internal state — only a physical unplug does. That explains
+why every software-side reset failed while the replug bought 22 s.
+
+**REMAINING DECISIVE TESTS (in order):**
+1. **Different USB port** — still the falsifier, still not done. Free: **bus 6 port 1**, **bus 5**,
+   **bus 7** (both empty 5 Gbps root hubs). Bus 1 = VIA hub (WFB d993c0 + 8821cu), bus 2 = Orbbec,
+   bus 4 = WFB d98f91.
+2. **Different cable** — swap it independently of the port; at 500 mA a marginal cable drops real volts.
+3. **Different host** — plug the camera into a laptop and stream it. This is the cleanest
+   camera-vs-companion isolation and needs no rover disassembly.
+If it dies the same way on another port AND another cable AND another host ⇒ **the LG Smart Cam
+unit is faulty, swap it.** No cabling work will help.
+
+`vision_streaming` left RUNNING (flapping on its backoff) so the feed returns by itself the moment
+frames flow — no manual restart needed after the physical work.
+
 ### New diagnostic worth keeping: prove the radio is idle without trusting the wfb counter
 The wfb API `video tx` counter is unreliable (documented above). Instead sample **wfb_tx CPU ticks**:
 the video instance is the one with **`-p 0 ... -k 8 -n 12`**; mavlink is `-p 16 -k 1 -n 3`, tunnel
 `-p 32 -k 2 -n 4`. During the outage the video wfb_tx burned **0 ticks in 20 s** while mavlink and
 tunnel kept ticking ⇒ nothing is being handed to the radio, and the radio is alive. Cross-checks a
 frozen `packets.incoming` honestly.
+
+---
+
+# ⚠️ 2026-07-28 NIGHT — REOPENED. MY "LG IS DEAD HARDWARE" VERDICT WAS WRONG.
+
+The user reconnected the **LG Smart Cam** (same port 6-2, devnum 5) and re-applied it from QGC
+(`camera_id` back to `usbcam-30c9009d-01.00.00-i00`). **It works.** So the closure above — and the
+`✅ CLOSED / the unit was faulty` verdict — is **overturned**. Do not repeat that claim.
+
+**What the journal actually shows (the user reported "working without any issue"):**
+- 3 stalls in the first ~90 s after reconnect — 22:37:54 (`for 12s after 40s`), 22:38:34
+  (`for 32s after 32s`), 22:39:04 (`for 12s after 24s`) — the identical `camera stopped feeding`
+  signature.
+- It settled on the 4th start (22:39:18) and then ran **9 min 22 s clean**, with video `wfb_tx -p 0`
+  taking **22 ticks/20 s** = real frames on air.
+- ⚠️ **9.5 min proves nothing on its own** — the LG's historical best healthy run was **722 s (12 min)**.
+  A run must beat ~20 min, ideally an hour plus a reboot, before "fixed" means anything.
+
+**Why the swap test did NOT prove what I said it proved.** I concluded "different camera works ⇒
+the LG unit is faulty". But by then the connector had been mated/unmated ~4 times. **Repeated
+insertion cycles wipe oxide off a marginal contact** — a classic temporary fix. So the swap
+confounded *camera identity* with *connector condition*.
+
+**TWO LIVE HYPOTHESES, still unseparated:**
+- **(a)** intermittent internal fault in the LG.
+- **(b)** **contact resistance on port 6-2**, temporarily cleaned by tonight's replug cycles.
+  This fits the asymmetry the swap actually showed: the See3CAM draws **100 mA** and worked
+  instantly and continuously; the LG draws **500 mA** and needed 3 restarts to settle. A
+  high-resistance contact hurts the 500 mA device far more. **The connector theory is NOT retired.**
+
+**How to separate them (cheapest first):**
+1. **Soak the LG where it is.** >20 min beats its record; >1 h and across a reboot is real evidence.
+2. If it stalls again: move the LG to **bus 5 or bus 7** (empty 5 Gbps root hubs). Works there but
+   not on 6-2 ⇒ **(b)**, the port/connector.
+3. Still stalls on a different port ⇒ **(a)**, the camera; the See3CAM is the on-hand spare.
+
+**LESSON — do not repeat.** "It works now" after several variables changed at once is not a root
+cause, and I stated one anyway. This file already warned about exactly that (see the 07-27
+"⚠️ NOT ISOLATED — 4 variables changed at once" note) and I still did it. **When hardware starts
+working after a physical intervention, report WHAT CHANGED and WHAT IS UNPROVEN — do not name a
+culprit.** The diagnostics in this file remain sound; only the verdict was wrong.
