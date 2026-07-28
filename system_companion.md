@@ -1212,3 +1212,5 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 - M	System_files/etc/vision_streaming.conf
 **2026-07-27 08:31**
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-07-28 09:08**
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
