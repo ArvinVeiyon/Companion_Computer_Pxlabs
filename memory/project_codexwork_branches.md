@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 15cc4d60-122c-4a4b-9f9b-8e1a15ef71a0
-  modified: 2026-07-19T07:31:08.795Z
+  modified: 2026-07-28T18:58:16.963Z
 ---
 
 `~/codex-work` (ArvinVeiyon/Companion_Computer_Pxlabs) has both `origin/main` and `origin/master` on GitHub, diverged with no common merge (`git merge-base --is-ancestor origin/main origin/master` → no).
@@ -24,3 +24,18 @@ auto-commit only picks up already-tracked files — newly created memory files s
 `~/codex-work/memory/` until someone `git add`s them once (10 files were missing). After writing
 a NEW memory file, check `git status ~/codex-work/memory/` and add+push it. Also: mirror has a
 stray `claude_memory.md` not present in live memory — left alone, not verified.
+
+**CORRECTION 2026-07-29 — this note understated the problem. Auto-sync does not copy memory AT ALL,
+new or existing.** Read `~/codex-work/scripts/system_files_sync.sh`: it rsyncs only the paths in
+`System_files_list.txt`, then runs exactly
+`git add System_files/ System_files_list.txt scripts/px4_mavlink.py`. `memory/` appears in neither the
+rsync list nor the git add, so **live memory edits never reach the mirror by themselves** — the mirror
+had drifted since 10:35 that day and still held the pre-compression long-form `MEMORY.md`.
+- **Back up by hand:** `cp -p ~/.claude/projects/-home-roz/memory/*.md ~/codex-work/memory/`, then
+  `git add memory/ && git commit && git push`.
+- ⚠️ **Never `rsync --delete` the mirror.** It is a **UNION of two memory scopes** — 3 files
+  (`probe-formats-every-op-watch-item.md`, `vision-config-manager-setter-exception-gap.md`,
+  `vision-streaming-outage-2026-07-27.md`) exist there only because they belong to
+  `~/.claude/projects/-home-roz-codex-work/memory/`. A mirroring delete would destroy them.
+- The service also **skips entirely when the FC reports armed**, so it is unreliable during work
+  sessions regardless.

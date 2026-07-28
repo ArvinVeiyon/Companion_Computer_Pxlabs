@@ -1,6 +1,7 @@
 # Vind-Roz Platform Memory
 > Compressed semantic memory. Auto-loaded each session. Also Phi-3 system prompt (offline AI).
 > Live: ~/.claude/projects/-home-roz/memory/ | Backup: ~/codex-work/memory/ → GitHub ArvinVeiyon/Companion_Computer_Pxlabs
+> ⚠️ **THE BACKUP IS MANUAL — NOTHING SYNCS MEMORY AUTOMATICALLY** (verified 2026-07-29). `system_files_sync.sh` rsyncs only `System_files_list.txt` paths and only runs `git add System_files/ System_files_list.txt scripts/px4_mavlink.py` — `memory/` is in neither. To back up: `cp -p ~/.claude/projects/-home-roz/memory/*.md ~/codex-work/memory/` then git add/commit/push. **Never `rsync --delete`** — the mirror is a UNION of this scope and the codex-work scope below.
 > ⚠️ A SECOND Claude memory scope exists at `~/.claude/projects/-home-roz-codex-work/memory/` (used when cwd is ~/codex-work). It is NOT auto-loaded here — check it after any codex-work session.
 
 ## [MEMORY_FILES]
