@@ -1,14 +1,131 @@
 ---
 name: project-ffmpeg-hung-alive-gap
-description: "INTERMITTENT, NOT closed. FPV camera stops feeding frames while staying enumerated (alive on ep0, silent on isoc). Software/radio/power excluded by measurement. Two live suspects: the LG unit itself vs contact resistance on port 6-2. Working as of 07-28 night but unproven — see the NIGHT section at the end FIRST."
+description: "FPV camera stops feeding frames while staying enumerated. 07-30: LG proven unrecoverable by ANY software means (driver rebind, full USB re-enumeration, lowest-bandwidth mode, GStreamer — all 0 frames); See3CAM swapped in on the SAME port works. Fault is the LG or the 6-2 connector under 500 mA load. Read the 2026-07-30 section FIRST."
 metadata: 
   node_type: memory
   type: project
   originSessionId: 62813ffb-bde2-479e-8734-481ad4a5907b
-  modified: 2026-07-28T17:22:04.264Z
+  modified: 2026-07-30T18:07:07.382Z
 ---
 
-# ⚠️ NOT CLOSED — READ THE "2026-07-28 NIGHT" SECTION AT THE END OF THIS FILE FIRST.
+# ⚠️ READ THE "2026-07-30" SECTION IMMEDIATELY BELOW FIRST. It supersedes the 07-28 night section.
+
+---
+
+# 2026-07-30 — LG proven unrecoverable in software; See3CAM swapped in and working
+
+## The stall histogram — ~66% of "stalls" are NOT stalls
+186 `no new frames` events since 07-25, bucketed by ffmpeg runtime at failure:
+
+| runtime at failure | count | meaning |
+|---|---|---|
+| **exactly 32 s** | **97** | `STARTUP_GRACE_S`(30) + one 2 s watchdog tick, `saw_frames` never True |
+| 30 / 34 / 36 s | 12 / 8 / 5 | same band |
+| 38–70 s | ~30 | ambiguous |
+| >100 s (130,210,252,256,310,448,566,616,722) | **9** | the only TRUE mid-stream stalls |
+
+**A failure at 32 s with `stalled_for == runtime` means ffmpeg got ZERO frames from the very first
+one.** Those are **cold-start failures**, not stalls. Only 9 of 186 events are the "streams fine
+then dies" case this file was named for.
+
+**The recovery path is the real outage amplifier.** 07-28 10:17:46 → 10:36:34 = **19 consecutive
+32 s failures = 20 minutes of dead video from ONE initial glitch.** Mechanism: stall → ffmpeg wedged
+in a v4l2 ioctl ignores SIGTERM → SIGKILL at 5 s → camera never gets a clean STREAMOFF → next open
+yields no frames → 30 s grace → SIGKILL → repeat. At max backoff the cycle is
+**30 s backoff + 32 s grace + 5 s kill ≈ 67 s per attempt.**
+
+## ⛔ SOFTWARE USB RECOVERY DOES NOT WORK — this kills todo 8b item 3
+Tested against a live-wedged LG, in escalating order. **Every one returned 0 frames:**
+
+| test | result |
+|---|---|
+| `ffmpeg -c copy` (NO encoder in the pipeline) | `0 packets muxed (0 bytes)` in 20 s |
+| `uvcvideo` unbind → rebind `6-2:1.0` | 0 packets |
+| USB de-authorize → re-authorize (`6-2/authorized` 0→1, full re-enumeration) | 0 packets |
+| retry at **640x480** (lowest isoc bandwidth) | 0 packets |
+| **GStreamer** `v4l2src ! image/jpeg ! fakesink` | 0 buffers, hung |
+
+**Do NOT build "escalate to a USB port reset after N zero-frame starts" (todo 8b item 3) — it is
+measured NOT VIABLE.** Only physical VBUS removal clears the camera. The node can be made to fail
+*gracefully and loudly*, but it cannot be made to self-heal on this hardware.
+
+**Kernel is silent throughout**: zero `-71`/`-110`, no babble, no `Not enough bandwidth`, no port
+reset, no xhci errors during any stall. `throttled=0x0`, core 0.85 V. The device stops filling isoc
+packets and the host controller is perfectly happy. (One `uvcvideo 6-2:1.1: Failed to resubmit video
+URB (-1)` appeared at 23:01, but during the unbind test — not organically.)
+
+## The swap — and what it does NOT prove
+See3CAM_CU135 fitted to the **same port 6-2**, same cable path, same bus, same host controller,
+same ffmpeg command → **worked immediately**, and recovered from a mid-stream disruption on the very
+next retry (something the LG never did in 5+ minutes of retries).
+
+⚠️ **This still does not separate "LG internally faulty" from "connector 6-2 bad under load".**
+See3CAM draws **100 mA**, LG draws **500 mA** — a contact-resistance fault produces exactly this
+result. `ext5v-report` reads the rail UPSTREAM and is blind to a drop at the connector.
+**Discriminator not yet run:** put the LG in the free port `4-1` (different host controller,
+different power path) and soak. Blocked — enclosure is assembled.
+
+## ✅ CORRECTION: the "See3CAM only does ~16 fps on 480M bus 6" note was WRONG
+That claim (in MEMORY [SENSORS] and this file's lineage) is **retracted**. It was measured in a dark
+room and the cause misattributed to USB 2.0 bandwidth. Measured 07-30 at 1280x720 MJPG on bus 6-2:
+
+| exposure | fps |
+|---|---|
+| `auto_exposure = Auto Mode` (dark room, 23:30) | **16.6** |
+| manual, `exposure_time_absolute = 50` (5 ms) | **59.4** |
+| manual, `exposure_time_absolute = 10` (1 ms) | **59.6** |
+
+**The camera does a genuine 60 fps at 720p MJPG over USB 2.0.** Long auto-exposure in low light
+caps frame rate — normal camera physics, not a bus limit. The tell that should have caught this
+sooner: fps was ~15-16 at 640x480, 720p **and** 1080p alike. A bandwidth limit would have made the
+small resolution much faster; it didn't. **You do NOT need a blue USB3 port for full frame rate.**
+Expect 60 fps outdoors/daylight, ~16 fps indoors at night. `dup_frames=0, drop_frames=0` throughout.
+
+⚠️ **Toggling `auto_exposure` mid-stream stalls this camera for >12 s and trips the watchdog** — I
+caused a false-alarm stall doing exactly that. Stop the service before touching v4l2 controls.
+Also: `exposure_time_absolute` is flagged `inactive` in Auto Mode and writes to it return
+`Permission denied` (a v4l2 rule, NOT sudo) — set auto→manual, write, then auto again.
+
+## New code defects found in `vision_streaming_node.py` (all UNAPPLIED)
+Verified against the live file 07-30; line numbers from that read.
+
+1. **`-progress` has NO `frame=` key when `-c copy` is used.** Keys present in copy mode are only
+   `bitrate drop_frames dup_frames out_time out_time_ms out_time_us progress speed total_size`.
+   The stall watchdog exists **only because libx264 is in the pipeline**. ⚠️ **Any move to MJPEG
+   passthrough would silently disable the watchdog** (`saw_frames` never True → kills a healthy
+   stream every 30 s forever). If that path is ever taken, key liveness on **`out_time_us`**.
+2. **`fps` in the conf is never read.** Node parses `resolution`/`bitrate`/`format` only; no
+   `-framerate` is ever passed. Verified live: QGC now has `fps = 60` and the running command line
+   has no `-framerate`. The QGC control does nothing and the readout is not trustworthy.
+3. **No `-g` / GOP control.** x264 default `keyint` = 250 frames ≈ **8.3 s at 30 fps**. Over a lossy
+   radio one lost keyframe smears/freezes for up to 8 s. Strongest candidate for what reads as
+   "WFB is flaky". Fix: `-g 30` (1 s) or intra-refresh, plus `-tune zerolatency`.
+4. **`frame=0` counts as progress** (`drain_progress`, ~line 257): `0 > last_frame(-1)` advances
+   `last_progress_at` without setting `saw_frames`, so the 30 s grace silently becomes ~50 s.
+   Observed: `no new frames for 32s after 50s`.
+5. **Backoff reset on the stall path** (~lines 325-326) — still unapplied, as todo 8b(a) says.
+6. **`rclpy.shutdown()` RCLError** (~line 363) fires on **every QGC camera change**, not just manual
+   restarts — confirmed live during the 07-30 swap. Harmless (systemd logs `Deactivated
+   successfully`) but dumps a traceback exactly when you'd be checking whether the swap worked.
+7. **The `camera_name` fallback is dangerous.** `/dev/video0` did not exist for most of 07-30
+   (nodes were video8/video9). If sysfs resolution ever fails, ffmpeg gets pointed at a node that
+   is not the camera. It only worked after the swap **by luck**.
+
+## Pi 5 has NO hardware H.264 encoder — encoder choice is not a lever
+`v4l2h264enc` MISSING; `v4l2-ctl --list-devices` shows only `rpivid`, which is **decode-only**.
+(ffmpeg lists `h264_v4l2m2m` but that is a generic wrapper with no m2m encoder device to bind.)
+So H.264 is software-only either way. **GStreamer 1.24.2 is installed with every needed plugin
+(`v4l2src`, `x264enc`, `rtph264pay`, `udpsink`) and offers no performance advantage** — same x264
+cost. Its only real edge is surfacing device faults as bus messages instead of scraped stderr.
+**Recommendation: stay with ffmpeg.** `-progress` is what makes the watchdog possible at all.
+Measured CPU: LG 720p30 ≈ 84.6% of a core; See3CAM 720p16 ≈ 48.6%.
+
+**MJPEG passthrough** (camera already emits MJPEG; you decode → yuv420p → re-encode) would drop CPU
+to ~zero and is all-keyframe (no error propagation — genuinely better over a lossy link), but
+720p30 MJPEG is ~8-15 Mbit/s vs the 13 Mbit/s MCS1 PHY at ~34% used — **it does not fit at 720p.**
+640x480 (~3-5 Mbit/s) would. See defect 1 before attempting it.
+
+---
 
 **This header used to read "CLOSED — the LG unit was faulty". That verdict was WRONG and is
 retracted.** The LG was later reconnected and works. What follows in this section is still useful

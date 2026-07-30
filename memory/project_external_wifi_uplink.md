@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 711b1827-1cb0-4b8c-bdac-d95d7be22cd4
-  modified: 2026-07-26T02:58:41.857Z
+  modified: 2026-07-30T18:07:54.063Z
 ---
 
 2026-07-25: Closing the enclosure (metal top plate → Faraday effect) killed/weakened the RPi5 onboard WiFi (`wlan0`, brcmfmac BCM4345). Added an **external USB adapter** as the primary management uplink.
@@ -39,6 +39,26 @@ Next boot, confirm with `ip link show wlan0` (should not exist) + `lsmod | grep 
 **TODO #2 stays open until that reboot check passes.** If the external RTL8821CU ever fails after
 this takes effect there is no onboard-Wi-Fi fallback — recover via WFB → relay:2222 → 10.5.5.87:22,
 or comment out the `dtoverlay=disable-wifi` line.
+
+### 🔴 CORRECTION #2, 2026-07-30 — the 07-26 fix was RIGHT but the OVERLAY NAME IS WRONG FOR PI 5
+Reboot verification finally happened (boot 2026-07-30 22:41:45). **It still did not work.**
+- `brcmfmac` + `brcmfmac_wcc` **still loaded**, bound via **sdio**, radio live as **`wlan1`** on
+  wiphy0, parked at **channel 34 / 5170 MHz**. Interface is DOWN (netplan doesn't configure it), so
+  it is not beaconing — but the radio IS initialized.
+- The 07-26 inline-comment fix was correct and is intact: the line sits in `[all]` at config.txt:69
+  with its comments on their own lines above. **The directive itself is simply the wrong one.**
+- **ROOT CAUSE: Pi 5 needs a different overlay.** Both files exist in `/boot/firmware/overlays/`:
+  `disable-wifi.dtbo` **and `disable-wifi-pi5.dtbo`**. This board needs the **`-pi5`** variant.
+- **FIX (not applied — needs a reboot to verify, again):** `dtoverlay=disable-wifi-pi5`.
+  More robust alternative that cannot be silently ignored by the firmware: **blacklist `brcmfmac`**
+  at the driver level. `rfkill` is NOT installed on this box.
+- ⚠️ **This is the SECOND time this one line has silently no-op'd** (07-25 inline comment, 07-30
+  wrong overlay name). **Do not mark TODO #2 done again without a post-reboot `lsmod | grep
+  brcmfmac` returning empty.** An `ip link` check alone is not enough — the interface name changed
+  from `wlan0` to `wlan1`, so a check keyed on `wlan0` would have falsely passed.
+- **Related drift:** the `wifi0` udev rename rule from [[feedback_wlan0_persistent_name]] is **GONE**
+  — nothing under `/etc/udev/rules.d/` or `/etc/systemd/network/` references `wifi0`. That is why
+  the radio came up as `wlan1` (kernel default, USB WFB adapters took the wlx* names).
 
 ### (superseded, and see the correction above) Onboard wlan0 DISABLED 2026-07-25 (was: finalizes TODO #2): wlan0 = phy0 = brcmfmac (USB adapters are phy1/2 rtl88x2eu WFB, phy3 rtw_8821cu = this uplink). (1) removed wlan0 stanza from netplan (commented) + `ip link set wlan0 down` → out of routing immediately, only .240 default route remains. (2) added `dtoverlay=disable-wifi` to `/boot/firmware/config.txt` (beside existing `disable-bt`; backup `.bak.*`) → firmware-level removal of onboard radio, kills 5GHz WFB ch161 interference. **Rebooted 2026-07-25 to finalize** — after reboot wlan0 no longer exists; uplink = wlx90de80d824d6 @ 192.168.1.240. rfkill NOT installed on this box. Supersedes [[feedback_wlan0_persistent_name]] wifi0-rename plan (radio now gone entirely).
 - Note: onboard wlan0 still weakly associated (192.168.1.208, metric 600) during apply — marginal, not fully dead, but external wins routing. Relates to TODO #2 (disable onboard wifi0/ex-wlan0, 5GHz WFB interference).

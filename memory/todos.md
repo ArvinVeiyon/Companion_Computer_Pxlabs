@@ -3,6 +3,78 @@
 
 ---
 
+## 🔴🔴 [WFB-NG — HIGH PRIORITY] — added 2026-07-30, WORK THIS BLOCK FIRST
+> Measured, not theorised. Raw numbers: [[reference_wfb_ng]]. **Read W0 before touching anything.**
+
+### W0. ⛔ FIRST PRINCIPLE — the drone radio is HEALTHY. Stop blaming WFB by default.
+First real link measurement (07-30, WFB JSON API on `127.0.0.1:8102`):
+- **0 dropped / 0 truncated / 0 fec_timeouts over 117,570 video packets** (whole session, cumulative)
+- TX latency 6-35 us avg, 361 us worst | RF temps 32-39 C | `throttled=0x0`
+- **~34% airtime** of a 13 Mbit/s MCS1 PHY (~367 pkt/s, ~3.9 Mbit/s injected) — headroom exists
+- `mavlink tx`: offers 179 kbit/s, injects 549 kbit/s (k=1/n=3), **drops NOTHING**
+
+**When video breaks, WFB is sitting on an EMPTY input queue.** The 07-30 session proved the FPV
+outage was a dead camera while the radio was flawless. **Suspect the source before the link.**
+How to check in 5 s: TCP-connect `127.0.0.1:8102`, read newline-delimited JSON, look at
+`video tx . packets.incoming[0]`. If it is 0/s, the radio is fine and the camera is dead.
+(Counters are `[per_second, cumulative]`. Do NOT use the `wfb-cli` TUI for this.)
+
+### W1. 🔴 TODO #3 and TODO #4 ARE PROBABLY THE SAME BUG — treat them as one
+**Hypothesis (strong, not yet confirmed on the relay):** the GS `wfb-server` EAGAIN crash loop from
+TODO #3 *is* the cause of the "uplink dead / downlink 15%" symptoms in TODO #4.
+
+Evidence chain:
+- Drone offers 179 kbit/s downlink and **injects 100% of it, 0 dropped** ⇒ the ~85% loss is NOT on
+  the drone. It happens on the **GS/relay side**. (Matches the older "176 kbit/s → 26 kbit/s" note.)
+- TODO #3: GS wfb-server dies with `BlockingIOError EAGAIN` (socket buffer overflow), **19 restarts
+  observed**, each producing "New session detected" + decrypt errors + uplink loss spikes.
+- One restart explains every #4 symptom at once: 15% downlink delivery; 8 uplink commands arriving
+  0 times; QGC "Unknown <number>" (low-rate mode messages disproportionately land in the gaps).
+- Uplink FEC behaviour corroborates a **burst**, not a weak signal: `mavlink rx` lost **546** blocks
+  and FEC recovered only **83** — with k=1/n=3 (three full copies of every block) a single lost copy
+  is trivially recoverable, so losing all three means the losses come in bursts. Measured at
+  **-28 dBm / 29 dB SNR on a bench link.**
+- Cause of the socket overflow is volume: **549 kbit/s MAVLink + 3.2 Mbit/s video** into a 2 MB ring.
+
+**⛔ Consequence: "raise GS TX power" (TODO #4's original theory) will NOT fix burst loss.** Deprioritise it.
+
+### W2. Fix order — do these in sequence, re-measure between each
+1. **Trim PX4 MAVLink stream rates.** 179 kbit/s is a LOT — near-full 1400 B packets 16x/s, tripled
+   by FEC to 549 kbit/s = ~13% of airtime. This is the main thing pressurising the GS socket, so it
+   attacks W1 at the source. **Cheapest lever available.**
+2. **Raise `rx_ring_size` on the relay** 2 MB -> 4-8 MB (`/etc/wifibroadcast.cfg`) = TODO #3 Option A.
+3. **Re-measure the 176 -> 26 kbit/s ratio.** Expect most of it to close. If it does, #3 and #4 both die.
+4. **Verify the hardcoded GS peer** `10.5.6.50` (`gs_video` :5600, `gs_mavlink` :14550) — a fixed IP
+   on a subnet unrelated to the 10.5.5.0/24 tunnel. **If QGC is not at that address, some of this
+   "loss" is just packets delivered to the wrong host while the radio is perfect.**
+5. **Then** the antenna imbalance (W3) and only then TX power. Both real, neither is what's biting.
+
+### W3. 🔴 RX antenna imbalance — one weak chain on BOTH cards
+| NIC-A ant1 | -28 dB | NIC-B ant257 | -33 dB |
+|---|---|---|---|
+| **NIC-A ant0** | **-46 dB** | **NIC-B ant256** | **-42 dB** |
+
+Stable to +/-1 dB across every sample ⇒ **not a fade**. 18 dB ~= 8x range; half the diversity is
+contributing nothing, on both cards identically. Check u.FL seating / pigtails / antenna type on the
+weak chain of each card. Not yet investigated.
+
+### W4. Evidence still needed (cannot be gathered from the drone)
+`journalctl -u wifibroadcast@gs` on the relay (`ssh vind-admin@10.5.5.77`) — confirm whether the
+EAGAIN restarts are **still** happening and at what rate. **This confirms or kills W1 quickly.**
+Also grab the GS-side `rx` stats from its API on port **8103** for the downlink loss picture.
+
+### W5. MTU margin is thin (hardening, no live fault)
+`radio_mtu = 1445`; ffmpeg RTP averages 1354 B and `truncated=0` over 117k packets. But ffmpeg's RTP
+default `pkt_size` is **1472 (> 1445)** with no guaranteed margin. Pin `-pkt_size 1400` when the
+vision-node flags are applied (session item 3).
+
+### W6. Radio headroom is now MEASURED — unblocks the 07-28 bitrate item
+That item recorded headroom as "NEVER MEASURED". It is now: **~34% airtime used of a 13 Mbit/s MCS1
+PHY.** There IS room to raise video bitrate — but do W2.1 (trim MAVLink) first so you spend the
+headroom on picture instead of telemetry.
+
+---
+
 ## [WFB-NG FIXES] — do after OS backup
 
 ### 1. Fix GS clock / NTP for real (Relay station vind-rly) — RECURRED 2026-07-11
@@ -10,11 +82,18 @@
 Real fix needs a **local NTP server** the relay can actually reach — companion (10.5.5.87) is reachable from relay (10.5.5.77) over the WFB tunnel and has real internet+correct time. Plan: install `chrony` on companion in server mode, allow 10.5.5.0/24, then point relay's `systemd-timesyncd` `NTP=` at 10.5.5.87.
 Attempted 2026-07-11, aborted mid-install — see `project_relay_ntp_setup.md` and `project_companion_network_degraded.md`.
 
-### 2. ✅ DONE 2026-07-25 — Disable drone onboard Wi-Fi (Drone)
-Onboard radio (wlan0/phy0 brcmfmac) fully disabled: removed from netplan + `dtoverlay=disable-wifi`
-in /boot/firmware/config.txt (beside disable-bt), rebooted → radio gone at firmware level, no more
-5GHz WFB interference. Uplink replaced by external USB RTL8821CU `wlx90de80d824d6` @ static
-192.168.1.240 (onboard was blocked by metal enclosure lid anyway). See project_external_wifi_uplink.md.
+### 2. 🔴 STILL OPEN — Disable drone onboard Wi-Fi (Drone) — FAILED VERIFICATION 2026-07-30
+**Twice marked done, twice wrong.** Reboot check finally ran (boot 07-30 22:41:45): `brcmfmac` +
+`brcmfmac_wcc` **still loaded**, bound via sdio, radio live as **`wlan1`** on wiphy0 at
+**ch34 / 5170 MHz**. DOWN (netplan doesn't configure it) so not beaconing, but initialized.
+**Root cause: wrong overlay name for this board.** `/boot/firmware/overlays/` contains BOTH
+`disable-wifi.dtbo` and **`disable-wifi-pi5.dtbo`** — the Pi 5 needs the **`-pi5`** variant.
+The 07-26 inline-comment fix was correct and is intact; the directive itself is just wrong.
+**FIX (not applied, needs a reboot to verify):** `dtoverlay=disable-wifi-pi5`, or blacklist
+`brcmfmac` at driver level (cannot be silently ignored by firmware). `rfkill` not installed.
+⚠️ **Verify with `lsmod | grep brcmfmac` returning EMPTY — not `ip link show wlan0`.** The interface
+renamed to `wlan1`, so a wlan0-keyed check falsely passes. Detail: project_external_wifi_uplink.md.
+Uplink meanwhile = external USB RTL8821CU `wlx90de80d824d6` @ static 192.168.1.240, working.
 
 ### 3. Increase WFB ring buffer on GS OR reduce drone video bitrate (Relay station)
 Root cause: GS wfb-server crashes with BlockingIOError EAGAIN (socket buffer overflow).
@@ -38,6 +117,14 @@ Asymmetry may still indicate GS TX power too low.
 ```bash
 iw dev wlx00c0cab6db3b info
 ```
+**⛔ UPDATE 2026-07-30 — TX power is probably NOT the answer; deprioritise it.** First real link
+measurement (WFB JSON API on 8102) at **−28 dBm, 29 dB SNR on a bench link**: `mavlink rx` lost
+**109 / 4884** blocks and FEC recovered only **27**. MAVLink runs **k=1/n=3 — three full copies of
+every block** — so losing all three at point-blank range means **burst loss (interference or a
+starved GS transmitter), NOT link budget.** More power does not fix burst loss.
+**Check these first instead:** (a) the hardcoded GS peer `10.5.6.50:5600/:14550` in
+`/etc/wifibroadcast.cfg` — wrong-IP looks exactly like "WFB broken"; (b) the onboard brcmfmac radio
+still live at ch34 (todo #2); (c) the RX antenna imbalance below. → `reference_wfb_ng.md`
 
 ### 6. vision_streaming node: no ffmpeg watchdog — ✅ DONE 2026-07-19
 Watchdog implemented + verified live (ros2_ws a561e93, multicam upgrade phase B):
@@ -78,11 +165,19 @@ From [[project_ffmpeg_hung_alive_gap]]; all three were agreed/designed but never
   vision_streaming_node.py:325-326` still resets `backoff_s` to 2 s after a run >60 s that
   **ended in a stall**. Longer waits are what actually recover the camera (16 s → 256 s of
   good video; 2 s → 14 s, dead), so the node earns a working delay and throws it away.
-  Agreed fix = do NOT reset on the stall path. Item 2 of that list (settle delay with the
-  device closed after a kill) and item 3 (escalate to a USB port reset of 6-2 after N
-  consecutive zero-frame starts) are also unapplied.
+  Agreed fix = do NOT reset on the stall path. **STILL UNAPPLIED, re-verified live 07-30.**
+  Item 2 of that list (settle delay with the device closed after a kill) is also unapplied.
+  - **❌ CLOSED 2026-07-30 — item 3 (escalate to a USB port reset of 6-2 after N consecutive
+    zero-frame starts) is NOT VIABLE. Do not build it.** Measured against a live-wedged LG:
+    uvcvideo unbind/rebind → 0 frames; full USB de-authorize/re-authorize → 0 frames;
+    retry at 640x480 → 0 frames; GStreamer → 0 buffers. **No software reset recovers this
+    camera** — only physical VBUS removal. Replace the idea with: cap consecutive cold-start
+    failures, then log a clear "camera requires physical replug" ERROR instead of looping
+    silently for 20 minutes. → [[project_ffmpeg_hung_alive_gap]]
 - **(b) USB autosuspend** — `/sys/bus/usb/devices/6-2/power/control` is still `auto`
   (2000 ms). Pin to `on` via udev. "Fix regardless" per the 07-27 evening finding.
+  **Priority DOWN 07-30**: hygiene only, already tested and NOT a cause, and the camera on 6-2
+  has since been swapped. Do it if a udev rule is being written anyway; don't make a job of it.
 - **(c) vision_config_manager v2.3.0 — bitrate control** (feature, not a fix; user's idea,
   agreed, designed, NOT started). Companion half: optional `--bitrate` on `set-cam-params`
   (MUST stay optional — the shipped QGC build calls it without); `update_cam_params_config()`
@@ -301,3 +396,66 @@ Raising the camera to 1280x720 left `bitrate = 2000K`, dropping bits/pixel 0.129
 pxlabs_cli/PXLABSApi/CompanionControl.qml. Full design + constraints (FEC k=8/n=12,
 radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) in
 project_ffmpeg_hung_alive_gap.md. Stopped here 2026-07-28: usage limit.
+
+---
+
+## [2026-07-30 SESSION] — WFB-ng + vision node deep analysis
+> Full detail: [[project_ffmpeg_hung_alive_gap]] (vision) and [[reference_wfb_ng]] (radio).
+
+### Closed / killed today
+- ❌ **8b item 3 (USB port-reset escalation) — KILLED, not viable.** See item 8b above.
+- ✅ **07-26 opened-item 1 ("verify `dtoverlay=disable-wifi` after next reboot") — VERIFIED, and it
+  FAILED.** Wrong overlay name for Pi 5. Folded back into **todo #2, which is REOPENED**.
+- ✅ **"Is it ffmpeg / the node / WFB?" — ANSWERED, definitively NO to all three.** The LG camera was
+  the fault. ffmpeg, libx264, GStreamer, uvcvideo, USB enumeration, isoc bandwidth, the vision node
+  and WFB are all excluded by direct measurement. Stop re-litigating this.
+- ✅ **Encoder-swap question (ffmpeg vs GStreamer) — SETTLED: stay with ffmpeg.** Pi 5 has **no
+  hardware H.264 encoder** (`v4l2h264enc` missing; `rpivid` is decode-only), so both are software
+  x264 at identical cost. ffmpeg's `-progress` is what makes the stall watchdog possible.
+- ❌ **"See3CAM only does ~16 fps on the 480M bus" — RETRACTED, it was wrong.** It does a real
+  **60 fps** at 720p MJPG over USB 2.0. The 16 fps was auto-exposure in a dark room. **You do NOT
+  need a blue USB3 port for full frame rate.** Fix the note in MEMORY [SENSORS] if it resurfaces.
+
+### Opened today
+1. **Camera swap — PARTIAL SOAK PASSED, finish it after the mount is made.** See3CAM_CU135 fitted
+   07-30 23:14 on port 6-2 and selected from QGC (conf `usbcam-2560c1d1-241D8306-i00`, `fps = 60`).
+   **Ran 11 min 49 s continuous: 0 errors, 0 stalls, steady ~200 pkt/s / ~250 kB/s, 0 drops.**
+   That **beats the LG's best-ever clean window (9.5 min)** and its 448 s from the same night.
+   **Ended by a clean PHYSICAL unplug at 23:50:41, not a fault** — user removed it because it was
+   dangling on its cable and is building a proper mount for it.
+   **REMAINING: refit on the mount, then 20-30 min untouched + a reboot** to finish the verdict.
+   ⚠️ **A packet-flow check is NOT sufficient proof** — see opened-item 9.
+2. **Discriminate LG-faulty vs connector-6-2-bad-under-load.** The swap confounds them: See3CAM
+   100 mA vs LG 500 mA. Test = put the LG in the free port **`4-1`** (different host controller and
+   power path) and soak. **Blocked: enclosure is assembled.** Do it next time it's open.
+3. **Apply the vision_streaming_node.py fixes** (all verified live 07-30, all unapplied):
+   - `-g 30` + `-tune zerolatency` + `-pkt_size 1400` — **highest value**; x264 default keyint is
+     250 frames ≈ 8.3 s at 30 fps, so one lost keyframe smears for up to 8 s over the radio.
+   - wire the `fps` conf key through to `-framerate` (currently read by QGC, **never used**).
+   - `frame=0` counts as progress → 30 s grace silently becomes ~50 s.
+   - backoff reset on the stall path (= item 8b(a)).
+   - `rclpy.shutdown()` RCLError — fires on **every QGC camera change**, dumps a traceback exactly
+     when you'd be checking whether the swap worked.
+   - cap consecutive cold-start failures → log "camera requires physical replug" instead of looping.
+4. **🔴 WFB RX antenna imbalance — one weak chain on BOTH cards.** NIC-A ant0 −46 dB vs ant1 −28 dB
+   (**18 dB**); NIC-B ant256 −42 dB vs ant257 −33 dB. Stable to ±1 dB so not a fade. 18 dB ≈ 8×
+   range; half the diversity does nothing. Check u.FL seating / pigtails / antenna type.
+5. **Trim PX4 MAVLink stream rates.** ~175 kbit/s telemetry → **~525 kbit/s injected** (k=1/n=3) at
+   46-49 pkt/s ≈ 13% of airtime. Cheapest radio headroom available, and relevant before raising
+   video bitrate (the 07-28 bitrate item says headroom was UNMEASURED — **it is now: ~34% airtime
+   used of a 13 Mbit/s MCS1 PHY**).
+6. **Verify the hardcoded GS peer `10.5.6.50`** in `/etc/wifibroadcast.cfg` (`gs_video` :5600,
+   `gs_mavlink` :14550) — fixed IP on a subnet unrelated to the 10.5.5.0/24 tunnel. Wrong-IP
+   presents as "WFB broken" while the radio is flawless. Check as part of todo #4.
+7. **Boot-time clock is wrong until NTP steps it.** `systemd` claimed services started `Jul 29
+   00:31`, `last -x reboot` said `Jul 25 11:36`, `uptime -s` said `Jul 30 22:41:45` — all three
+   disagree on the same boot. **Journal timestamps around a boot are not trustworthy**; don't
+   correlate a WFB event against a vision event across a reboot without checking. Companion has
+   internet + NTP synced, so this is boot-window skew only. Related: [[project_relay_ntp_setup]].
+8. **`camera_name` fallback in the conf is dangerous.** `/dev/video0` did not exist for most of
+   07-30 (nodes were video8/video9). If sysfs `usbcam-*` resolution ever fails, ffmpeg is pointed
+   at a node that is not the camera. Consider failing loudly instead of falling back.
+9. **Verification method note (about MY checking, not a hardware bug).** A drone-side packet-flow
+   check (`wfb_tx video incoming` ~200 pkt/s, 0 drops) does not by itself prove the picture is
+   moving. Confirm at the GS when it matters. **No dup-padding problem has ever been observed on
+   the See3CAM** — it ran 11:49 clean and the user saw a normal moving picture throughout.
