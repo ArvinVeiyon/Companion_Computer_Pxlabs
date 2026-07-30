@@ -92,6 +92,12 @@ codex-work: ~/codex-work → Companion_Computer_Pxlabs | branch master (origin/m
 codex-relay: ~/codex-relay on vind-rly → Relay_Station_Pxlabs | mirror ~/codex-relay-mirror
 ros2_ws: ~/ros2_ws | branch main | release release/2026-02-22
 
+## [OPEN AT 2026-07-31 SESSION CLOSE]
+1. **⏳ REBOOT PENDING** — `disable-wifi-pi5` is written to config.txt but not yet active. Onboard radio still up on ch34.
+2. **⏳ Camera** — See3CAM physically removed; user is building a mount. Refit, then finish the soak (>20 min + reboot).
+3. **⏳ Memory backup** — mirrored to `~/codex-work/memory/` and committed **`67c30c4`, NOT pushed** (deliberate: PAT in the remote URL). User: "keep memory only on local, decide later."
+4. **⏳ UNDECIDED — user asked to "del mirror one" but deferred.** Nothing deleted. Ask what they mean before removing anything: undo `67c30c4`, empty `~/codex-work/memory/`, or something else. ⚠️ 3 mirror files (`probe-formats-*`, `vision-config-manager-setter-*`, `vision-streaming-outage-*`) come from the OTHER scope and also live in `~/.claude/projects/-home-roz-codex-work/memory/` — no permanent loss either way, but confirm first.
+
 ## [TODOS]
 → See memory/todos.md (full detail + commands)
 **🔴🔴 WFB-NG IS THE ACTIVE PRIORITY (set by user 07-31).** The long-running FPV fault is CLOSED as hardware; it was never WFB or software. Vision work is parked. **Work block W0-W6 in todos.md FIRST.**
