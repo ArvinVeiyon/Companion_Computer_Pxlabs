@@ -80,8 +80,8 @@ ros2_ws: ~/ros2_ws | branch main | release release/2026-02-22
 
 ## [TODOS]
 → See memory/todos.md (full detail + commands)
-**🔴🔴 WFB IS THE ACTIVE PRIORITY (user, 07-31). NEXT = A HARDWARE JOB: reseat the drone's NIC-A ant0 u.FL + pigtail + antenna (~20 dB deaf), re-measure on 8102** (#22). W0-W6 otherwise closed. Then: re-measure uplink loss, then test co-located desense (relay TX 31 dBm ch149 vs WFB RX ch161). Relay journal unread — **`vind-admin` sudo needs a password.**
-**Rover: next = #20 yaw gains, then L5.** #21 gyro-yaw odom open. **🔴 NEW L5 BLOCKER: `/odom` dies at rest (ESC doze).** **[OUTDOOR = PRIMARY TARGET] O1-O5** after L5/L6: STL-19 · DroneCAN GPS · lidar SLAM · GPS-waypoint Nav2 · outdoor safety
+**🔴🔴 AUTONAV IS THE ACTIVE PRIORITY (user, 08-01 — supersedes the 07-31 WFB priority).** Start with **🔴 `/odom` dies at rest (ESC doze) — the L5 blocker**, then #20 yaw gains, then L5. #21 gyro-yaw odom open. ⚠️ Don't stream FPV while driving (~21% `/scan` tax). **[OUTDOOR = PRIMARY TARGET] O1-O5** after L5/L6: STL-19 · DroneCAN GPS · lidar SLAM · GPS-waypoint Nav2 · outdoor safety
+**WFB parked (not closed): NEXT = a HARDWARE job — reseat drone NIC-A ant0 u.FL/pigtail/antenna (~20 dB deaf), re-measure on 8102** (#22). W0-W6 otherwise closed. Then re-measure uplink, then test co-located desense (relay TX 31 dBm ch149 vs WFB RX ch161).
 1. Fix relay clock for real (local NTP via companion) — OPEN
 2. Disable onboard Wi-Fi — **APPLIED 07-30, AWAITING REBOOT.** config.txt:69 `disable-wifi-pi5` (plain `disable-wifi` = wrong overlay here). ⚠️ **verify `lsmod|grep brcmfmac` EMPTY**, NOT `ip link show wlan0` (renamed `wlan1` ⇒ falsely passes). Once live there is NO onboard fallback → recover via WFB → relay:2222
 3+4+24. ❌ **ALL THREE DELETED — do not re-propose.** GS `rx_ring_size` (nothing overflows; leave 2 MB), GS TX power (already maxed 30 dBm), trim PX4 MAVLink rates (fixes nothing — downlink ~100%; airtime-only; can't touch uplink loss or CPU).
