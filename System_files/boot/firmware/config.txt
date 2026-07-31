@@ -66,7 +66,14 @@ dtoverlay=disable-bt
 # Uplink = external RTL8821CU wlx90de80d824d6. Comment out the next line to restore.
 # NOTE: config.txt has NO inline-comment support - a trailing "#..." on the same line is parsed
 # as part of the overlay name, so the overlay is SILENTLY IGNORED. That bug was live 07-25..07-26.
-dtoverlay=disable-wifi
+# 2026-07-30: was "disable-wifi" - WRONG OVERLAY FOR PI 5. That .dtbo is
+# compatible="brcm,bcm2835" and targets mmc/mmcnr; this board is BCM2712 and the
+# radio sits on sdio2, so it applied and did nothing (brcmfmac stayed loaded,
+# radio live as wlan1 on ch34). disable-wifi-pi5.dtbo is compatible="brcm,bcm2712"
+# and targets sdio2, which is the one this board needs.
+# VERIFY AFTER REBOOT WITH:  lsmod | grep brcmfmac   (must be EMPTY)
+# NOT with "ip link show wlan0" - the iface renamed to wlan1, so that falsely passes.
+dtoverlay=disable-wifi-pi5
 dtoverlay=uart0
 dtoverlay=uart2
 dtoverlay=uart3-pi5
