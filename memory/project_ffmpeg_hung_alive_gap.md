@@ -5,10 +5,60 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 62813ffb-bde2-479e-8734-481ad4a5907b
-  modified: 2026-07-30T18:07:07.382Z
+  modified: 2026-07-31T18:47:16.043Z
 ---
 
-# ⚠️ READ THE "2026-07-30" SECTION IMMEDIATELY BELOW FIRST. It supersedes the 07-28 night section.
+# ⚠️ READ THE "2026-08-01" SECTION FIRST — it is a DIFFERENT fault class from everything below.
+# (07-30 supersedes 07-28-night. Those are camera/USB faults. **08-01 is NOT a camera fault at all.**)
+
+---
+
+# 2026-08-01 — CPU-STARVATION LATCH: black QGC video with a PERFECT camera and PERFECT radio
+
+**Symptom:** QGC shows no picture. Camera enumerated and healthy, radio flawless, service "active",
+**node logs completely silent** — no warning, no error, no restart, for over an hour.
+
+**Mechanism.** ffmpeg lost a CPU race (rover stack: `rover-camera` 41%, `wheel_odometry` 26%,
+`MicroXRCEAgent` 13%, `depthimage_to_laserscan` 9%, vs ffmpeg needing a full core), fell behind, and
+**never caught up. It is a LATCH, not a steady state** — output degraded to ~3 s bursts every ~14 s,
+**7-28 pkt/s against 208 healthy**, and stayed there indefinitely.
+**⛔ Restarting the service does NOT clear it** — it re-enters the same load and falls behind again
+within seconds (proved at 22:40). QGC shows *black* rather than stutter because with ~10 s output
+gaps it rarely catches a keyframe.
+
+**THE FIX (60 s, reversible):** `sudo systemctl stop rover-camera rover-scan rover-odometry`
+→ **7 → 208 pkt/s**, and it **stays healthy after those services are restarted**. Measured both ends.
+
+**Why ffmpeg is fragile enough to lose that race:** with `-f rtp` the muxer forces constant frame
+rate, so ffmpeg **dup-pads a 15 fps camera up to 60 fps — 600 frames encoded from 151 real ones**,
+4× the work for the same picture. `-fps_mode passthrough` removes the padding (149 from 150) and
+halves CPU (94% → 42%). **⛔ BUT the user has VETOED any change to the ffmpeg command line
+(`vision_streaming_node.py` ~lines 176-207). Do not propose `-fps_mode`, `-g 30`, `-tune
+zerolatency`, `-pkt_size`, or `fps`→`-framerate` again.**
+
+**FIX APPLIED INSTEAD (08-01, built + verified live): throughput-floor watchdog.**
+`RATE_FLOOR_FPS=5.0 / RATE_WINDOW_S=20.0 / RATE_GRACE_S=30.0`, evaluated in `check_ffmpeg` after the
+existing stall check; logs ERROR, kills, restarts. **Deliberately does NOT reset the backoff on this
+path** (a long run ending degraded has not earned a fast retry; resetting would restart-loop every
+~60 s under sustained load). Verified by `systemctl set-property --runtime vision_streaming.service
+CPUQuota=5%` → fired in ~30 s: *"only 2.6 fps over the last 22s (floor 5 fps) after 216s — throughput
+collapse, not a stall"*. Healthy 212 pkt/s produced **no** false trip over 75 s.
+**Why the old watchdog missed it:** it only checked *liveness* — line ~257 treats ANY frame-counter
+increment as progress and resets the 10 s `STALL_TIMEOUT_S`. A bursty collapse keeps ticking, so a
+30× throughput loss was invisible by construction.
+
+### ⚠️ Two measurement traps that cost hours on 08-01 — READ BEFORE DEBUGGING VIDEO
+1. **Per-second samples of `video tx incoming` on 8102 land inside the burst gaps and read 0.**
+   That made me wrongly declare "WFB's video listener is dead". **Always use a CUMULATIVE delta over
+   ≥30 s** (`(cum_end - cum_start)/elapsed`), never per-second snapshots.
+2. **A MANUALLY launched ffmpeg sending to `127.0.0.1:5602` never moves WFB's counter**, though the
+   service's ffmpeg does. Cause NOT established — the socket is *not* connected (`rem_address
+   0.0.0.0:0`), so that is not the reason. **⇒ NEVER A/B ffmpeg flags via the WFB counter.** Use
+   ffmpeg's own `N packets read / N frames decoded / N frames encoded` summary, or the live service.
+
+**Camera-health baseline for comparison (manual, clean):** 152 packets in 10 s = **15.2 fps**,
+**0 decode errors**, speed 0.99×. ~5 `No JPEG data found` lines in the first second after any start
+are **benign sensor settling**.
 
 ---
 

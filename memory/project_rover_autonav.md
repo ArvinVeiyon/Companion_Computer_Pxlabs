@@ -5,10 +5,33 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-07-28T18:49:08.321Z
+  modified: 2026-07-31T19:14:20.200Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## 🔴 2026-08-01 — `/odom` DIES AT REST (ESC doze). NEW L5 BLOCKER. Answers the 07-26 "unknown".
+Measured: **zero `/odom` messages in 25 s, with FPV video both ON and OFF — so it is NOT a CPU
+problem.** `/fmu/out/esc_status` reports `esc_online_flags: 8` = **only ESC 13 awake**, the other
+three asleep, so `wheel_odometry_node` logs `incomplete wheel data (L:1 R:0) — skipping update`
+every 5 s and publishes nothing at all. Recovers on a wheel nudge (flags → 15).
+**Why it blocks L5:** Nav2 cannot plan against an odometry topic that goes silent whenever the rover
+sits still, and `rover_ekf_bridge` would lose its input mid-mission if the ESCs can also doze while
+armed (still untested armed).
+⚠️ **`/odom` is RELIABLE QoS** — a BEST_EFFORT subscriber reads 0 msgs and looks exactly like this
+fault. Check QoS before diagnosing. (`/scan` publishes both RELIABLE and BEST_EFFORT.)
+
+## ⚡ 2026-08-01 — FPV video taxes autonomy ~21% (measured, both directions)
+| | `/scan` rate | worst gap |
+|---|---|---|
+| video ON | **22.3 Hz** | **235 ms** |
+| video OFF | **28.4 Hz** | 132 ms |
+
+28.4 Hz matches the post-tfmini baseline. At ~0.6 m/s a 235 ms gap = **~14 cm travelled before the
+collision reflex sees anything**, ≈ ¼ of the 0.60 m block margin (8 cm with video off). Tolerable
+now; **L5 Nav2 costmaps/planners land on the same 4 cores**, which are already oversubscribed —
+software x264 alone needs 80-95% of one. ⇒ **don't stream FPV during autonomous driving if you want
+full reaction speed.** Related failure mode: [[project-ffmpeg-hung-alive-gap]] (CPU-starvation latch).
 
 ## ⏭ RESUME HERE — 2026-07-28 (floor session: #20 baseline captured, WALL CONTACT, collision-stop hardened)
 

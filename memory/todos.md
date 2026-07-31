@@ -6,6 +6,35 @@
 ## 🔴🔴 [WFB-NG — HIGH PRIORITY] — added 2026-07-30, WORK THIS BLOCK FIRST
 > Measured, not theorised. Raw numbers: [[reference_wfb_ng]]. **Read W0 before touching anything.**
 
+### ⚡⚡ 2026-07-31 RESOLUTION — most of this block is now CLOSED. Read this first.
+A **20 min simultaneous both-ends run under full video load** settled it. Numbers: [[reference_wfb_ng]].
+
+**THE ONLY WFB ACTION LEFT: 🔴 reseat/replace the drone's NIC-A ant0 u.FL + pigtail + antenna.**
+It is ~20 dB deaf (−48.5 vs −28.3 dBm, steady over 224 samples / 20 min). The GS reads both its
+antennas identical, so the defect is on the **drone's RX side** — exactly the direction that loses
+packets. Re-measure via 8102 immediately after.
+
+| CLOSED 07-31 | verdict |
+|---|---|
+| **W1** (GS EAGAIN socket overflow ⇒ 15% downlink) | ❌ **DEAD + DELETED.** Tested at 3.2 Mbit/s video + telemetry for 20 min: relay lost **4 video blocks of 341 057**, `wfb-server` PID 696 stable, `NRestarts=0`, zero EAGAIN. |
+| **W2.1** trim MAVLink rates | ❌ **DELETED as a fix.** Downlink already delivers ~100%. Buys airtime only; cannot touch the uplink loss or CPU. |
+| **W2.2** raise GS `rx_ring_size` (todo #3) | ❌ **DELETED** — nothing is overflowing. Leave at 2 MB. |
+| **W2.3** re-measure 176→26 kbit/s | ✅ **DONE — it does not reproduce.** Downlink is 99.86-99.99%. |
+| **W2.4 / #6** hardcoded peer `10.5.6.50` | ✅ **CORRECT.** QGC laptop on the relay's Wi-Fi Direct hotspot (`p2p-wlan0-0`, SSID `vind_rely`, ch149, relay 10.5.6.101/24). **Ping fails = Windows firewall, NOT a break.** |
+| **todo #4** GS TX power | ❌ **CLOSED — already maxed at 30 dBm** (`wifi_txpower=3000`, regdom BO permits 30). Nothing to turn up. |
+| **W3** antenna imbalance | 🔴 **PROMOTED TO ROOT CAUSE — and corrected: only NIC-A is bad. NIC-B is 3 dB, not 9 dB.** |
+
+**Still open beyond the antenna:** (a) uplink GS→drone loses **13.57%** of MAVLink payload /
+**5.46%** tunnel, continuous not bursty — expected to improve when the antenna is fixed, re-measure
+before doing anything else; (b) relay TX to the laptop at **31 dBm on ch149** shares a chassis with
+the WFB RX on ch161 — possible co-located desense, untested; (c) `journalctl -u wifibroadcast@gs`
+still unread — **`vind-admin` is in `sudo` but sudo needs a password**, so journald hides the unit.
+
+⚠️ **Method note that cost a week:** compare payload **`tx.incoming` → `rx.out`** across the two
+APIs. Do NOT use `rx.all` (the drone double-counts across 4 antennas — makes 13.6% look like 2.4%),
+and do NOT infer radio health from MAVLink message rates at two `tcp:5760` endpoints (that path
+includes mavlink-router and PX4 stream config — it is what produced the bogus "15% downlink").
+
 ### W0. ⛔ FIRST PRINCIPLE — the drone radio is HEALTHY. Stop blaming WFB by default.
 First real link measurement (07-30, WFB JSON API on `127.0.0.1:8102`):
 - **0 dropped / 0 truncated / 0 fec_timeouts over 117,570 video packets** (whole session, cumulative)
@@ -19,49 +48,37 @@ How to check in 5 s: TCP-connect `127.0.0.1:8102`, read newline-delimited JSON, 
 `video tx . packets.incoming[0]`. If it is 0/s, the radio is fine and the camera is dead.
 (Counters are `[per_second, cumulative]`. Do NOT use the `wfb-cli` TUI for this.)
 
-### W1. 🔴 TODO #3 and TODO #4 ARE PROBABLY THE SAME BUG — treat them as one
-**Hypothesis (strong, not yet confirmed on the relay):** the GS `wfb-server` EAGAIN crash loop from
-TODO #3 *is* the cause of the "uplink dead / downlink 15%" symptoms in TODO #4.
+### W1 + W2. ❌ DELETED 2026-08-01 — the whole "GS is the bottleneck" theory was WRONG.
+Everything that hung off it is gone: the EAGAIN/socket-overflow hypothesis, the `rx_ring_size`
+raise, the MAVLink-rate trim as a *fix*, and the fix-order list. All disproved by the 07-31 run
+(see the resolution box at the top). **Do not reconstruct them.** One-line guards only:
+- **Never raise `rx_ring_size`** — nothing overflows (4 blocks lost of 341k, PID stable, 0 EAGAIN).
+- **Never trim MAVLink rates to "fix" a link problem** — downlink already delivers 99.86-99.99%.
+  It only ever buys *airtime* (~13% of a link at ~34% use), and it cannot touch the uplink loss
+  (uplink is ~1.4 pkt/s) or CPU (mavlink-router isn't even in the top 8 processes).
 
-Evidence chain:
-- Drone offers 179 kbit/s downlink and **injects 100% of it, 0 dropped** ⇒ the ~85% loss is NOT on
-  the drone. It happens on the **GS/relay side**. (Matches the older "176 kbit/s → 26 kbit/s" note.)
-- TODO #3: GS wfb-server dies with `BlockingIOError EAGAIN` (socket buffer overflow), **19 restarts
-  observed**, each producing "New session detected" + decrypt errors + uplink loss spikes.
-- One restart explains every #4 symptom at once: 15% downlink delivery; 8 uplink commands arriving
-  0 times; QGC "Unknown <number>" (low-rate mode messages disproportionately land in the gaps).
-- Uplink FEC behaviour corroborates a **burst**, not a weak signal: `mavlink rx` lost **546** blocks
-  and FEC recovered only **83** — with k=1/n=3 (three full copies of every block) a single lost copy
-  is trivially recoverable, so losing all three means the losses come in bursts. Measured at
-  **-28 dBm / 29 dB SNR on a bench link.**
-- Cause of the socket overflow is volume: **549 kbit/s MAVLink + 3.2 Mbit/s video** into a 2 MB ring.
+### W3. 🔴🔴 RX antenna imbalance — **ROOT CAUSE, and it is ONE chain on ONE card** (rev. 07-31)
+20 min / 224 samples, steady throughout ⇒ **not a fade**:
 
-**⛔ Consequence: "raise GS TX power" (TODO #4's original theory) will NOT fix burst loss.** Deprioritise it.
+| chain | avg rssi | verdict |
+|---|---|---|
+| NIC-A **ant0** | **−48.5 dBm** (min −55) | 🔴 **20.2 dB down — FIX THIS** |
+| NIC-A ant1 | −28.3 dBm | healthy |
+| NIC-B ant256 | −35.0 dBm | 3.0 dB gap, acceptable |
+| NIC-B ant257 | −32.0 dBm | healthy |
 
-### W2. Fix order — do these in sequence, re-measure between each
-1. **Trim PX4 MAVLink stream rates.** 179 kbit/s is a LOT — near-full 1400 B packets 16x/s, tripled
-   by FEC to 549 kbit/s = ~13% of airtime. This is the main thing pressurising the GS socket, so it
-   attacks W1 at the source. **Cheapest lever available.**
-2. **Raise `rx_ring_size` on the relay** 2 MB -> 4-8 MB (`/etc/wifibroadcast.cfg`) = TODO #3 Option A.
-3. **Re-measure the 176 -> 26 kbit/s ratio.** Expect most of it to close. If it does, #3 and #4 both die.
-4. **Verify the hardcoded GS peer** `10.5.6.50` (`gs_video` :5600, `gs_mavlink` :14550) — a fixed IP
-   on a subnet unrelated to the 10.5.5.0/24 tunnel. **If QGC is not at that address, some of this
-   "loss" is just packets delivered to the wrong host while the radio is perfect.**
-5. **Then** the antenna imbalance (W3) and only then TX power. Both real, neither is what's biting.
+**⚠️ Corrects the 07-30 table above: NIC-B is 3 dB out, NOT 9 dB. Only NIC-A ant0 is broken.**
+The GS reads **both** its own antennas identical ⇒ the defect is **entirely on the drone's RX
+side** — which is exactly the direction losing packets (13.57% uplink MAVLink loss vs 0.14%
+downlink). 20 dB ≈ 10× range. **Action: reseat u.FL on NIC-A ant0, check pigtail + antenna, then
+re-measure on 8102.** This is the whole remaining WFB job.
 
-### W3. 🔴 RX antenna imbalance — one weak chain on BOTH cards
-| NIC-A ant1 | -28 dB | NIC-B ant257 | -33 dB |
-|---|---|---|---|
-| **NIC-A ant0** | **-46 dB** | **NIC-B ant256** | **-42 dB** |
-
-Stable to +/-1 dB across every sample ⇒ **not a fade**. 18 dB ~= 8x range; half the diversity is
-contributing nothing, on both cards identically. Check u.FL seating / pigtails / antenna type on the
-weak chain of each card. Not yet investigated.
-
-### W4. Evidence still needed (cannot be gathered from the drone)
-`journalctl -u wifibroadcast@gs` on the relay (`ssh vind-admin@10.5.5.77`) — confirm whether the
-EAGAIN restarts are **still** happening and at what rate. **This confirms or kills W1 quickly.**
-Also grab the GS-side `rx` stats from its API on port **8103** for the downlink loss picture.
+### W4. ✅ DONE 2026-07-31 — GS-side evidence gathered (except the journal)
+GS `rx` stats pulled from API **8103** and paired against the drone's 8102: **W1 killed, downlink
+proved healthy, root cause localised to the drone antenna.** See the resolution box above.
+❌ **Journal still unread**: `vind-admin` is in group `sudo` but **sudo requires a password**, so
+journald returns "No entries" + an insufficient-permissions warning. Needs the password (or the
+user runs `journalctl` by hand). Low value now that W1 is dead — only worth it if EAGAIN returns.
 
 ### W5. MTU margin is thin (hardening, no live fault)
 `radio_mtu = 1445`; ffmpeg RTP averages 1354 B and `truncated=0` over 117k packets. But ffmpeg's RTP
@@ -70,8 +87,9 @@ vision-node flags are applied (session item 3).
 
 ### W6. Radio headroom is now MEASURED — unblocks the 07-28 bitrate item
 That item recorded headroom as "NEVER MEASURED". It is now: **~34% airtime used of a 13 Mbit/s MCS1
-PHY.** There IS room to raise video bitrate — but do W2.1 (trim MAVLink) first so you spend the
-headroom on picture instead of telemetry.
+PHY.** There IS room to raise video bitrate — go straight ahead; the old "trim MAVLink first"
+precondition is deleted (it was never a fix). ⚠️ But note the real constraint is **CPU, not radio**:
+software x264 already needs ~80-95% of a core, see [[project_ffmpeg_hung_alive_gap]].
 
 ---
 
@@ -95,18 +113,25 @@ The 07-26 inline-comment fix was correct and is intact; the directive itself is 
 renamed to `wlan1`, so a wlan0-keyed check falsely passes. Detail: project_external_wifi_uplink.md.
 Uplink meanwhile = external USB RTL8821CU `wlx90de80d824d6` @ static 192.168.1.240, working.
 
-### 3. Increase WFB ring buffer on GS OR reduce drone video bitrate (Relay station)
-Root cause: GS wfb-server crashes with BlockingIOError EAGAIN (socket buffer overflow).
-19 service restarts observed → each causes "New session detected" + decrypt errors + uplink loss spikes.
-Option A — increase rx_ring_size in /etc/wifibroadcast.cfg on relay (currently 2MB, try 4-8MB).
-Option B — reduce drone video bitrate in /etc/vision_streaming.conf.
+### 3. ❌ DELETED — "increase WFB ring buffer on GS". Disproved 07-31, do not do this.
+Nothing overflows: 4 video blocks lost of 341 057, `wfb-server` PID stable, `NRestarts=0`, zero
+EAGAIN, under the exact video+telemetry load the theory predicted. **Leave `rx_ring_size` at 2 MB.**
+(July's 19 restarts were real but are not recurring; if `EAGAIN` ever returns, get the relay journal
+— still needs the sudo password.)
 
 ### 5. Fix channel reference in PXLABS_qgroundcontrol docs (local edit + push)
 ARCHITECTURE.md and DEVELOPMENT.md both say `ch157` — correct value is **ch161**.
 Clone repo, search `ch157` / `channel 157`, replace with `ch161` in both files, then push.
 Repo: https://github.com/ArvinVeiyon/PXLABS_qgroundcontrol (branch: master)
 
-### 4. Check GS adapter TX power (Relay station) — NOW MEASURED, WORSE THAN THOUGHT (2026-07-20)
+### 4. Check GS adapter TX power — ❌ CLOSED 2026-07-31. IT IS ALREADY AT MAXIMUM.
+`wifi_txpower = 3000` in `/etc/wifibroadcast.cfg`; `iw dev wlx00c0cab6db3b info` reports
+**30.00 dBm**; regdom **BO** permits 30 dBm across 5735-5835 MHz. **There is no power to add.**
+The downlink half of this item is also dead — it delivers ~100%, not 15% (that was a measurement
+artifact, see the resolution box at the top). The uplink half is real but its cause is the **drone's
+NIC-A ant0 antenna**, not GS power. → [[reference_wfb_ng]], [[project_gcs_link_degraded]]
+
+<details><summary>original 07-20 record (superseded)</summary>
 Uplink is not merely lossy, it is **dead for commands**: 8 MAVLink commands injected at the relay
 reached the drone **0 times** (a sniffer on the companion router confirmed zero arrivals), while the
 identical test on the companion locally succeeded 6/6. Downlink also delivers only **~15%** of offered
@@ -125,6 +150,7 @@ starved GS transmitter), NOT link budget.** More power does not fix burst loss.
 **Check these first instead:** (a) the hardcoded GS peer `10.5.6.50:5600/:14550` in
 `/etc/wifibroadcast.cfg` — wrong-IP looks exactly like "WFB broken"; (b) the onboard brcmfmac radio
 still live at ch34 (todo #2); (c) the RX antenna imbalance below. → `reference_wfb_ng.md`
+</details>
 
 ### 6. vision_streaming node: no ffmpeg watchdog — ✅ DONE 2026-07-19
 Watchdog implemented + verified live (ros2_ws a561e93, multicam upgrade phase B):
@@ -425,6 +451,14 @@ project_ffmpeg_hung_alive_gap.md. Stopped here 2026-07-28: usage limit.
    dangling on its cable and is building a proper mount for it.
    **REMAINING: refit on the mount, then 20-30 min untouched + a reboot** to finish the verdict.
    ⚠️ **A packet-flow check is NOT sufficient proof** — see opened-item 9.
+   ✅ **2026-07-31 — SOAK PASSED.** Refitted on 6-2 and streamed 1280x720 for a **continuous 41.8 min**
+   (21:30:01 → 22:11:48, incl. a 19.8 min instrumented window; ended by a **clean service restart, not
+   a fault** — `Deactivated successfully`, the usual QGC-camera-change signature):
+   `vision_streaming` PID **38192** unchanged across all 40
+   health samples, `NRestarts=0`, ffmpeg alive throughout, **0 errors / 0 stalls / 0 dup-padding**,
+   62.6-65.3 °C, `throttled=0x0` on every sample. Downlink delivered **234 331 of 234 362** video
+   packets (99.99%) end-to-end at the relay — so the picture genuinely moved, not just RTP.
+   **ONLY THE REBOOT CHECK REMAINS.** (Load avg 4-7 on 4 cores from software x264 — high but stable.)
 2. **Discriminate LG-faulty vs connector-6-2-bad-under-load.** The swap confounds them: See3CAM
    100 mA vs LG 500 mA. Test = put the LG in the free port **`4-1`** (different host controller and
    power path) and soak. **Blocked: enclosure is assembled.** Do it next time it's open.
@@ -437,13 +471,11 @@ project_ffmpeg_hung_alive_gap.md. Stopped here 2026-07-28: usage limit.
    - `rclpy.shutdown()` RCLError — fires on **every QGC camera change**, dumps a traceback exactly
      when you'd be checking whether the swap worked.
    - cap consecutive cold-start failures → log "camera requires physical replug" instead of looping.
-4. **🔴 WFB RX antenna imbalance — one weak chain on BOTH cards.** NIC-A ant0 −46 dB vs ant1 −28 dB
-   (**18 dB**); NIC-B ant256 −42 dB vs ant257 −33 dB. Stable to ±1 dB so not a fade. 18 dB ≈ 8×
-   range; half the diversity does nothing. Check u.FL seating / pigtails / antenna type.
-5. **Trim PX4 MAVLink stream rates.** ~175 kbit/s telemetry → **~525 kbit/s injected** (k=1/n=3) at
-   46-49 pkt/s ≈ 13% of airtime. Cheapest radio headroom available, and relevant before raising
-   video bitrate (the 07-28 bitrate item says headroom was UNMEASURED — **it is now: ~34% airtime
-   used of a 13 Mbit/s MCS1 PHY**).
+4. **🔴 WFB RX antenna imbalance** — ⚠️ these 07-30 figures are SUPERSEDED; only **NIC-A ant0** is
+   bad (−48.5 vs −28.3 dBm) and NIC-B is 3 dB, not 9. See W3 above for the corrected table.
+5. ❌ **DELETED 08-01 — "trim PX4 MAVLink stream rates".** It fixes nothing: downlink already
+   delivers ~100%. Airtime-only, and headroom is now measured at ~34% of a 13 Mbit/s MCS1 PHY, so
+   the video-bitrate item no longer depends on it.
 6. **Verify the hardcoded GS peer `10.5.6.50`** in `/etc/wifibroadcast.cfg` (`gs_video` :5600,
    `gs_mavlink` :14550) — fixed IP on a subnet unrelated to the 10.5.5.0/24 tunnel. Wrong-IP
    presents as "WFB broken" while the radio is flawless. Check as part of todo #4.

@@ -1,14 +1,44 @@
 ---
 name: project-gcs-link-degraded
-description: "OPEN 2026-07-20: GCS MAVLink link — downlink delivers only ~15% of offered telemetry, uplink commands 0/8 delivered; explains QGC 'Unknown mode'"
+description: "2026-07-31: downlink HALF RESOLVED (delivers ~100%, was a misdiagnosis); uplink still lossy at 13.6% — root cause = drone NIC-A ant0 ~20 dB deaf"
 metadata: 
   node_type: memory
   type: project
   originSessionId: e3048451-855a-4c5a-a615-d3cc75dac98f
-  modified: 2026-07-20T15:39:43.489Z
+  modified: 2026-07-31T16:35:45.284Z
 ---
 
-# GCS MAVLink link degraded — OPEN (measured 2026-07-20)
+# GCS MAVLink link degraded — DOWNLINK CLOSED, UPLINK OPEN (re-measured 2026-07-31)
+
+## ⚡ 2026-07-31 UPDATE — read this before any of the 07-20 material below
+20 min simultaneous both-ends measurement **under full video load** (the condition every earlier
+test lacked). Full numbers + method: [[wfb-ng-config]].
+
+- ✅ **"Downlink delivers only ~15%" is DEAD — it delivers ~100%.** video 0.01% loss,
+  mavlink 0.14%, tunnel 0.16%. The 07-20 figure below compared **MAVLink message rates at two TCP
+  endpoints**, which is not a radio measurement — mavlink-router endpoint behaviour and PX4 stream
+  config sit in that path. **The radio was never dropping that traffic.** Do not re-derive link
+  health from `tcp:5760` message counts again; use the WFB JSON API on 8102/8103.
+- ✅ **GS `wfb-server` EAGAIN crash loop — NOT HAPPENING.** PID 696 stable across the whole run,
+  `NRestarts=0`, 4 video blocks lost of 341 057. Old todo #3 (raise `rx_ring_size`) is closed.
+- ✅ **GS TX power — already maxed at 30 dBm** (`wifi_txpower=3000`, regdom BO allows 30). Old
+  todo #4 is closed; there was never any power to add.
+- ✅ **Hardcoded peer `10.5.6.50` is CORRECT** — the QGC laptop on the relay's Wi-Fi Direct
+  hotspot (`p2p-wlan0-0`, SSID `vind_rely`, 10.5.6.101/24). Ping fails only due to Windows firewall.
+- 🔴 **STILL OPEN, and now localised: uplink (GS→drone) loses 13.57% of MAVLink payload**
+  (1710 sent → 1478 delivered) and 5.46% of tunnel. **Continuous, not bursty** — 104 of 116
+  intervals affected. ~100× worse than the reverse direction.
+- 🔴 **ROOT CAUSE: drone NIC-A ant0 sits ~20 dB below its partner** (−48.5 vs −28.3 dBm, steady
+  over 224 samples). The GS reads both its own antennas identical ⇒ the defect is on the **drone's
+  receive side**, exactly where the loss is. **Fix the antenna, then re-measure.**
+- ⚠️ **Not yet ruled out** (do after the antenna): the relay transmits to the laptop at **31 dBm on
+  ch149** from the same chassis whose WFB card receives on ch161 — possible co-located desense.
+- ⚠️ **Still un-gathered:** `journalctl -u wifibroadcast@gs` history. `vind-admin` is in `sudo` but
+  sudo needs a password, so journald hides the unit. Needs the password or a manual run.
+
+---
+
+# Original record — measured 2026-07-20 (downlink half now known to be a misdiagnosis)
 
 Discovered while chasing the QGC "Unknown mode" name issue for [[project-rover-autonav]]. Measured with pymavlink on both ends (do NOT repeat casually — see [[feedback-use-dds-not-mavlink]]).
 
