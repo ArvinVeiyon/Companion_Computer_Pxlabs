@@ -78,7 +78,7 @@ ros2_ws: ~/ros2_ws | branch main | release release/2026-02-22
 ## [OPEN AT SESSION CLOSE]
 1. **⏳ REBOOT PENDING** — `disable-wifi-pi5` written to config.txt, not yet active; onboard radio still up on ch34.
 2. **✅ ros2_ws throughput-floor watchdog COMMITTED + PUSHED 08-01 — `a5fb348` on `main`** (`8270b40..a5fb348`). Tree clean, in sync with origin. **NOTE: ros2_ws origin is SSH (`git@github.com:ArvinVeiyon/ros2_ws.git`) — safe to push, unlike codex-work's PAT-in-URL remote.**
-3. **⏳ Memory backup** — mirror `~/codex-work/memory/` is STALE; committed `67c30c4`, NOT pushed (PAT in remote URL). User: "keep memory only on local, decide later." **UNDECIDED: user said "del mirror one" then deferred — ask before deleting anything.**
+3. **✅ Memory mirrored 08-01 → `~/codex-work/memory/`, commit `da5f30b`. ⛔ NOT PUSHED — 5 commits ahead of origin/master; the remote URL still embeds a plaintext PAT** (todo #14: rotate + move to SSH). Copy method: `cp -p`, never `rsync --delete` (mirror is a UNION — 3 files come from the codex-work scope). **UNDECIDED: user said "del mirror one" then deferred — ask before deleting anything.**
 
 ## [TODOS]
 → See memory/todos.md (full detail + commands)
