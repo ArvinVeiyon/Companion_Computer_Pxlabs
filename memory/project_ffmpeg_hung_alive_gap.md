@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 62813ffb-bde2-479e-8734-481ad4a5907b
-  modified: 2026-07-31T18:47:16.043Z
+  modified: 2026-07-31T19:54:50.268Z
 ---
 
 # ⚠️ READ THE "2026-08-01" SECTION FIRST — it is a DIFFERENT fault class from everything below.
@@ -59,6 +59,25 @@ increment as progress and resets the 10 s `STALL_TIMEOUT_S`. A bursty collapse k
 **Camera-health baseline for comparison (manual, clean):** 152 packets in 10 s = **15.2 fps**,
 **0 decode errors**, speed 0.99×. ~5 `No JPEG data found` lines in the first second after any start
 are **benign sensor settling**.
+
+## 2026-08-01 close — the `fps` conf key does nothing, and why that is UNRESOLVED
+User dropped the stream to **640x360** from QGC: **ffmpeg CPU 78-95% → 25.7%, load 4-6 → 2.4,
+throughput still 183 pkt/s.** ~3.7× cut — this largely defuses the starvation latch above.
+**⚠️ Resolution and bitrate work. `fps` does NOT:** conf said `fps = 15` while
+`v4l2-ctl --get-parm` reported **30**. QGC→conf is fine; **conf→ffmpeg is the missing hop** (the key
+is never added to the command). ⚠️ `bitrate` stayed 2000K ⇒ **radio load unchanged; the saving was
+CPU-only.**
+
+**⛔ USER RULE, verbatim (08-01): "do not hardcode the frame rate in the ffmpeg — it will be handled
+from QGC through the config file."** A literal `-framerate 30` is FORBIDDEN.
+**UNRESOLVED — ASK, do not decide alone:** does that rule also forbid passing the *conf's own* value
+through (`-framerate {conf fps}` — config-driven, nothing hardcoded)? If it does, QGC's fps control
+stays permanently decorative.
+
+**🔎 CHECK THIS FIRST, before any code discussion — the user's own hypothesis:** the camera may not
+*support* 15 fps at all. Run `v4l2-ctl -d /dev/video0 --list-formats-ext` and read the frame-interval
+list for 640x360 MJPG. **If 15 is not offered, the setting could never work regardless of plumbing**,
+and the missing hop is only half the story. User's read: "15 fps is the issue, rest are working."
 
 ---
 
