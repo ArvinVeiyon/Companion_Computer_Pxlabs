@@ -43,7 +43,7 @@ ROS2 Jazzy | Python 3.12.3 | Ollama v0.17.7 / phi3:mini | AIDE 0.18.6 | wfb-ng 1
 ## [SERVICES] → reference_services.md
 core: mavlink.router | microxrce-agent | rc_control_node | vision_streaming | block-traffic | wifibroadcast@drone | system_files_sync.timer | ollama | ldlidar(disabled)
 **AIDE `dailyaidecheck.timer` DISABLED 07-26** (stale baseline + ~3.5h/day of a core). If re-enabling: `COPYNEWDB=yes` + Nice=19.
-**tfmini DISABLED 07-26 — drone-only. ⚠️ MUST `systemctl enable --now tfmini` for the DRONE airframe.** Sensorless it burned 38% CPU.
+**tfmini DISABLED 07-26 — drone-only. ⚠️ MUST `systemctl enable --now tfmini` for the DRONE airframe.**
 autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | rover-autonav-mode — enabled+active; **rover-ekf-bridge installed but DISABLED on purpose** (wheels-up limit-cycle hazard; start by hand on the floor).
 **⚡ FPV video costs `/scan` 28.4 → 22.3 Hz** ⇒ don't stream FPV while driving. **🔴 `/odom` DIES AT REST — ESC doze (`esc_online_flags: 8`), NOT CPU.** ⚠️ `/odom` is RELIABLE QoS — a BEST_EFFORT subscriber reads 0 and mimics this fault exactly.
 🔴 **A CAMERA RESTART CAN COME UP HALF-DEAD** — back "active", params answering, gyro/accel streaming, **no error logged, but depth & color never started**; `/scan` + both depth topics silently dead. A 2nd restart fixed it. **VERIFY EVERY camera restart:** `journalctl -u rover-camera --since -1min | grep "depth Frame - Width"` (absent = half-dead) **AND a topic rate. `systemctl is-active` does NOT catch this.**
@@ -59,16 +59,16 @@ autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | 
 🔎 **`min_height=0.12` is likely too conservative** — floor measured **−0.012 m**, ~6 cm below the 0.043-0.093 it was chosen against ⇒ **0.06-0.08 would roughly HALVE the 12 cm minimum visible obstacle. Measure 2-3 locations first.** Lateral tilt +1.54° vs 0.573° TF roll = sloped floor OR roll extrinsics error; one pose can't tell.
 
 ## [WFB_NG] → reference_wfb_ng.md
-ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc across both wlx NICs
+ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc, both wlx NICs
 **Every `wifibroadcast@` restart prints `rtw_mlmeext_disconnect` WARN + trace 2×. BENIGN. Don't investigate, don't patch the driver.**
-**Drone TX is flawless. When video breaks, WFB has an EMPTY input queue — suspect the source, not the link.** Live stats: TCP `127.0.0.1:8102` (GS 8103), newline-delimited JSON; do NOT use the `wfb-cli` TUI.
-**⚡ 07-31 DEFINITIVE:** downlink 99.86-99.99%; uplink loses 13.57% mavlink. **ROOT CAUSE = drone NIC-A ant0 −48.5 vs ant1 −28.3 dBm (20 dB deaf)** ⇒ **ONLY WFB JOB LEFT: reseat that u.FL/pigtail/antenna.** ✅ DELETED as causes: ring-buffer/EAGAIN, GS TX power, peer `10.5.6.50`.
-⚠️ **METHOD (cost a week):** compare payload `tx.incoming`→`rx.out` across 8102/8103. **Never `rx.all`** (drone double-counts 4 antennas). **Never infer radio health from MAVLink rates at two `tcp:5760` endpoints.**
+**Drone TX is flawless. When video breaks, WFB has an EMPTY input queue — suspect the source.** Live stats: TCP `127.0.0.1:8102` (GS 8103), JSON; do NOT use the `wfb-cli` TUI.
+**⚡ 07-31:** downlink 99.86-99.99%; uplink loses 13.57% mavlink. **ROOT CAUSE = drone NIC-A ant0 −48.5 vs ant1 −28.3 dBm (20 dB deaf)** ⇒ **ONLY WFB JOB LEFT: reseat that antenna.** ✅ DELETED as causes: ring-buffer/EAGAIN, GS TX power, peer `10.5.6.50`.
+⚠️ **METHOD (cost a week):** compare payload `tx.incoming`→`rx.out` across 8102/8103. **Never `rx.all`** (double-counts 4 antennas). **Never infer radio health from MAVLink rates at two `tcp:5760` endpoints.**
 
 ## [RELAY_STATION]
-vind-rly | Ubuntu 24.04.2 RPi5 | `ssh vind-admin@10.5.5.77` (**sudo NEEDS A PASSWORD ⇒ journalctl of other units returns "No entries"**) | repo ~/codex-relay | tunnel 2222→drone 10.5.5.87:22 (autossh)
-svcs: wifibroadcast@gs, mavlink.router, ssh-tunnel-to-companion, relay_files_sync.timer | wfb standalone(CURRENT) vs cluster(+CPE610@10.5.7.102, not connected)
-**Wi-Fi Direct P2P-GO `p2p-wlan0-0`, SSID `vind_rely`, ch149, relay 10.5.6.101/24 → QGC laptop 10.5.6.50** | NO RTC + no internet → clock unreliable → project_relay_ntp_setup.md
+vind-rly | RPi5 | `ssh vind-admin@10.5.5.77` (**sudo NEEDS A PASSWORD ⇒ journalctl of other units returns "No entries"**) | repo ~/codex-relay | tunnel 2222→drone 10.5.5.87:22 (autossh)
+svcs: wifibroadcast@gs, mavlink.router, ssh-tunnel-to-companion, relay_files_sync.timer | wfb standalone(CURRENT) vs cluster(+CPE610, not connected)
+**Wi-Fi Direct P2P-GO `p2p-wlan0-0`, SSID `vind_rely`, ch149, relay 10.5.6.101/24 → QGC laptop 10.5.6.50** | NO RTC → clock unreliable
 
 ## [REPOS]
 codex-work: ~/codex-work → Companion_Computer_Pxlabs, branch master (origin/main stale) | codex-relay: ~/codex-relay on vind-rly → Relay_Station_Pxlabs (mirror ~/codex-relay-mirror) | ros2_ws: ~/ros2_ws, branch main, release release/2026-02-22
