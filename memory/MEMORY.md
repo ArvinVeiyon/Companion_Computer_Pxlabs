@@ -12,7 +12,7 @@
 - `project_autonomy_plan_reframe.md` — ladder re-cut by OUTCOME; contradicts "L0-L4 DONE". Q1 localization = THE WALL
 - `project_l2_floortest_wheel0_reversed.md` (wheel-0 "reversal" = FALSE ALARM) · `project_l4_gemini_nav2_prereqs.md` · `project_vision_multicam_upgrade.md` (**Phase D remains**) · `project_ffmpeg_hung_alive_gap.md` (**READ ITS 08-01 SECTION FIRST**)
 - `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.** `ext5v-report` reads the rail UPSTREAM
-- `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md` · `project_ros2ws_tag_cleanup.md`
+- `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md`
 - `project_rc_control_camera_retry_storm.md` — 🔴 **NEW 08-01. `rc_control_node` respawns `sudo vision_config_manager /dev/video0` at 95 Hz forever when it fails (2181 fails/10 min, ~100% of a core, blocks the RC callback). THIS is the "runaway" blamed twice on a stray process. Killing it never works — TX cam switch to neutral stops it.**
 - `project_codexwork_token_in_remote.md` — **SECURITY: origin URL embeds a plaintext GitHub PAT; rotate + move to SSH** · `project_codexwork_branches.md` (**auto-sync does NOT git-add NEW memory files — add manually**)
 
@@ -25,7 +25,7 @@
 Claude Code CLI + onboard AI for the Vind-Roz drone/rover platform | user: roz / ArvinVeiyon | goal: continuous presence — develop, maintain, autonomize this platform
 
 ## [PLATFORM]
-Vind-Roz: aerial drone + ground rover, same RPi5 companion, different PX4 airframe | RPi5 BCM2712 quad-core 8GB, 64GB SD | Ubuntu 24.04.1 aarch64, kernel 6.8.0-1048-raspi, host `Vind-Roz`
+Vind-Roz: aerial drone + ground rover, same RPi5 companion, different PX4 airframe | RPi5 BCM2712 quad-core 8GB | Ubuntu 24.04.1 aarch64, kernel 6.8.0-1048-raspi, host `Vind-Roz`
 ⚠️ **Boot clock is WRONG until NTP steps it** — don't correlate journals across a reboot. ⚠️ **Only 4 cores; the rover stack + software x264 oversubscribe them** → [VIDEO_FAULTS] (B).
 ⚠️ **No rate/CPU measurement on this box is trustworthy without `ps -eo pid,pcpu --sort=-pcpu` first** — a "7.5 Hz cloud" reading turned out to be a runaway `vision_config_manager` at 72.7%.
 
@@ -45,7 +45,7 @@ core: mavlink.router | microxrce-agent | rc_control_node | vision_streaming | bl
 **AIDE `dailyaidecheck.timer` DISABLED 07-26** (stale baseline + ~3.5h/day of a core). If re-enabling: `COPYNEWDB=yes` + Nice=19/IOSchedulingClass=idle
 **tfmini DISABLED 07-26 — drone-only. ⚠️ MUST `systemctl enable --now tfmini` for the DRONE airframe.** Sensorless it burned 38% CPU.
 autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | rover-autonav-mode — enabled+active; **rover-ekf-bridge installed but DISABLED on purpose** (wheels-up limit-cycle hazard; start by hand on the floor).
-**⚡ FPV video costs `/scan` 28.4 → 22.3 Hz** ⇒ don't stream FPV while driving autonomously. **🔴 `/odom` DIES AT REST — ESC doze (`esc_online_flags: 8`), NOT CPU.** ⚠️ `/odom` is RELIABLE QoS — a BEST_EFFORT subscriber reads 0 and mimics this fault exactly.
+**⚡ FPV video costs `/scan` 28.4 → 22.3 Hz** ⇒ don't stream FPV while driving. **🔴 `/odom` DIES AT REST — ESC doze (`esc_online_flags: 8`), NOT CPU.** ⚠️ `/odom` is RELIABLE QoS — a BEST_EFFORT subscriber reads 0 and mimics this fault exactly.
 🔴 **A CAMERA RESTART CAN COME UP HALF-DEAD** — back "active", params answering, gyro/accel streaming, **no error logged, but depth & color never started**; `/scan` + both depth topics silently dead. A 2nd restart fixed it. **VERIFY EVERY camera restart:** `journalctl -u rover-camera --since -1min | grep "depth Frame - Width"` (absent = half-dead) **AND a topic rate. `systemctl is-active` does NOT catch this.**
 
 ## [PERCEPTION 08-01] → **full detail + all numbers: project_perception_3d_costmap.md**
