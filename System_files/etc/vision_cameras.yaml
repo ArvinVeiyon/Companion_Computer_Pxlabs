@@ -5,4 +5,4 @@ usbcam-2bc50807-CPC7B53000AB-i04:
   alias: NAV-COLOR
   role_lock: autonomy
 usbcam-30c9009d-01.00.00-i00:
-  alias: FPV
+  alias: FRONT_CAM
