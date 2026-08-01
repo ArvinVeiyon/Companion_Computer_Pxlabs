@@ -528,3 +528,19 @@ At rest only ESC addr 13 stays awake (`esc_online_flags 8`), so `/odom` is **sil
 `L:1 R:0`. A small **nudge wakes the other three** (flags → 15, `/odom` resumes ~100 Hz).
 This is normal ESC sleep, **not a CAN failure**. **Always check `esc_online_flags == 15` before
 trusting `/odom`** — otherwise you will misread sleeping ESCs as an odometry bug.
+
+## 🔑 MANUAL MODE BYPASSES THE YAW RATE LOOP — verified in the REAL firmware 2026-08-02
+**Source: `~/PX4-Autopilot` branch `pxlabs-fw` (the actual fw source, NOT the upstream clone),
+`src/modules/rover_differential/DifferentialDriveModes/DifferentialManualMode/DifferentialManualMode.cpp`**
+```cpp
+manual(): rover_steering_setpoint.normalized_steering_setpoint =
+              RD_YAW_STK_GAIN * superexpo(roll stick)   -> publishes STEERING directly
+acro():   rover_rate_setpoint.yaw_rate_setpoint = _max_yaw_rate * superexpo(...)
+                                                        -> publishes a RATE setpoint
+```
+`RoverDifferential.cpp:114` dispatches `NAVIGATION_STATE_MANUAL -> _manual_mode.manual()`.
+⇒ **The ~21× yaw runaway lives in the RATE controller (`RO_YAW_RATE_P`), which MANUAL NEVER INVOKES.**
+⇒ **Driving in MANUAL is not exposed to it. ACRO / STAB / POSCTL / OFFBOARD / AUTO all are.**
+⚠️ **BUT the collision reflex does NOT apply in Manual** — it lives inside `autonav_mode`'s executor,
+a CUSTOM PX4 mode, so PX4 never routes through it. **In Manual the operator is the ONLY safety layer.**
+⇒ **#20 still gates every AUTONOMOUS mode. It does NOT gate manual driving.**

@@ -149,3 +149,30 @@ reports success and does nothing, same trap as `point_cloud_decimation_filter_fa
 throws `InvalidParameterTypeException`; quoting does not help, use a params file or omit.
 ⚠️ Measurement hygiene: a transient `pemmican-cli` at 90-143% contaminated the first run, and
 `pgrep -f rgbd_odometry` **matched its own command line** and falsely reported the node still alive.
+
+## 📦 BAG-RECORD COST MEASURED 2026-08-02 — **CPU is fine, the SD CARD is the constraint**
+Offline architecture: **record on the Pi → process on a laptop → run localization-only on the Pi.**
+Mapping (features, loop closure, graph optimisation) is the expensive half; **localizing against an
+existing map is far cheaper** — AMCL on a 184-beam scan is nothing like RTAB-Map.
+`ros2 bag record` of color+depth images & camera_infos, `/odom`, `/tf`, `/tf_static`:
+| | baseline | + bag record | (RTAB-Map for contrast) |
+|---|---|---|---|
+| recorder CPU | — | **42.6% of a core** | 79.6% |
+| `/scan` | 13.4 Hz | **14.2 Hz** | 7.0 Hz |
+| `/scan_3d` cloud | 23.2 Hz | **25.3 Hz** | 17.3 Hz |
+✅ **Recording does NOT degrade the safety path** (within noise) — the opposite of RTAB-Map.
+🔴 **DISK IS THE BINDING CONSTRAINT: 29.3 MB/s growth vs a measured 27.4 MB/s SD sustained-write
+ceiling — it writes AT the card's limit, so hiccups WILL drop messages. 27 GB free ≈ 15 MIN of
+driving.** ⇒ **A USB SSD is effectively required for a real run** (none attached). Dropping colour to
+640×360 shrinks the bag AND RTAB-Map's cost — one change, both problems.
+⚠️ **Live-streaming RGB-D to the laptop instead is NOT viable:** `image_transport` here has **only
+`raw_pub`** (the `compressedDepth` plugin fails to load — visible in every `rover-camera` start), so
+depth would go uncompressed at ~12 MB/s ≈ 100 Mbit/s. WFB is 13 Mbit/s. Record locally, transfer after.
+
+## ⏭ MAPPING IS NOT YAW-GATED — drive it in MANUAL
+**Manual mode bypasses the yaw rate controller (firmware-verified → [[project-rover-autonav]]).**
+⇒ **A mapping run can happen BEFORE #20 is fixed.** ⚠️ **but the collision reflex does NOT apply in
+Manual — the operator is the only safety layer.** Drive slowly (motion blur kills feature matching)
+and **make deliberate LOOPS** — returning to known places is exactly what loop closure needs.
+**Revised order: USB SSD → 640×360 colour + `depth_registration` (one camera restart, then the
+half-dead check) → manual mapping run → offline RTAB-Map on the laptop → AMCL/Nav2 on the Pi.**
