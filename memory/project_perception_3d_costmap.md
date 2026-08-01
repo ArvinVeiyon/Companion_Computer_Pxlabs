@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T14:31:05.726Z
+  modified: 2026-08-01T14:42:18.165Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -17,6 +17,26 @@ state and [[project-l4-gemini-nav2-prereqs]] for the Nav2/slam_toolbox install.
 of L1, and the depth cam is what sees the table tops and drop-offs a 2D lidar passes under or over.
 ⚠️ This file was written from a crash recovery, not from the session that did the work —
 see [[feedback-crash-recovery-checkpoint]].
+
+## ✅ DEPLOYED 2026-08-01 20:08 — `rover-scan-3d.service`, PARALLEL, publishing `/scan_3d`
+**`cloud_to_scan.launch.py` publishes `/scan_3d`, NOT `/scan`, and publishes NO TF.**
+`base_link->camera_link` comes ONLY from `rover-scan`'s `depth_to_scan.launch.py`.
+⇒ **NEVER repoint `rover-scan.service` at `cloud_to_scan.launch.py`** — it would kill the TF, kill the
+`/scan` the live reflex consumes, and leave a topic nothing subscribes to. New unit
+`/etc/systemd/system/rover-scan-3d.service` runs it alongside, with `Requires=rover-scan.service`.
+**Measured head-to-head, same 30 s window:** `/scan_3d` **29.2 Hz / worst gap 99 ms** vs
+`/scan` **23.5 Hz / worst gap 233 ms**. `/scan_3d` is in `base_link`, 184 beams over 92°, 96% finite.
+
+## 🔴 BLOCKER FOR SWITCHING THE REFLEX — `/scan_3d` REPORTS THE NEAR-FIELD STRUCTURE AS OBSTACLES
+**`range_min = 0.40` DOES NOT remove the self-view, because a LaserScan range is √(x²+y²), not x.**
+The structure reaches y = −0.395 at x ≈ 0.34 ⇒ range ≈ **0.52 m**, sailing past a 0.40 m filter.
+**Measured: 34 of 184 beams (18%) have a median range < 0.60 m** — a solid arc from **−45.8° to −33.9°
+at 0.40-0.46 m**, plus isolated bearings at **−9.9° (0.414 m), +10.0° (0.628 m), +31.9° (0.457 m)**.
+**Several have std 0.0004-0.0010 m across 30 frames** — rigid to sub-millimetre, which no real scene
+return looks like. Negative bearing = the vehicle's RIGHT (ROS REP-103 +y is left), matching the
+y median −0.282 of the near-field cluster.
+⇒ **These sit INSIDE the reflex threshold (0.687 m from camera). Switch the reflex to `/scan_3d` today
+and the rover refuses to move.** ⛔ Do not switch until this is masked or explained.
 
 ## ⏭ RESUME HERE (re-verified live 2026-08-01 19:31, after a 19:19 reboot)
 - `rover-scan.service` **still runs the OLD 2D pipeline** — `depth_to_scan.launch.py` →
@@ -118,6 +138,28 @@ record "it is the rover's own bodywork" as fact.** Either way `range_min = 0.40`
 `nav2_forward.yaml` had `sensor_frame: camera_link`. **The cloud is published in
 `camera_depth_optical_frame`.** Now left `""` so Nav2 uses the message's own frame and raytracing
 originates where the sensor actually is.
+
+## 📐 CAMERA MOUNTING — CENTRE vs FORWARD (asked 2026-08-01). ANSWER: **LEAVE IT, TEST FIRST**
+**Current mount (live TF):** `base_link->camera_link` = **(0, 0, 0.305)**, pitch **2.33° down**, roll 0.57°.
+So the camera is at the **vehicle centre**, 30.5 cm up, **33.7 cm behind the 0.337 m bumper plane**.
+**🔴 DO NOT MOVE IT YET — the measurement that would justify moving it has not been made.** We cannot
+yet prove the occluding structure is the ROVER rather than the room (see the re-measure note above).
+**THE DECISIVE TEST, and it is cheap:** rotate the vehicle **30-45°** and re-measure the `/scan_3d`
+beams at **−45.8°..−33.9°**. **Bearing+range unchanged ⇒ it is the rover** (mount change or masking
+justified). **Sweeps with the vehicle ⇒ it is the room** and the mount is fine. Fold this into the
+**outdoor 08-02** session that already has to happen for yaw → [[project-rover-autonav]].
+**Why a setback is probably RIGHT anyway, two independent geometric reasons:**
+1. **Sensor near limit.** Min valid depth measured **0.308 m** (nothing closer is ever returned).
+An obstacle touching the bumper is currently at slant range √(0.337² + 0.305²) ≈ **0.454 m** — safely
+inside the working range. **Move the camera onto the bumper and that same obstacle sits at ~0.305 m,
+right at the blind-zone edge — invisible at exactly the moment it matters most.**
+2. **Vertical FOV, not range, sets the near blind zone.** VFOV ~65° with 2.33° down-pitch puts the
+lower edge **34.8° below horizontal**; from 0.305 m that meets the floor at **0.44 m from the camera =
+only ~10 cm past the bumper.** Moving the camera forward drags this blind zone forward with it — it
+does not shrink it. **Raising or tilting the camera changes this; sliding it forward does not.**
+⇒ **If the occluder does turn out to be the rover, prefer (a) an angular mask on the known self-occupied
+bearings or (b) raising the camera — both far cheaper than relocating, which invalidates the extrinsics
+that are already only sampled over 1.0-1.4 m.**
 
 ## ⚠️ THE CAVEAT THE CODE ITSELF FLAGS — RE-VALIDATE IN AN OPEN CORRIDOR
 The height band was measured **with something blocking at 1.26 m**, so the floor was only sampled over
