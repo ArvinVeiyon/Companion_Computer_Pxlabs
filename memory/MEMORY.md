@@ -54,7 +54,9 @@ autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | 
 🔴 **DO NOT SWITCH THE REFLEX YET — `/scan_3d` puts 18-24 beams < 0.60 m, inside the 0.687 m reflex threshold ⇒ the rover would refuse to move.** `range_min=0.40` misses them because scan range = **√(x²+y²)**.
 🔴🔴 **THE "ROVER SEES ITS OWN BUMPER" FINDING IS OVERTURNED (two-pose test 20:36): they are ROOM objects, not the rover.** Moved pose ⇒ beams 41→24 and the rigid ones shifted 1-4° and ~4 cm; rigid vehicle structure would be IDENTICAL. ⇒ **`range_min=0.40` is clipping REAL obstacles; re-derive it from the 0.308 m sensor near limit.** ⇒ **no self-occlusion to design around.**
 📐 **CAMERA MOUNT: LEAVE IT CENTRE** — (0,0,0.305), pitch 2.33°, 33.7 cm behind the bumper. Setback keeps a bumper-contact obstacle (slant 0.454 m) outside the 0.308 m near limit; the near blind zone is set by VFOV, so moving forward drags it along rather than shrinking it.
-❌ **Height-band validation attempt 1 (20:35) INCONCLUSIVE — not a pass.** Only 1.5-2.25 m of floor sampled; "safe at 6.55 m" was a 3-point extrapolation from NEGATIVE p5 values, under load 6.45. **Redo with ≥4 m genuinely clear and the retry storm stopped.**
+✅ **HEIGHT BAND VALIDATED 20:53 (one location):** RANSAC floor plane, 9833 inliers, RMS 9.9 mm, `z=+0.00638x+0.02681y−0.01203` ⇒ forward tilt **+0.37°**, **crosses 0.12 m at x=20.7 m — ~7× past the 3 m range. No phantom obstacles.** ⚠️ repeat at 2-3 spots.
+🔑 **METHOD: percentiles DO NOT WORK — p5 sinks and p50 climbs with range (noise), giving OPPOSITE wrong answers (±2.6° vs the true +0.37°). ALWAYS RANSAC-fit the floor plane.**
+🔎 **`min_height=0.12` is likely too conservative** — floor measured **−0.012 m**, ~6 cm below the 0.043-0.093 it was chosen against ⇒ **0.06-0.08 would roughly HALVE the 12 cm minimum visible obstacle. Measure 2-3 locations first.** Lateral tilt +1.54° vs 0.573° TF roll = sloped floor OR roll extrinsics error; one pose can't tell.
 
 ## [WFB_NG] → reference_wfb_ng.md
 ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc across both wlx NICs

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T15:10:45.018Z
+  modified: 2026-08-01T15:24:41.625Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -176,7 +176,33 @@ does not shrink it. **Raising or tilting the camera changes this; sliding it for
 bearings or (b) raising the camera — both far cheaper than relocating, which invalidates the extrinsics
 that are already only sampled over 1.0-1.4 m.**
 
-## ❌ HEIGHT-BAND VALIDATION ATTEMPT 1, 2026-08-01 20:35 — **INCONCLUSIVE, MUST BE REDONE**
+## ✅ HEIGHT BAND VALIDATED 2026-08-01 20:53 — **RANSAC PLANE FIT, ONE LOCATION**
+Clean system (retry storm stopped), open area, 10 pooled frames, 245 911 pts.
+**Floor plane in `base_link`, 9833 inliers, residual RMS 9.9 mm, coverage 0.4-3.5 m:**
+`z = +0.00638·x +0.02681·y −0.01203`  ⇒ **forward tilt +0.37°**, lateral tilt +1.54°
+| x | 0.5 | 1.5 | 2.5 | 3.0 m |
+|---|---|---|---|---|
+| floor z | −0.009 | −0.003 | +0.004 | +0.007 |
+| margin to 0.12 | +0.129 | +0.123 | +0.116 | +0.113 |
+**Crosses 0.12 m at x = 20.7 m — ~7× beyond the 3 m working range. NO phantom obstacles.**
+⚠️ **ONE LOCATION ONLY.** Repeat at 2-3 spots before treating it as general.
+
+### 🔑 METHOD — percentiles DO NOT WORK for this, use a plane fit
+**p5 and p50 give OPPOSITE answers and both are wrong.** Depth noise grows with range, so the low
+percentile SINKS (p5: −0.015 → −0.048 over 1.5-2.5 m) while the median CLIMBS past the threshold
+(p50: 0.008 → 0.132). Percentile fits reported **±2.6° of tilt; the plane fit says +0.37°.**
+⇒ **Always RANSAC-fit the floor plane over z<0.25, 0.4<x<3.5, then read the crossing off the plane.**
+
+### 🔎 TWO FOLLOW-UPS THIS RAISED
+1. **`min_height = 0.12` is likely more conservative than needed.** This fit puts the floor at
+**−0.012 m**, ~6 cm lower than the 0.043-0.093 m the 0.12 was chosen against. If the floor really sits
+near z≈0, **0.12 could come down to ~0.06-0.08 and roughly HALVE the minimum visible obstacle height**
+(today anything under ~12 cm is invisible). **Measure 2-3 locations before changing it.**
+2. **Lateral tilt +1.54° vs 0.573° roll in the static TF.** Either a genuinely sloped floor or a roll
+extrinsics error — **a single pose cannot tell them apart.** Harmless for the band (within the ±46°
+FOV the floor stays under 0.09 m at 3 m) but it WILL matter for the wider-FOV STL-19.
+
+## ❌ ATTEMPT 1, 20:35 — INCONCLUSIVE (kept for the method)
 Do NOT read this as a pass. Script: `validate_band.py` (floor p5 per 0.25 m bin, then a linear fit).
 **Why it failed:** only **3 bins had floor data (1.5-2.25 m)** — nothing from 0.5-1.5 m or beyond
 2.25 m. The fit claimed "floor reaches 0.12 m at x = 6.55 m, SAFE" but that is a **3-point
