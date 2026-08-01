@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T11:34:05.575Z
+  modified: 2026-08-01T14:04:44.666Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -18,11 +18,33 @@ of L1, and the depth cam is what sees the table tops and drop-offs a 2D lidar pa
 ⚠️ This file was written from a crash recovery, not from the session that did the work —
 see [[feedback-crash-recovery-checkpoint]].
 
-## ⏭ RESUME HERE
+## ⏭ RESUME HERE (re-verified live 2026-08-01 19:31, after a 19:19 reboot)
 - `rover-scan.service` **still runs the OLD 2D pipeline** — `depth_to_scan.launch.py` →
-  `/opt/ros/jazzy/lib/depthimage_to_laserscan/depthimage_to_laserscan_node`. Confirmed live.
-- The new `cloud_to_scan.launch.py` + `nav2_forward.yaml` changes exist **only in the working tree**.
+  `/opt/ros/jazzy/lib/depthimage_to_laserscan/depthimage_to_laserscan_node`. Confirmed live. **Switching
+  it over is a ONE-LINE `ExecStart` change — but read the rate blocker below first.**
+- ✅ The config is no longer uncommitted: **`e0535f9` is pushed, tree clean, 0 ahead of origin/main.**
+- ✅ Prereqs confirmed present: `pointcloud_to_laserscan_node` installed under `/opt/ros/jazzy`,
+  and `/camera/depth/points` **is** being published by the Orbbec wrapper (2.9.3, Gemini 336L, USB3.2).
 - Nothing has been driven with any of this. The numbers below are static measurements, not a test.
+
+## 🔴 BLOCKER FOUND 2026-08-01 19:31 — THE CLOUD IS HALF THE RATE OF THE SCAN IT REPLACES
+Measured over 15 s, services running, video OFF, load ~2.5/4:
+| topic | rate | worst gap | mean gap |
+|---|---|---|---|
+| `/scan` (current 2D `depthimage_to_laserscan`) | **22.7 Hz** | **200 ms** | 44 ms |
+| `/camera/depth/points` (input to the NEW pipeline) | **11.1 Hz** | **465 ms** | 91 ms |
+
+⇒ **Deploying `cloud_to_scan` as-is roughly HALVES the obstacle update rate and MORE THAN DOUBLES the
+worst-case blind interval.** At 0.6 m/s a 465 ms gap is **28 cm of travel** against a 0.35 m bumper
+margin — it eats ~80% of the reflex distance on its own. **⛔ Do not flip `rover-scan.service` over
+until this is closed.**
+**It is NOT the sensor:** the depth stream is configured **848×480 @ 30 fps Y16** and the camera reports
+healthy. The cloud is **CPU-bound in the wrapper's own point-cloud assembly** on 4 oversubscribed cores.
+**Options, in order of cheapness:** (a) drop depth resolution — the scan collapses to one row band
+anyway, so full 848×480 is wasted work; (b) subscribe `depth/image_raw`+`camera_info` and project only
+the needed height band ourselves instead of taking a full organised cloud; (c) accept a lower speed cap
+and re-derive the collision margin from the MEASURED worst gap. **Do not just lower the speed silently.**
+⚠️ Note this also revises the earlier "`/scan` 16-19 Hz" figure — post-reboot it measures 22.7 Hz.
 
 ## 🔴 THE TWO MEASUREMENTS THAT MAKE OR BREAK IT (2026-08-01, from the live cloud)
 

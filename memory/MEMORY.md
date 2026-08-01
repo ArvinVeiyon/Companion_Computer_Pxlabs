@@ -73,10 +73,10 @@ tunnel 2222→drone 10.5.5.87:22 (autossh) | svcs: wifibroadcast@gs, mavlink.rou
 codex-work: ~/codex-work → Companion_Computer_Pxlabs, branch master (origin/main stale) | codex-relay: ~/codex-relay on vind-rly → Relay_Station_Pxlabs (mirror ~/codex-relay-mirror)
 ros2_ws: ~/ros2_ws | branch main | release release/2026-02-22
 
-## [CURRENT STATE — 2026-08-01 16:55, after a session crash at ~16:12. Nothing broken]
-**LIVE-VERIFIED:** all core + 4 autonav svcs active · `rover-ekf-bridge` inactive (correct) · **DISARMED, Manual** · `/odom` **99.7 Hz** ✅ · `/scan` **16-19 Hz** ⚠️ · load 3.77/4 cores · `vision_streaming` **stopped 10:51 by SIGTERM after 9h12m clean — deliberate** ("no FPV while driving"), NOT a fault.
-🔴 **A LOST SESSION (13:00-16:12) did 6 commits + 2 uncommitted files memory never recorded** → `project_perception_3d_costmap.md` + `project_autonomy_plan_reframe.md`. **ros2_ws = 12 AHEAD of origin/main + 2 UNCOMMITTED files holding MEASURED calibration ⇒ COMMIT+PUSH FIRST.**
-⚠️ **`/scan` 16-19 Hz with video OFF vs 22.3 Hz previously WITH video ⇒ the new perception path may cost more than the video did. Re-measure worst gap before any armed test.**
+## [CURRENT STATE — 2026-08-01 19:31, verified live after a 19:19 REBOOT. Nothing broken]
+**LIVE-VERIFIED:** all core + 4 autonav svcs active · `rover-ekf-bridge` inactive (correct) · **DISARMED, `nav_state:4`** · `/odom` publishing at rest ✅ (`esc_online_flags=8` doze handled, heading source GYRO) · **`/scan` 22.7 Hz, worst gap 200 ms** · load ~2.5/4 · `vision_streaming` inactive (deliberate, "no FPV while driving").
+✅ **GIT BLOCKER CLEARED:** ros2_ws working tree CLEAN, `e0535f9` = origin/main, **0 ahead**. The lost-session commits + the measured calibration are all pushed. codex-work auto-synced 19:24.
+🔴 **NEXT BLOCKER = `/camera/depth/points` runs only 11.1 Hz, worst gap 465 ms** (vs the 2D `/scan` it would replace at 22.7 Hz / 200 ms). **At 0.6 m/s a 465 ms gap = 28 cm of travel against a 0.35 m bumper margin ⇒ do NOT deploy `cloud_to_scan` until this is resolved.** Depth stream is configured 848×480@30 — the cloud is CPU-bound, not sensor-bound.
 ⚠️ **`fps` is INERT — QGC's fps control does NOTHING**; resolution + bitrate DO work. 640x360 cut ffmpeg CPU 78-95% → 25.7% (largely defuses the latch) but bitrate still 2000K ⇒ **radio load unchanged. ⛔ frame rate NEVER hardcoded in ffmpeg — it comes from QGC via the conf. 🔎 CHECK `v4l2-ctl -d /dev/video0 --list-formats-ext`: the camera may not support 15 fps at all.**
 ⚠️ **codex-work's last push used the plaintext PAT in its remote URL** ⇒ **#14 rotate+SSH MORE urgent.** Mirror with `cp -p`, **never `rsync --delete`** (UNION). **UNDECIDED: "del mirror one" deferred — ask first.**
 
