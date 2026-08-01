@@ -6,12 +6,13 @@
 ## [MEMORY_FILES]
 - `feedback_dkms_arch.md` (rtl88x2eu DKMS ARCH) · `feedback_use_dds_not_mavlink.md` (**RULE: FC over DDS, never MAVLink probing**) · `feedback_wlan0_persistent_name.md` (⚠️ udev rule GONE 07-30) · `feedback_crash_recovery_checkpoint.md` (**RULE: checkpoint memory PER FINDING** + post-crash recovery)
 - `feedback_camera_qgc_only.md` — **RULE: cameras configured ONLY from QGC; never hand-edit vision_streaming.conf** (FPV cams only, NOT the Orbbec)
+- `feedback_check_docs_before_measuring.md` — 🔴 **RULE: grep `docs/` for a dimension BEFORE deriving it from sensor data; read the COMMENTS around a config value. Cost 1 h + a wrong published reversal on 08-01 — ground-to-top-plate 0.235 m was already documented. The operator's physical identification beats my geometry inference.**
 - `reference_wfb_ng.md` · `reference_wfb_rlyctl.md` · `reference_wfb_cfg_apply.md` · `reference_uart_map.md` · `reference_services.md` · `reference_known_fixes_archive.md` · `reference_gcs_companion_interface.md` · `todos.md` · `ros2_nodes.md`/`ros2_topics.md` · `rover_odometry.md`
 - `project_rover_autonav.md` — **ACTIVE. YAW RATE RUNAWAY: cmd 0.3 rad/s, actual ~6.3 (~21×). ⛔ NO armed yaw tests until fixed.** **ALL pre-08-01 speeds read 12.2× LOW.** Arm workflow + 5 hazards
 - `project_perception_3d_costmap.md` — **ACTIVE. `/scan_3d` deployed + rate fixed; measured floor height, near-field self-view, camera-mount analysis. Reflex NOT switched yet**
 - `project_autonomy_plan_reframe.md` — ladder re-cut by OUTCOME; contradicts "L0-L4 DONE". Q1 localization = THE WALL
 - `project_l2_floortest_wheel0_reversed.md` (wheel-0 "reversal" = FALSE ALARM) · `project_l4_gemini_nav2_prereqs.md` · `project_vision_multicam_upgrade.md` (**Phase D remains**) · `project_ffmpeg_hung_alive_gap.md` (**READ ITS 08-01 SECTION FIRST**)
-- `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.** `ext5v-report` reads the rail UPSTREAM
+- `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.**
 - `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md`
 - `project_rc_control_camera_retry_storm.md` — ✅ **FIXED+PUSHED `9893d6b`.** Was: `rc_control_node` respawned `sudo vision_config_manager /dev/video0` at 95 Hz forever on failure (~100% of a core, blocked the RC callback) — **THIS was the "runaway" blamed twice on a stray process.** Holds what the node does + the CH9/CH10 map.
 - `project_codexwork_token_in_remote.md` — **SECURITY: origin URL embeds a plaintext GitHub PAT; rotate + move to SSH** · `project_codexwork_branches.md` (**auto-sync does NOT git-add NEW memory files — add manually**)
@@ -19,14 +20,14 @@
 ## [VIDEO_FAULTS] — TWO DIFFERENT FAULTS. Full detail + proofs → project_ffmpeg_hung_alive_gap.md
 **(B) 🔴 CPU-STARVATION LATCH — CHECK FIRST, no hardware work.** ffmpeg loses a CPU race and **never recovers** (7-28 pkt/s vs 208). **A service restart does NOT clear it. FIX: briefly `systemctl stop rover-camera rover-scan rover-odometry`.**
 **(A) CAMERA WEDGE — looks identical.** ⛔ **NO SOFTWARE RECOVERY EXISTS — don't build one**; only physical VBUS removal clears it. **🔴 "LG = faulty hw" is WRONG or intermittent — it later ran fine on the SAME port.**
-**⚠️ TRAPS:** `video tx incoming` reads 0 inside gaps — **use a CUMULATIVE delta over ≥30 s**; a **manually launched** ffmpeg never moves WFB's counter — **never A/B flags via it. Stop the service before touching v4l2 controls.**
+**⚠️ TRAPS:** `video tx incoming` reads 0 inside gaps — **use a CUMULATIVE delta over ≥30 s**; a **manually launched** ffmpeg never moves WFB's counter — **never A/B flags via it.**
 
 ## [IDENTITY]
 Claude Code CLI + onboard AI for the Vind-Roz drone/rover platform | user: roz / ArvinVeiyon | goal: continuous presence — develop, maintain, autonomize this platform
 
 ## [PLATFORM]
 Vind-Roz: aerial drone + ground rover, same RPi5 companion, different PX4 airframe | RPi5 BCM2712 quad-core 8GB | Ubuntu 24.04.1 aarch64, kernel 6.8.0-1048-raspi, host `Vind-Roz`
-⚠️ **Boot clock is WRONG until NTP steps it** — don't correlate journals across a reboot. ⚠️ **Only 4 cores; the rover stack + software x264 oversubscribe them** → [VIDEO_FAULTS] (B).
+⚠️ **Boot clock is WRONG until NTP steps it** — don't correlate journals across a reboot. ⚠️ **Only 4 cores; rover stack + x264 oversubscribe them** → [VIDEO_FAULTS] (B).
 ⚠️ **No rate/CPU measurement on this box is trustworthy without `ps -eo pid,pcpu --sort=-pcpu` first** — a "7.5 Hz cloud" reading turned out to be a runaway `vision_config_manager` at 72.7%.
 
 ## [FLIGHT_CONTROLLER]
@@ -61,7 +62,7 @@ autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | 
 
 ## [WFB_NG] → reference_wfb_ng.md
 ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc, both wlx NICs
-**Every `wifibroadcast@` restart prints `rtw_mlmeext_disconnect` WARN + trace 2×. BENIGN. Don't investigate, don't patch the driver.**
+**`wifibroadcast@` restart prints `rtw_mlmeext_disconnect` WARN + trace 2×. BENIGN — don't investigate or patch the driver.**
 **Drone TX is flawless. When video breaks, WFB has an EMPTY input queue — suspect the source.** Live stats: TCP `127.0.0.1:8102` (GS 8103), JSON; do NOT use the `wfb-cli` TUI.
 **⚡ 07-31:** downlink 99.86-99.99%; uplink loses 13.57% mavlink. **ROOT CAUSE = drone NIC-A ant0 −48.5 vs ant1 −28.3 dBm (20 dB deaf)** ⇒ **ONLY WFB JOB LEFT: reseat that antenna.** ✅ DELETED as causes: ring-buffer/EAGAIN, GS TX power, peer `10.5.6.50`.
 ⚠️ **METHOD (cost a week):** compare payload `tx.incoming`→`rx.out` across 8102/8103. **Never `rx.all`** (double-counts 4 antennas). **Never infer radio health from MAVLink rates at two `tcp:5760` endpoints.**
