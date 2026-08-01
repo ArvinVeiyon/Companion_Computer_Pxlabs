@@ -10,8 +10,7 @@
 - `project_rover_autonav.md` — **ACTIVE. YAW RATE RUNAWAY: cmd 0.3 rad/s, actual ~6.3 (~21×). ⛔ NO armed yaw tests until fixed.** **ALL pre-08-01 speeds read 12.2× LOW.** Arm workflow + 5 hazards
 - `project_perception_3d_costmap.md` — **ACTIVE. `/scan_3d` deployed + rate fixed; measured floor height, near-field self-view, camera-mount analysis. Reflex NOT switched yet**
 - `project_autonomy_plan_reframe.md` — ladder re-cut by OUTCOME; contradicts "L0-L4 DONE". Q1 localization = THE WALL
-- `project_l2_floortest_wheel0_reversed.md` (wheel-0 "reversal" = FALSE ALARM) · `project_l4_gemini_nav2_prereqs.md` · `project_vision_multicam_upgrade.md` (**Phase D remains**)
-- `project_ffmpeg_hung_alive_gap.md` — **READ ITS 08-01 SECTION FIRST.** CPU latch, fps-key question, vision-node defects
+- `project_l2_floortest_wheel0_reversed.md` (wheel-0 "reversal" = FALSE ALARM) · `project_l4_gemini_nav2_prereqs.md` · `project_vision_multicam_upgrade.md` (**Phase D remains**) · `project_ffmpeg_hung_alive_gap.md` (**READ ITS 08-01 SECTION FIRST**)
 - `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.** `ext5v-report` reads the rail UPSTREAM
 - `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md` · `project_ros2ws_tag_cleanup.md`
 - `project_rc_control_camera_retry_storm.md` — 🔴 **NEW 08-01. `rc_control_node` respawns `sudo vision_config_manager /dev/video0` at 95 Hz forever when it fails (2181 fails/10 min, ~100% of a core, blocks the RC callback). THIS is the "runaway" blamed twice on a stray process. Killing it never works — TX cam switch to neutral stops it.**
