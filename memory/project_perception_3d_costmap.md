@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T14:04:44.666Z
+  modified: 2026-08-01T14:31:05.726Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -27,7 +27,41 @@ see [[feedback-crash-recovery-checkpoint]].
   and `/camera/depth/points` **is** being published by the Orbbec wrapper (2.9.3, Gemini 336L, USB3.2).
 - Nothing has been driven with any of this. The numbers below are static measurements, not a test.
 
-## 🔴 BLOCKER FOUND 2026-08-01 19:31 — THE CLOUD IS HALF THE RATE OF THE SCAN IT REPLACES
+## ✅ RATE BLOCKER FIXED 2026-08-01 20:00 — `point_cloud_decimation_filter_factor:=3`
+**The cloud is now FASTER than the 2D scan it replaces, on both rate and worst gap.** 60 s runs:
+| decimation | cloud rate | worst gap | msg size | points |
+|---|---|---|---|---|
+| 1 (was) | 10.0 Hz | **1066 ms** | 3.37 MB | 210 339 |
+| 2 | 17.8 Hz | 265 ms | 0.84 MB | 52 621 |
+| **3 (deployed)** | **23.2 Hz** | **301 ms** | **0.37 MB** | 23 268 |
+| 4 | 26.2 Hz | 409 ms | 0.21 MB | 13 152 |
+For comparison the OLD 2D `/scan` measures **16.4 Hz, worst gap 390 ms** on the same run.
+**Nothing that matters is lost at 3:** 283 columns across the ~90° depth FOV = **0.32°/column = 1.7 cm
+at 3 m**, well inside a 5 cm costmap cell. 4 gives a higher mean rate but a WORSE worst gap — don't.
+**Deployed as a systemd drop-in** `/etc/systemd/system/rover-camera.service.d/10-point-cloud-decimation.conf`
+(original unit untouched; revert = delete the file + `systemctl daemon-reload`).
+⚠️ **`ros2 param set … point_cloud_decimation_filter_factor` reports "successful" and DOES NOTHING.**
+The working runtime lever is a **service**: `ros2 service call /camera/set_point_cloud_decimation
+orbbec_camera_msgs/srv/SetInt32 "{data: 3}"` — takes effect immediately, no restart. Use it to A/B.
+⚠️ **The DEPTH IMAGE is now the slow path, not the cloud** — 14.6 Hz worst 533 ms, despite being
+configured 848×480 **@30 fps**. It publishes 814 KB/frame on `default` (RELIABLE) QoS. Once
+`cloud_to_scan` is deployed nothing needs `/camera/depth/image_raw` at all — turning it off is the
+next free win. Not yet investigated why 30 fps only delivers ~15.
+
+## 🔴 HAZARD FOUND THE HARD WAY 2026-08-01 19:55 — A CAMERA RESTART CAN COME UP HALF-DEAD
+`systemctl restart rover-camera` came back **"active", params answering, gyro+accel streaming, NO error
+logged — but depth and color never started.** `/camera/depth/points`, `/camera/depth/image_raw` and
+`/scan` were all silently dead. **A second `systemctl restart` fixed it.** Not caused by the decimation
+arg — the identical command worked on the retry.
+**DISCRIMINATOR: after any camera restart, grep the log for the stream-start lines**
+`journalctl -u rover-camera --since -1min | grep "depth Frame - Width"` — **present = streams live;
+absent = half-dead, restart again.** `systemctl is-active` does NOT catch this, and neither does a
+param read. ⇒ **never trust a camera restart without checking a topic rate.**
+
+## 🔴 SUPERSEDED — the original blocker, kept for the method
+**The first 7.3-7.7 Hz reading was measured while a runaway `vision_config_manager` (pid 1340510) ate
+72.7% of a core**; it died with the 19:19 reboot. Clean-system baseline was 10.0 Hz. **Always check
+`ps -eo pid,pcpu --sort=-pcpu` before trusting a rate measurement on this 4-core box.**
 Measured over 15 s, services running, video OFF, load ~2.5/4:
 | topic | rate | worst gap | mean gap |
 |---|---|---|---|
@@ -66,6 +100,19 @@ exactly at the **0.337 m bumper plane**, with 1.26 m of genuinely clear floor be
 beyond this.
 ⚠️ **The old 2D `/scan` never noticed this** because at 0.3 m the plate falls below its narrow row
 band. The height-aware scan is the first thing that ever looked there — expect more findings like it.
+
+**🔶 RE-MEASURED 2026-08-01 19:45 — "front plate" UNDERSTATES IT. The near field is much bigger.**
+Live cloud, 4 consecutive frames: **18 472 points with x < 0.40 m — 8.9% of the whole cloud**, not 1982.
+Extent in `base_link`: **x 0.305-0.398 (med 0.342) · z 0.089-0.498 (med 0.323) · y -0.395..0.250
+(med -0.282)**. So it reaches from **9 cm off the floor to 50 cm — i.e. ~20 cm ABOVE the camera**
+(camera sits at z = 0.305), and is offset to the RIGHT.
+**Shape: x std 0.021 vs z std 0.095 and y std 0.094 ⇒ a roughly VERTICAL, forward-facing surface at
+constant x ≈ 0.34 m**, NOT a horizontal top deck (a top plate would show constant *z*).
+**Rigidity: the y median is −0.2817 in all four frames, to four decimals.**
+⚠️ **HONEST LIMIT: that only proves the scene is STATIC, not that the surface is the ROVER.** The
+decisive test is to rotate the vehicle and see whether the surface follows — **not possible yet**
+(indoor, and the yaw-rate runaway is unresolved → [[project-rover-autonav]]). **Until then do not
+record "it is the rover's own bodywork" as fact.** Either way `range_min = 0.40` removes it.
 
 ### 3. `sensor_frame` was wrong
 `nav2_forward.yaml` had `sensor_frame: camera_link`. **The cloud is published in
