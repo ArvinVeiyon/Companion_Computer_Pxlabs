@@ -31,7 +31,7 @@ Vind-Roz: aerial drone + ground rover, same RPi5 companion, different PX4 airfra
 
 ## [FLIGHT_CONTROLLER]
 Custom Pixhawk 6X-RT (in-house PCB, NOT Holybro) | MCU: NXP i.MX RT1176 Cortex-M7+M4
-PX4 **pxlabs-v1.17.0-2.0.0** | git-hash a52c38b07d | built 2026-05-31 | target px4_fmu-v6xrt (via NuttShell `ver all`; local ~/PX4-Autopilot @ c5b8445 is an upstream clone, NOT the fw source)
+PX4 **pxlabs-v1.17.0-2.0.0** | git-hash a52c38b07d | built 2026-05-31 | target px4_fmu-v6xrt (local ~/PX4-Autopilot @ c5b8445 is an upstream clone, NOT the fw source)
 
 ## [UART_MAP] → reference_uart_map.md
 AMA0=MAVLink 921600 | AMA2=TFmini 115200 | AMA3=STL19 230400(disabled) | AMA4=DDS 921600 | AMA1=free
@@ -42,7 +42,7 @@ ROS2 Jazzy | Python 3.12.3 | Ollama v0.17.7 / phi3:mini | AIDE 0.18.6 | wfb-ng 1
 
 ## [SERVICES] → reference_services.md
 core: mavlink.router | microxrce-agent | rc_control_node | vision_streaming | block-traffic | wifibroadcast@drone | system_files_sync.timer | ollama | ldlidar(disabled)
-**AIDE `dailyaidecheck.timer` DISABLED 07-26** (stale baseline + ~3.5h/day of a core). If re-enabling: `COPYNEWDB=yes` + Nice=19/IOSchedulingClass=idle
+**AIDE `dailyaidecheck.timer` DISABLED 07-26** (stale baseline + ~3.5h/day of a core). If re-enabling: `COPYNEWDB=yes` + Nice=19.
 **tfmini DISABLED 07-26 — drone-only. ⚠️ MUST `systemctl enable --now tfmini` for the DRONE airframe.** Sensorless it burned 38% CPU.
 autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | rover-autonav-mode — enabled+active; **rover-ekf-bridge installed but DISABLED on purpose** (wheels-up limit-cycle hazard; start by hand on the floor).
 **⚡ FPV video costs `/scan` 28.4 → 22.3 Hz** ⇒ don't stream FPV while driving. **🔴 `/odom` DIES AT REST — ESC doze (`esc_online_flags: 8`), NOT CPU.** ⚠️ `/odom` is RELIABLE QoS — a BEST_EFFORT subscriber reads 0 and mimics this fault exactly.
