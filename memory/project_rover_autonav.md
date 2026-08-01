@@ -5,10 +5,106 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-07-31T19:14:20.200Z
+  modified: 2026-08-01T11:30:33.700Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## ⏭ RESUME HERE — 2026-08-01 (session crashed ~16:12; state recovered + verified 16:55)
+**Verified live at recovery: services mavlink.router / microxrce-agent / wifibroadcast@drone /
+rover-camera / rover-scan / rover-odometry / rover-autonav-mode ALL ACTIVE. `rover-ekf-bridge`
+inactive (correct, deliberate). `/odom` 99.7 Hz ✅. `/scan` 16-19 Hz ⚠️. Load 3.77 on 4 cores.
+`vision_streaming` STOPPED at 10:51 by SIGTERM after a 9h12m clean run — deliberate, matches the
+"don't stream FPV while driving" rule, NOT a fault.**
+🔴 **A LATE SESSION (13:00-16:12) WAS LOST AND ITS WORK WAS NEARLY UNDOCUMENTED.** It built the 3D
+perception layer and rewrote the autonomy ladder → **[[project-perception-3d-costmap]]** and
+**[[project-autonomy-plan-reframe]]**. **ros2_ws is 12 commits AHEAD of origin/main and has 2
+UNCOMMITTED files holding measured calibration values — push and commit before anything else.**
+⚠️ **`/scan` is 16-19 Hz with video OFF, vs 22.3 Hz previously measured WITH video streaming** — the
+new perception path may cost more than the video did. Re-measure the worst gap before any armed test.
+
+### Yaw — PARKED FOR **OUTDOOR, 2026-08-02** (unchanged by the crash)
+**State left: DISARMED, nav_state 0 (Manual), `rover-ekf-bridge` STOPPED, other 4 autonav services
+active, `/odom` 99.9 Hz. ros2_ws committed, NOT pushed.**
+- ✅ **`RO_YAW_RATE_P` = 0.05 and `RO_YAW_RATE_LIM` = 0.5 — user ran `param save` 08-01, both read
+  back correct.** (Was 2.0 / 1.57.) ⚠️ Persistence NOT independently verified: the saved-vs-RAM flag
+  is only visible via NuttShell `param show`, which has wedged this link before. **Re-read both after
+  any FC reboot** (`tools/set_param.py RO_YAW_RATE_P`) — 2.0 is the runaway value.
+  ⚠️ `RO_YAW_RATE_LIM` clamps the **SETPOINT ONLY, never the achieved rate** — it did not stop the
+  6.3 rad/s runaway. It limits what can be asked for, it is NOT protection. Test setpoints 0.2/0.4
+  both sit under the new 0.5 cap, so no conflict.
+- **Why yaw was parked:** indoor space insufficient. Measured the visible arc — obstacle at **0.48 m
+  on the far right = only 0.21 m clear of the rover body**; a skid-steer spin TRANSLATES into it.
+- ⚠️ **The depth cam sees only 92° (-46..+46) and `range_min` is 0.30 m.** 268° incl. the whole rear
+  is UNMEASURABLE, and anything closer than 0.30 m reads as "nothing there". **Never clear a spin
+  from `/scan` alone — it cannot see where a spin goes.**
+- **The yaw test needs only ~23-46°** (l2_test yaw leg = 2.0 s: 0.2 rad/s→23°, 0.4→46°). NOT a 360.
+  Space needed: ~1.5 m clear radius **plus ~0.5 m ahead**, because l2_test always runs its forward
+  leg first and `--speed 0` makes that check fail and abort before yaw.
+- **Tomorrow:** `yaw_response_log.py 290 --p-gain 0.05` in one shell, then
+  `l2_test.py --live --speed 0.1 --yaw 0.2` and again `--yaw 0.4`. Two setpoints so the ratio is a
+  confirmed constant, not a single-point fit.
+
+## ⚠️ 2026-08-01 — HOW TO READ THE YAW TEST (the discriminator, learned the hard way)
+**Discriminate on `steering/setpoint`, NOT absolute output, and NOT on how the rover behaves.**
+Dropping `RO_YAW_RATE_P` 2.0→0.05 to make the test safe ALSO made an open loop produce roughly the
+*commanded* yaw rate — so **the rover's visible behaviour stops distinguishing the hypotheses.**
+| `steering ÷ setpoint` | verdict |
+|---|---|
+| **≈ 0.102** (= FF 0.0517 + P 0.05) | **OPEN loop** — controller never sees `vehicle_angular_velocity`. **No gain fixes it**; firmware/sensor work. |
+| **≈ 0.052** (FF only, error → 0) | **CLOSED loop** — feedback alive, it IS a tuning job (`RO_YAW_RATE_P/I`). |
+⚠️ **The tool printed a confident "matches OPEN LOOP" on the 08-01 forward-only run where yaw sp was
+0.0 — a degenerate case with ZERO discriminating power (separation 0.001). That verdict was
+MEANINGLESS.** Guard added (`fdf8d37`, `f8f1988`): it now refuses a verdict below |sp| 0.05.
+**No yaw evidence has been collected yet.** The open-loop hypothesis still rests only on the 07-29
+arithmetic.
+
+## ✅ 2026-08-01 — SPEED LOOP VALIDATED ARMED after the scale fix (L2 re-PASS, forward-only)
+Commanded 0.2 m/s: **peak ERPM 170 → 80**, `/odom` peak **0.363 m/s** (80 x 0.004633 = 0.371, agrees
+to 2%). Clean auto-disarm + Hold. Gyro sustained −0.014 rad/s ⇒ tracked straight.
+🔴 **THE REAL SAFETY POINT: under the old scale the setpoint was PHYSICALLY UNREACHABLE.** Making
+`/odom` read 0.2 m/s needed **526 ERPM ≈ 2.4 m/s** real, and `RO_SPEED_LIM` 0.7 implied ~1840 ERPM
+≈ **8.5 m/s** — so the speed controller had no equilibrium and **just accelerated until it ran out of
+floor.** That is why forward legs kept climbing instead of holding. Setpoint is now 43 ERPM, reachable.
+⚠️ Still ~1.8x over (80 peak vs ~43 expected) — **probably accel overshoot + `RO_SPEED_I` windup, but
+UNCONFIRMED**: only *peak* was logged, not sustained. Sustained logging added; re-check on a longer leg.
+
+## ✅ 2026-08-01 — `erpm_to_ms` MEASURED: was **12.2x TOO SMALL**, now FIXED (`42f9aa2`)
+**0.000380 → 0.004633.** The old value was assumed geometry, `pi*0.1524/(7*3*60)`, implying
+`pole_pairs*gear_ratio = 21`. **Measured, that product is ~1.75** — the assumed drivetrain is not
+this drivetrain. ⇒ **every distance and velocity `/odom` ever reported was ~12.2x low.**
+**METHOD THAT WORKED (use this again): push the rover BY HAND through N counted wheel revolutions.**
+No slip, no tape measure, and **the wheel diameter cancels out**:
+`pole_pairs*gear_ratio = ERPM_seconds / (60*revolutions)` = 516.7/(60*5) = **1.722**.
+Powered 2.13 m tape drive agreed independently (1.788 / 0.004463 — tape error + slip bias it low).
+Tool: **`tools/odom_scale_measure.py --revs 5`** (reports coverage, straightness, implied product).
+- ⚠️ **The old ">=2.3x low" figure was a LOWER BOUND ONLY**, from a skid-steer spin. Scrub makes
+  wheels turn far more than the achieved rotation implies — **real slip factor in that spin was ~5x.**
+  Never treat a spin-derived scale as an estimate; it is a floor.
+- **`deadband_erpm` 40 → 5** as a consequence. 40 ERPM was chosen when it meant 0.015 m/s; at the
+  true scale it is **0.185 m/s** and would have swallowed most of Nav2's fine-positioning range.
+  Standstill noise re-measured, 2930 samples x 4 wheels: **min 0, max 0 — the "+/-35 ERPM idle
+  jitter" note does NOT reproduce.** ⚠️ re-check armed (dithering motors may differ from idle).
+- 🔴 **RE-READ ALL PRE-08-01 SPEED NUMBERS AS 12.2x LOW.** "commanded 0.2 m/s → /odom 0.081" means
+  the rover was really doing **~1.0 m/s — 4-5x the commanded speed.** The FC speed loop closes on
+  EKF velocity fed from `/odom` via `rover_ekf_bridge`, so it was over-driving to chase an
+  under-reported measurement. **This fix is a prerequisite for any armed AutoNav floor test.**
+  The "forward is comparatively tame (~0.08-0.15 m/s)" note was the under-reported figure, not reality.
+- ⚠️ Two earlier versions of the measuring tool produced **confident wrong answers** (0.00452, then
+  ~0.0044) by silently dropping frames and by measuring straightness against `/odom`'s ABSOLUTE pose
+  (which includes every earlier drive). **Instrument coverage and straightness or don't believe the run.**
+- Also cleared: `esc_status` runs at **99.4 Hz** (not ~50), and its timestamps track wall clock to
+  1.0003 — the integration timebase is sound, ruled out as a cause.
+
+## ✅ 2026-08-01 — `/odom` at rest FIXED (`bee3abe`) — the ESC-doze L5 blocker
+`wheel_odometry_node` now publishes a **zero-velocity** sample when a side has no online ESC but
+**every awake ESC reads inside the deadband**. Rationale: a dozing VESC cannot be driving its wheel,
+and a wheel turned externally wakes its ESC — so that state is a real measurement, not missing data.
+Guard stays narrow: **any awake wheel reporting motion while the other side is unreadable still skips
+and warns.** Param `publish_at_rest` (default true) restores the old behaviour for A/B.
+Verified on synthetic EscStatus: flags=15 stopped publishes, flags=8 stopped publishes, flags=8 with
+addr 13 spinning stays silent, recovers on all-four. ⚠️ **Not yet seen against a live doze** — the
+ESCs stayed awake for a 4-minute watch.
 
 ## 🔴 2026-08-01 — `/odom` DIES AT REST (ESC doze). NEW L5 BLOCKER. Answers the 07-26 "unknown".
 Measured: **zero `/odom` messages in 25 s, with FPV video both ON and OFF — so it is NOT a CPU
@@ -67,6 +163,31 @@ position aiding at all, EKF2's horizontal position variance grows forever. Found
 - **This WILL recur** — it is inherent to velocity-only aiding, so budget an FC reboot before floor work.
   Durable fix is an L5/L6 item: give EKF2 a bounded position source (SLAM pose → `vehicle_visual_odometry`
   position). Nav2 will hit this too.
+
+### 🔎 2026-08-01 YAW ANALYSIS (firmware + live params, no armed test) — points at ABSENT FEEDBACK
+Read the REAL firmware (`~/PX4-Autopilot` branch **`pxlabs-fw` @ a52c38b** = the FC build) plus live
+params via pymavlink PARAM_REQUEST_READ. Chain is `DifferentialRateControl.cpp` →
+`RoverControl::rateControl` (`src/lib/rover_control/RoverControl.cpp:163`).
+- **`RD_WHEEL_TRACK` = 0.31, CORRECTLY SET** (default is 0). ❌ "feed-forward is disabled" — WRONG, deleted.
+  ⚠️ but note `runSanityChecks` only errors if FF params **and** `RO_YAW_RATE_P` are all ~0, so a zero
+  track would have been silent. Worth re-checking after any param wipe.
+- FF term = `yaw_rate_sp * RD_WHEEL_TRACK/2 / RO_MAX_THR_SPEED` = 0.3*0.31/2/3.0 = **0.0155** — tiny.
+- Observed yaw differential was ~870/1500 ERPM ≈ **0.58 normalized** ⇒ the PID supplied ~0.56
+  = `RO_YAW_RATE_P (2.0) x error` ⇒ **error ≈ 0.28 rad/s ≈ the ENTIRE setpoint** ⇒ the yaw rate the
+  loop *measures* is **≈ 0** while the gyro logged 5.7-6.3 rad/s. **The loop is running OPEN.**
+  A closed loop at P=2.0 would have slammed to full reverse (error -6 → -12, clamped -1); the rover
+  instead span steadily one way, which a working loop cannot do.
+- Explains why achieved rate blew through `RO_YAW_RATE_LIM` 1.57 by ~4x: **that limit clamps the
+  SETPOINT, never the outcome.**
+- Live params: RO_YAW_RATE_P 2.0 · I 0.1 · LIM 1.57 · TH 3.0 (**degrees**, x M_DEG_TO_RAD_F in fw) ·
+  CORR 1.0 · ACCEL/DECEL_LIM -1 · RO_MAX_THR_SPEED 3.0 · RO_SPEED_LIM 0.7 · RD_YAW_STK_GAIN 1.0.
+- **NEW INSTRUMENTATION nobody used before: `/fmu/out/rover_steering_setpoint` and
+  `/fmu/out/rover_throttle_setpoint` ARE exported over DDS** (dds_topics.yaml:111,114) — that is the
+  rate controller's own OUTPUT. Log it vs `sensor_combined.gyro_rad[2]` to settle open-loop vs
+  unstable-loop directly. (`rover_rate_status`, which carries measured_yaw_rate + PID integral, is
+  NOT exported — would need a dds_topics.yaml change on next flash. Worth adding.)
+- **SAFE NEXT TEST:** set `RO_YAW_RATE_P` 2.0 → ~0.05 FIRST. Even fully open-loop that gives
+  0.05*0.3 + 0.0155 ≈ 0.03 normalized (~45 ERPM) — **it cannot run away** — then log steering vs gyro.
 
 ### 🔴 FINDING A (2026-07-29, BIGGEST OF THE SESSION) — YAW RATE RUNAWAY, ~21x COMMAND
 Commanded **0.3 rad/s** → the rover actually rotated at **~6.3 rad/s** (≈1 rev/s, **~2 full turns in the

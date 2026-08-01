@@ -100,7 +100,17 @@ software x264 already needs ~80-95% of a core, see [[project_ffmpeg_hung_alive_g
 Real fix needs a **local NTP server** the relay can actually reach — companion (10.5.5.87) is reachable from relay (10.5.5.77) over the WFB tunnel and has real internet+correct time. Plan: install `chrony` on companion in server mode, allow 10.5.5.0/24, then point relay's `systemd-timesyncd` `NTP=` at 10.5.5.87.
 Attempted 2026-07-11, aborted mid-install — see `project_relay_ntp_setup.md` and `project_companion_network_degraded.md`.
 
-### 2. 🔴 STILL OPEN — Disable drone onboard Wi-Fi (Drone) — FAILED VERIFICATION 2026-07-30
+### 2. ✅✅ DONE — VERIFIED 2026-08-01 — Disable drone onboard Wi-Fi (Drone)
+**Third time was right.** Reboot happened 08-01; verified by the correct check:
+**`lsmod | grep brcmfmac` returns EMPTY**, and `ip -br link` shows **NO `wlan*` interface at all** —
+only `eth0` (DOWN), the two WFB NICs `wlx782288d98f91` / `wlx782288d993c0`, the uplink
+`wlx90de80d824d6`, and the `drone-wfb` tunnel. `config.txt:76 dtoverlay=disable-wifi-pi5` is live.
+🔴 **THERE IS NO ONBOARD WI-FI FALLBACK ANY MORE. Recovery is WFB → relay:2222 ONLY.**
+⚠️ Boot-clock trap recurred at this reboot: `uptime -s` said 10:23, `who -b` said 07-25, and
+`vision_streaming`'s 9h12m duration implies a third value. **Don't correlate journals across it.**
+
+<details><summary>Historical — why this failed twice (kept for the overlay lesson)</summary>
+
 **Twice marked done, twice wrong.** Reboot check finally ran (boot 07-30 22:41:45): `brcmfmac` +
 `brcmfmac_wcc` **still loaded**, bound via sdio, radio live as **`wlan1`** on wiphy0 at
 **ch34 / 5170 MHz**. DOWN (netplan doesn't configure it) so not beaconing, but initialized.
@@ -112,6 +122,7 @@ The 07-26 inline-comment fix was correct and is intact; the directive itself is 
 ⚠️ **Verify with `lsmod | grep brcmfmac` returning EMPTY — not `ip link show wlan0`.** The interface
 renamed to `wlan1`, so a wlan0-keyed check falsely passes. Detail: project_external_wifi_uplink.md.
 Uplink meanwhile = external USB RTL8821CU `wlx90de80d824d6` @ static 192.168.1.240, working.
+</details>
 
 ### 3. ❌ DELETED — "increase WFB ring buffer on GS". Disproved 07-31, do not do this.
 Nothing overflows: 4 video blocks lost of 341 057, `wfb-server` PID stable, `NRestarts=0`, zero
