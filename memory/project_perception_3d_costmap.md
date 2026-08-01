@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T14:42:18.165Z
+  modified: 2026-08-01T15:10:45.018Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -121,7 +121,22 @@ beyond this.
 ⚠️ **The old 2D `/scan` never noticed this** because at 0.3 m the plate falls below its narrow row
 band. The height-aware scan is the first thing that ever looked there — expect more findings like it.
 
-**🔶 RE-MEASURED 2026-08-01 19:45 — "front plate" UNDERSTATES IT. The near field is much bigger.**
+## 🔴🔴 OVERTURNED 2026-08-01 20:36 — IT IS **NOT** THE ROVER. THE SELF-VIEW FINDING IS WRONG.
+**Two-pose test done** (rover physically moved to a different place AND heading, by hand, disarmed):
+| | baseline pose | new pose |
+|---|---|---|
+| beams < 0.60 m | **41** | **24** |
+| rigid beams (std<0.005 over 40 frames) | −41.8°, −39.9°, −9.9°, +10.0°, +31.9° | **+8.0..+9.5° @0.59 m · +34.9..+35.9° @0.50 m** |
+**Rigid VEHICLE structure must be identical in bearing AND range at both poses. These moved 1-4° and
+~4 cm, and the count nearly halved.** ⇒ **they are static objects in each room, not the rover.**
+⇒ **The "camera sees its own front plate / 1982 points exactly at the 0.337 m bumper plane" finding
+was a coincidence of that one spot. Do not repeat it as fact.**
+⇒ **`range_min = 0.40` has been clipping REAL nearby obstacles, not bodywork** — revisit whether 0.40
+is even wanted, and re-derive it from the sensor near limit (0.308 m) rather than from a phantom plate.
+⇒ Independently confirms **leave the camera centred** (below): there is no self-occlusion to design around.
+⚠️ Most non-rigid near beams have **std 0.16-0.81 m** = intermittent edge-of-FOV returns, not surfaces.
+
+**🔶 SUPERSEDED (kept for the method) — RE-MEASURED 2026-08-01 19:45:**
 Live cloud, 4 consecutive frames: **18 472 points with x < 0.40 m — 8.9% of the whole cloud**, not 1982.
 Extent in `base_link`: **x 0.305-0.398 (med 0.342) · z 0.089-0.498 (med 0.323) · y -0.395..0.250
 (med -0.282)**. So it reaches from **9 cm off the floor to 50 cm — i.e. ~20 cm ABOVE the camera**
@@ -160,6 +175,19 @@ does not shrink it. **Raising or tilting the camera changes this; sliding it for
 ⇒ **If the occluder does turn out to be the rover, prefer (a) an angular mask on the known self-occupied
 bearings or (b) raising the camera — both far cheaper than relocating, which invalidates the extrinsics
 that are already only sampled over 1.0-1.4 m.**
+
+## ❌ HEIGHT-BAND VALIDATION ATTEMPT 1, 2026-08-01 20:35 — **INCONCLUSIVE, MUST BE REDONE**
+Do NOT read this as a pass. Script: `validate_band.py` (floor p5 per 0.25 m bin, then a linear fit).
+**Why it failed:** only **3 bins had floor data (1.5-2.25 m)** — nothing from 0.5-1.5 m or beyond
+2.25 m. The fit claimed "floor reaches 0.12 m at x = 6.55 m, SAFE" but that is a **3-point
+extrapolation over a 0.75 m span**, from p5 values that are **non-monotonic and NEGATIVE
+(−0.021, −0.050, −0.005)** — contradicting the recorded floor of 0.043-0.093 m. It also ran at
+**load 4.18-6.45** because of [[project-rc-control-camera-retry-storm]].
+**To redo properly:** stop the retry storm (TX switch to neutral), find **≥4 m genuinely clear**,
+and require floor data in **most bins from 0.5 to 3.0 m** before believing any slope.
+⚠️ **Use p5, never the median** — the median is contaminated the moment anything stands in a bin.
+⚠️ Negative p5 suggests p5 is picking up the depth-noise tail at range; consider a plane fit to the
+floor points instead of per-bin percentiles.
 
 ## ⚠️ THE CAVEAT THE CODE ITSELF FLAGS — RE-VALIDATE IN AN OPEN CORRIDOR
 The height band was measured **with something blocking at 1.26 m**, so the floor was only sampled over

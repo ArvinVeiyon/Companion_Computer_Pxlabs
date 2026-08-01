@@ -14,12 +14,13 @@
 - `project_ffmpeg_hung_alive_gap.md` — **READ ITS 08-01 SECTION FIRST.** CPU latch, fps-key question, vision-node defects
 - `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.** `ext5v-report` reads the rail UPSTREAM
 - `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md` · `project_ros2ws_tag_cleanup.md`
+- `project_rc_control_camera_retry_storm.md` — 🔴 **NEW 08-01. `rc_control_node` respawns `sudo vision_config_manager /dev/video0` at 95 Hz forever when it fails (2181 fails/10 min, ~100% of a core, blocks the RC callback). THIS is the "runaway" blamed twice on a stray process. Killing it never works — TX cam switch to neutral stops it.**
 - `project_codexwork_token_in_remote.md` — **SECURITY: origin URL embeds a plaintext GitHub PAT; rotate + move to SSH** · `project_codexwork_branches.md` (**auto-sync does NOT git-add NEW memory files — add manually**)
 
 ## [VIDEO_FAULTS] — TWO DIFFERENT FAULTS. Full detail + proofs → project_ffmpeg_hung_alive_gap.md
-**(B) 🔴 CPU-STARVATION LATCH — CHECK FIRST, no hardware work.** ffmpeg loses a CPU race and **never recovers**: 7-28 pkt/s vs 208. **A service restart does NOT clear it. FIX: briefly `systemctl stop rover-camera rover-scan rover-odometry`.** Caught by watchdog #23.
-**(A) CAMERA WEDGE — looks identical.** ⛔ **NO SOFTWARE RECOVERY EXISTS — don't build one** (`-c copy`, uvcvideo rebind, USB de-auth, GStreamer: all 0 frames); only physical VBUS removal clears it. **🔴 the LG later ran fine on the SAME port ⇒ "LG = faulty hardware" is WRONG or intermittent.**
-**⚠️ TRAPS:** per-second `video tx incoming` reads 0 inside gaps — **use a CUMULATIVE delta over ≥30 s**; a **manually launched** ffmpeg never moves WFB's counter — **never A/B flags via it. Stop the service before touching v4l2 controls.** **DIAGNOSTIC:** `ffmpeg -loglevel verbose` by hand → `packets read/decoded` + `*** N dup!` (**dup-pads ⇒ live RTP ≠ live camera**).
+**(B) 🔴 CPU-STARVATION LATCH — CHECK FIRST, no hardware work.** ffmpeg loses a CPU race and **never recovers** (7-28 pkt/s vs 208). **A service restart does NOT clear it. FIX: briefly `systemctl stop rover-camera rover-scan rover-odometry`.**
+**(A) CAMERA WEDGE — looks identical.** ⛔ **NO SOFTWARE RECOVERY EXISTS — don't build one**; only physical VBUS removal clears it. **🔴 "LG = faulty hw" is WRONG or intermittent — it later ran fine on the SAME port.**
+**⚠️ TRAPS:** `video tx incoming` reads 0 inside gaps — **use a CUMULATIVE delta over ≥30 s**; a **manually launched** ffmpeg never moves WFB's counter — **never A/B flags via it. Stop the service before touching v4l2 controls.**
 
 ## [IDENTITY]
 Claude Code CLI + onboard AI for the Vind-Roz drone/rover platform | user: roz / ArvinVeiyon | goal: continuous presence — develop, maintain, autonomize this platform
@@ -51,9 +52,10 @@ autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | 
 ## [PERCEPTION 08-01] → **full detail + all numbers: project_perception_3d_costmap.md**
 ✅ **Cloud rate fixed:** `point_cloud_decimation_filter_factor:=3` (systemd drop-in on `rover-camera`). Cloud **10.0 → 23.2 Hz**, worst gap **1066 → 301 ms**, msg **3.37 → 0.37 MB**. ⚠️ **`ros2 param set` on it silently does NOTHING** — live lever is the **service** `/camera/set_point_cloud_decimation`.
 ✅ **`cloud_to_scan` deployed as `rover-scan-3d.service`, PARALLEL.** Publishes **`/scan_3d`, not `/scan`, and NO TF** (`base_link->camera_link` comes only from `rover-scan`) ⇒ **⛔ NEVER repoint `rover-scan.service` at it.** **`/scan_3d` 29.2 Hz / 99 ms worst** vs `/scan` 23.5 Hz / 233 ms.
-🔴 **DO NOT SWITCH THE REFLEX YET — `/scan_3d` reports the near-field structure as real obstacles.** `range_min=0.40` misses it because scan range = **√(x²+y²)**; the structure reaches y=−0.395 ⇒ range ≈0.52 m. **34/184 beams (18%) < 0.60 m**, arc **−45.8°..−33.9° @0.40-0.46 m**, std 0.0004 m over 30 frames = rigid. **Inside the 0.687 m reflex threshold ⇒ the rover would refuse to move.**
-📐 **CAMERA MOUNT: LEAVE IT CENTRE** — (0,0,0.305), pitch 2.33°, 33.7 cm behind the bumper. Setback keeps a bumper-contact obstacle (slant 0.454 m) outside the 0.308 m near limit; the near blind zone is set by VFOV (floor visible from 0.44 m) so moving forward drags it along rather than shrinking it. **Decisive test = rotate 30-45°, see if that arc follows (rover) or sweeps (room) — outdoor 08-02.**
-⏭ **Next:** drop `/camera/depth/image_raw` once the reflex moves. **Re-validate the 0.12 height band in an OPEN corridor** — only sampled over 1.0-1.4 m.
+🔴 **DO NOT SWITCH THE REFLEX YET — `/scan_3d` puts 18-24 beams < 0.60 m, inside the 0.687 m reflex threshold ⇒ the rover would refuse to move.** `range_min=0.40` misses them because scan range = **√(x²+y²)**.
+🔴🔴 **THE "ROVER SEES ITS OWN BUMPER" FINDING IS OVERTURNED (two-pose test 20:36): they are ROOM objects, not the rover.** Moved pose ⇒ beams 41→24 and the rigid ones shifted 1-4° and ~4 cm; rigid vehicle structure would be IDENTICAL. ⇒ **`range_min=0.40` is clipping REAL obstacles; re-derive it from the 0.308 m sensor near limit.** ⇒ **no self-occlusion to design around.**
+📐 **CAMERA MOUNT: LEAVE IT CENTRE** — (0,0,0.305), pitch 2.33°, 33.7 cm behind the bumper. Setback keeps a bumper-contact obstacle (slant 0.454 m) outside the 0.308 m near limit; the near blind zone is set by VFOV, so moving forward drags it along rather than shrinking it.
+❌ **Height-band validation attempt 1 (20:35) INCONCLUSIVE — not a pass.** Only 1.5-2.25 m of floor sampled; "safe at 6.55 m" was a 3-point extrapolation from NEGATIVE p5 values, under load 6.45. **Redo with ≥4 m genuinely clear and the retry storm stopped.**
 
 ## [WFB_NG] → reference_wfb_ng.md
 ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc across both wlx NICs
@@ -84,18 +86,19 @@ All core + **5** autonav svcs active · `rover-ekf-bridge` inactive (correct) ·
 
 ## [TODOS] → memory/todos.md (full detail + commands)
 **🔴🔴 AUTONAV IS THE ACTIVE PRIORITY (user, 08-01 — supersedes the 07-31 WFB priority). NEXT = 🔴 #20 yaw-rate runaway**, then L5. #21 gyro-yaw odom open. **[OUTDOOR = PRIMARY TARGET] O1-O5:** STL-19 · DroneCAN GPS · lidar SLAM · GPS-waypoint Nav2 · outdoor safety
-**WFB parked (not closed): #22 = the #1 WFB action, a HARDWARE job — reseat drone NIC-A ant0 antenna, re-measure on 8102.** W0-W6 otherwise closed. Then re-measure uplink, then test co-located desense (relay TX 31 dBm ch149 vs WFB RX ch161).
-1. Relay clock via local NTP — OPEN · 2. ✅ onboard Wi-Fi GONE 🔴 **NO onboard fallback — recovery is WFB → relay:2222 ONLY** · 14. 🔴 **Rotate the GitHub PAT + move codex-work to SSH**
+**WFB parked (not closed): #22 = the #1 WFB action, a HARDWARE job — reseat drone NIC-A ant0 antenna, re-measure on 8102.** W0-W6 closed. Then re-measure uplink, then test co-located desense.
+1. Relay clock via local NTP · 2. ✅ onboard Wi-Fi GONE 🔴 **NO onboard fallback — recovery is WFB → relay:2222 ONLY** · 14. 🔴 **Rotate the GitHub PAT + move codex-work to SSH**
 3+4+24. ❌ **ALL THREE DELETED — do not re-propose.** GS `rx_ring_size`, GS TX power (maxed 30 dBm), trim PX4 MAVLink rates (airtime-only).
-5+7+8+9+10. Antenna tracker HW (relay :14551) · /scan → obstacle_distance/Nav2 · #17 delete camera_sw_node_obsolute.py · Multicam Phase D · vision: backoff reset on STALL, pin `6-2/power/control` `on`, vision_config_manager v2.3.0 `--bitrate`
-23. ✅ **Throughput-floor watchdog LIVE** (`a5fb348`): 5 fps / 20 s / 30 s grace. **⛔ do NOT modify the ffmpeg command line** (`vision_streaming_node.py` ~176-207): `-g 30`/`-tune zerolatency`/`-pkt_size 1400` VETOED. Open: `frame=0` grace bug; `rclpy.shutdown()` traceback on every QGC camera change
+5+7+8+9+10. Antenna tracker HW (relay :14551) · /scan → obstacle_distance/Nav2 · #17 delete camera_sw_node_obsolute.py · Multicam Phase D · vision: backoff reset on STALL, pin `6-2/power/control` `on`, `--bitrate`
+23. ✅ **Throughput-floor watchdog LIVE** (`a5fb348`). **⛔ do NOT modify the ffmpeg command line** (`vision_streaming_node.py` ~176-207): `-g 30`/`-tune zerolatency`/`-pkt_size 1400` VETOED.
+25. 🔴 **NEW: fix the rc_control camera retry storm** (latch the ATTEMPT not the success, add backoff, get the blocking spawn out of the RC callback, key by usbcam id not `/dev/video0`) → its memory file
 
 ## [AI_STACK]
 online: claude CLI → Claude API | offline: Ollama phi3:mini (~3 tok/s) | `ai` auto-routes | SSH login: b+Enter=bash | Enter/4s+internet=Claude | no internet=Phi-3
 
 ## [SENSORS]
-TFmini: ttyAMA2 downward 0.3-12m 50Hz → distance_sensor | VL53L1X: I2C 0x29 front 20-400cm 10Hz → obstacle_distance | OptFlow: Farneback 10Hz → sensor_optical_flow (manual launch)
-STL-19: ttyAMA3 360° 0.02-25m ~10Hz — **PRIMARY-TARGET SENSOR** (outdoor 360°+SLAM); unit is with another team; on re-integration **lidar OWNS `/scan`** (remap depth→`/scan_depth`)
+TFmini: ttyAMA2 down 0.3-12m 50Hz → distance_sensor | VL53L1X: I2C 0x29 front 20-400cm 10Hz → obstacle_distance | OptFlow: Farneback 10Hz → sensor_optical_flow (manual)
+STL-19: ttyAMA3 360° 0.02-25m ~10Hz — **PRIMARY-TARGET SENSOR**; with another team; on re-integration **lidar OWNS `/scan`** (remap depth→`/scan_depth`)
 Cameras (**both FPV-capable, both proven on port 6-2; swap from QGC only**) — **See3CAM_CU135** `usbcam-2560c1d1-241D8306-i00` (100mA): real **60 fps** 720p MJPG. **LG Smart Cam** `usbcam-30c9009d-01.00.00-i00` (500mA): **30 fps**, cheaper on CPU, **currently the FPV cam**. | **Orbbec Gemini 336L** = autonomy-only, `usbcam-2bc50807-CPC7B53000AB-i04` (USB3 on BOX-B, ROS2 wrapper only, never ffmpeg); depth 848×480@30 configured but delivers ~15 Hz; min valid depth 0.308 m
 **Three camera rules:** (1) **NEVER key a camera by `/dev/videoN` or by-id** — only `usbcam-<vidpid>-<serial>-i<iface>`. (2) **NEVER record resolution/fps/bitrate as fact** — operator-set from QGC; read the conf live. (3) **Orbbec video nodes appear/vanish with `rover-camera.service`**; renumbering also from the Pi5's own `rpivid`/`pispbe-*` nodes
 
