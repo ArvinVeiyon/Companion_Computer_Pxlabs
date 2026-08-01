@@ -4,35 +4,27 @@
 > ⚠️ **KEEP UNDER 125 LINES / 17 KB.** One line per entry; detail belongs in the topic files.
 
 ## [MEMORY_FILES]
-- `feedback_dkms_arch.md` (rtl88x2eu DKMS ARCH) · `feedback_use_dds_not_mavlink.md` (**RULE: FC over DDS, never MAVLink probing**) · `feedback_wlan0_persistent_name.md` (⚠️ udev rule GONE 07-30) · `feedback_crash_recovery_checkpoint.md` (**RULE: checkpoint memory PER FINDING** + post-crash recovery)
-- `feedback_camera_qgc_only.md` — **RULE: cameras configured ONLY from QGC; never hand-edit vision_streaming.conf** (FPV cams only, NOT the Orbbec)
-- `feedback_check_docs_before_measuring.md` — 🔴 **RULE: `grep -rni` the WHOLE memory dir + `docs/` for a dimension BEFORE deriving it from sensor data; read the COMMENTS around config values. Cost 1 h + a wrong published reversal on 08-01 — it was already written in FOUR places, incl. a memory file whose index line hid it. An index line must name a file's LOAD-BEARING content. The operator's ID of their own hardware beats my inference.**
-- `reference_wfb_ng.md` · `reference_wfb_rlyctl.md` · `reference_wfb_cfg_apply.md` · `reference_uart_map.md` · `reference_services.md` · `reference_known_fixes_archive.md` · `reference_gcs_companion_interface.md` · `todos.md` · `ros2_nodes.md`/`ros2_topics.md` · `rover_odometry.md`
-- `project_rover_autonav.md` — **ACTIVE. YAW RATE RUNAWAY: cmd 0.3 rad/s, actual ~6.3 (~21×). ⛔ NO armed yaw tests until fixed.** **ALL pre-08-01 speeds read 12.2× LOW.** Arm workflow + 5 hazards
-- `project_perception_3d_costmap.md` — **ACTIVE. `/scan_3d` deployed + rate fixed; floor plane, top-plate self-view, camera-mount. Reflex NOT switched yet**
-- `project_autonomy_plan_reframe.md` — ladder re-cut by OUTCOME; contradicts "L0-L4 DONE". Q1 localization = THE WALL
-- `project_l2_floortest_wheel0_reversed.md` (wheel-0 "reversal" = FALSE ALARM) · `project_l4_gemini_nav2_prereqs.md` (🔴 **ALSO holds the 07-26 CAMERA REMOUNT GEOMETRY + the "deck IS in frame" analysis: anything consuming the FULL CLOUD must crop the rover's own nose**) · `project_vision_multicam_upgrade.md` (**Phase D remains**) · `project_ffmpeg_hung_alive_gap.md` (**READ ITS 08-01 SECTION FIRST**)
-- `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.**
-- `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md`
-- `project_rc_control_camera_retry_storm.md` — ✅ **FIXED+PUSHED `9893d6b`.** Was: `rc_control_node` respawned `sudo vision_config_manager /dev/video0` at 95 Hz forever on failure (~100% of a core, blocked the RC callback) — **THIS was the "runaway" blamed twice on a stray process.** Holds what the node does + the CH9/CH10 map.
-- `project_codexwork_token_in_remote.md` — **SECURITY: origin URL embeds a plaintext GitHub PAT; rotate + move to SSH** · `project_codexwork_branches.md` (**auto-sync does NOT git-add NEW memory files — add manually**)
+**feedback (RULES):** `check_docs_before_measuring` 🔴 **grep the WHOLE memory dir + `docs/` for a dimension BEFORE deriving it; an index line must name a file's LOAD-BEARING content; the operator's ID of their own hardware beats my inference** · `crash_recovery_checkpoint` (**checkpoint PER FINDING**) · `use_dds_not_mavlink` (**FC over DDS, never MAVLink probing**) · `camera_qgc_only` (**FPV cams set ONLY from QGC**) · `dkms_arch` · `wlan0_persistent_name` (udev rule GONE 07-30)
+**reference:** `wfb_ng` · `wfb_rlyctl` · `wfb_cfg_apply` · `uart_map` · `services` · `known_fixes_archive` · `gcs_companion_interface` · `todos.md` · `ros2_nodes`/`ros2_topics` · `rover_odometry`
+**project — ACTIVE:** `rover_autonav` (**🔴 YAW RUNAWAY ~21×, ⛔ no armed yaw tests; ALL pre-08-01 speeds read 12.2× LOW**) · `perception_3d_costmap` (**`/scan_3d` live, rate fixed, top-plate settled; reflex NOT switched**) · `autonomy_plan_reframe` (**Q1 localization = THE WALL**) · `rc_control_camera_retry_storm` (**FIXED `9893d6b` — WAS the "runaway" blamed twice on a stray process**)
+**project — other:** `ffmpeg_hung_alive_gap` (**READ ITS 08-01 SECTION FIRST**) · `l4_gemini_nav2_prereqs` (🔴 **ALSO the 07-26 camera remount geometry + "deck IS in frame"**) · `vision_multicam_upgrade` (**Phase D remains**) · `l2_floortest_wheel0_reversed` · `wfb_undervoltage_dead_nic` (**DON'T raise the pot / set usb_max_current_enable=1**) · `external_wifi_uplink` · `gcs_link_degraded` · `relay_ntp_setup` · `relay2_relaystn` (Pi4 USB brownout; fix = powered hub) · `companion_network_degraded` · `boxb_pcie_usb` · `codexrelay_divergence` · `codexwork_token_in_remote` (🔴 **plaintext PAT in origin URL**) · `codexwork_branches` (**auto-sync does NOT git-add NEW files**)
 
-## [VIDEO_FAULTS] — TWO DIFFERENT FAULTS. Full detail + proofs → project_ffmpeg_hung_alive_gap.md
-**(B) 🔴 CPU-STARVATION LATCH — CHECK FIRST, no hardware work.** ffmpeg loses a CPU race and **never recovers** (7-28 pkt/s vs 208). **A service restart does NOT clear it. FIX: briefly `systemctl stop rover-camera rover-scan rover-odometry`.**
-**(A) CAMERA WEDGE — looks identical.** ⛔ **NO SOFTWARE RECOVERY EXISTS — don't build one**; only physical VBUS removal clears it. **🔴 "LG = faulty hw" is WRONG or intermittent — it later ran fine on the SAME port.**
-**⚠️ TRAPS:** `video tx incoming` reads 0 inside gaps — **use a CUMULATIVE delta over ≥30 s**; a **manually launched** ffmpeg never moves WFB's counter — **never A/B flags via it.**
+## [VIDEO_FAULTS] — TWO FAULTS, they look identical. **Full detail + every proof + all traps → project_ffmpeg_hung_alive_gap.md, READ ITS 08-01 SECTION FIRST**
+**(B) 🔴 CPU-STARVATION LATCH — CHECK THIS FIRST, no hardware work.** ffmpeg loses a CPU race and **never recovers** (7-28 pkt/s vs 208). **A service restart does NOT clear it. FIX: briefly `systemctl stop rover-camera rover-scan rover-odometry`.**
+**(A) CAMERA WEDGE.** ⛔ **NO SOFTWARE RECOVERY EXISTS — don't build one**; only physical VBUS removal clears it. 🔴 "LG = faulty hw" is WRONG or intermittent.
+**⚠️ MEASUREMENT TRAP:** `video tx incoming` reads 0 inside gaps — **use a CUMULATIVE delta over ≥30 s**; a manually launched ffmpeg never moves WFB's counter, so **never A/B flags via it.**
 
 ## [IDENTITY]
 Claude Code CLI + onboard AI for the Vind-Roz drone/rover platform | user: roz / ArvinVeiyon | goal: continuous presence — develop, maintain, autonomize this platform
 
 ## [PLATFORM]
 Vind-Roz: aerial drone + ground rover, same RPi5 companion, different PX4 airframe | RPi5 BCM2712 quad-core 8GB | Ubuntu 24.04.1 aarch64, kernel 6.8.0-1048-raspi, host `Vind-Roz`
-⚠️ **Boot clock is WRONG until NTP steps it** — don't correlate journals across a reboot. ⚠️ **Only 4 cores; rover stack + x264 oversubscribe them** → [VIDEO_FAULTS] (B).
+⚠️ **Boot clock is WRONG until NTP steps it.** ⚠️ **Only 4 cores; rover stack + x264 oversubscribe them** → [VIDEO_FAULTS] (B).
 ⚠️ **No rate/CPU measurement here is trustworthy without `ps -eo pid,pcpu --sort=-pcpu` first** — a "7.5 Hz cloud" reading was really a runaway at 72.7%.
 
 ## [FLIGHT_CONTROLLER]
 Custom Pixhawk 6X-RT (in-house PCB, NOT Holybro) | MCU: NXP i.MX RT1176 Cortex-M7+M4
-PX4 **pxlabs-v1.17.0-2.0.0** | git-hash a52c38b07d | built 2026-05-31 | target px4_fmu-v6xrt (local ~/PX4-Autopilot @ c5b8445 is an upstream clone, NOT the fw source)
+PX4 **pxlabs-v1.17.0-2.0.0** | a52c38b07d | 2026-05-31 | px4_fmu-v6xrt (local ~/PX4-Autopilot @ c5b8445 is an upstream clone, NOT the fw source)
 
 ## [UART_MAP] → reference_uart_map.md
 AMA0=MAVLink 921600 | AMA2=TFmini 115200 | AMA3=STL19 230400(disabled) | AMA4=DDS 921600 | AMA1=free
@@ -43,19 +35,22 @@ ROS2 Jazzy | Python 3.12.3 | Ollama v0.17.7 / phi3:mini | AIDE 0.18.6 | wfb-ng 1
 
 ## [SERVICES] → reference_services.md
 core: mavlink.router | microxrce-agent | rc_control_node | vision_streaming | block-traffic | wifibroadcast@drone | system_files_sync.timer | ollama | ldlidar(disabled)
-**AIDE `dailyaidecheck.timer` DISABLED 07-26** (stale baseline + ~3.5h/day of a core). If re-enabling: `COPYNEWDB=yes` + Nice=19.
+**AIDE `dailyaidecheck.timer` DISABLED 07-26** (~3.5h/day of a core). If re-enabling: `COPYNEWDB=yes` + Nice=19.
 **tfmini DISABLED 07-26 — drone-only. ⚠️ MUST `systemctl enable --now tfmini` for the DRONE airframe.**
 autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | rover-autonav-mode — enabled+active; **rover-ekf-bridge installed but DISABLED on purpose** (wheels-up limit-cycle hazard; start by hand on the floor).
-**⚡ FPV video costs `/scan` 28.4 → 22.3 Hz** ⇒ don't stream FPV while driving. **🔴 `/odom` DIES AT REST — ESC doze (`esc_online_flags: 8`), NOT CPU.** ⚠️ `/odom` is RELIABLE QoS — a BEST_EFFORT subscriber reads 0 and mimics this fault exactly.
+**⚡ FPV video costs `/scan` 28.4→22.3 Hz** ⇒ don't stream FPV while driving. **🔴 `/odom` DIES AT REST — ESC doze (`esc_online_flags: 8`), NOT CPU.** ⚠️ `/odom` is RELIABLE QoS — a BEST_EFFORT subscriber reads 0 and mimics this fault exactly.
 🔴 **A CAMERA RESTART CAN COME UP HALF-DEAD** — back "active", params answering, gyro/accel streaming, **no error logged, but depth & color never started**; `/scan` + both depth topics silently dead. A 2nd restart fixed it. **VERIFY EVERY camera restart:** `journalctl -u rover-camera --since -1min | grep "depth Frame - Width"` (absent = half-dead) **AND a topic rate. `systemctl is-active` does NOT catch this.**
 
-## [PERCEPTION 08-01] → **all numbers + the reasoning: project_perception_3d_costmap.md**
-✅ **Cloud rate fixed:** `point_cloud_decimation_filter_factor:=3` (drop-in on `rover-camera`): **10.0 → 23.2 Hz**, worst gap **1066 → 301 ms**, msg 3.37 → 0.37 MB. ⚠️ **`ros2 param set` on it does NOTHING** — live lever is the **service** `/camera/set_point_cloud_decimation`.
+## [PERCEPTION 08-01] → **all numbers + reasoning: project_perception_3d_costmap.md · geometry: ~/ros2_ws/docs/rover_geometry.md**
+📗 **`docs/rover_geometry.md` (NEW) = THE authoritative source for every vehicle dimension + camera mount. READ IT BEFORE deriving geometry.** §6 = the 6 files consuming those numbers; §7 = sensors not fitted.
+✅ **Cloud rate fixed:** `point_cloud_decimation_filter_factor:=3` (drop-in on `rover-camera`): **10.0 → 23.2 Hz**, worst gap 1066 → 301 ms. ⚠️ **`ros2 param set` on it does NOTHING** — live lever is the **service** `/camera/set_point_cloud_decimation`.
 ✅ **`cloud_to_scan` deployed as `rover-scan-3d.service`, PARALLEL.** Publishes **`/scan_3d`, not `/scan`, and NO TF** ⇒ **⛔ NEVER repoint `rover-scan.service` at it** (it alone provides `base_link->camera_link`). `/scan_3d` **29.2 Hz / 99 ms** vs `/scan` 23.5 / 233.
-✅ **The near returns ARE the rover's OWN TOP PLATE** — docs say ground-to-plate **0.235 m**, `cam_z 0.305 = 0.235 plate + 0.070 bracket`; measured band **z 0.231 m** = 4 mm match. Reads as a constant-range ARC only because the **0.308 m sensor near limit hides all but the outer ~4 cm** of deck. 🔴 **`range_min=0.40` IS LOAD-BEARING — DO NOT lower it to 0.308.** Confirms **leave the camera centred**.
-⚠️ **I wrongly "overturned" this at 20:36** by comparing `/scan_3d` beams <0.60 m — but **`range_min=0.40` already clips the plate**, so that population couldn't contain it. **LESSON: check a filter doesn't already remove what you're testing for; verify at CLOUD level.** → [[feedback-check-docs-before-measuring]]
-✅ **HEIGHT BAND VALIDATED (one location):** RANSAC floor plane, 9833 inliers, RMS 9.9 mm ⇒ forward tilt **+0.37°**, **crosses 0.12 m at x=20.7 m, ~7× past the 3 m range.** ⚠️ repeat at 2-3 spots. 🔑 **METHOD: percentiles DO NOT WORK — p5 sinks, p50 climbs with range, giving OPPOSITE wrong answers (±2.6° vs the true +0.37°). ALWAYS RANSAC the plane.**
-🔴 **REFLEX NOT SWITCHED YET — 16-24 beams <0.60 m.** Edge noise real (std 0.003 m inside ±30° → **0.058 m past 40°**) but **trimming FOV barely helps (±46→±34 drops near beams 22→16)** ⇒ mostly genuine room objects. **Confirm in a truly clear space.** 🔎 `min_height=0.12` likely too conservative (floor measured −0.012 m) ⇒ 0.06-0.08 would ~halve the 12 cm minimum visible obstacle; measure 2-3 spots first.
+✅ **The near returns ARE the rover's OWN TOP PLATE** (plate z 0.235; `cam_z 0.305 = 0.235 + 0.070 bracket`; measured z 0.231 = 4 mm match). **Leave the camera CENTRED** — moving it forward trades a croppable object for a real blind strip and breaks `cam_x=0` (rotation centre). ⚠️ **I wrongly "overturned" this by comparing `/scan_3d` beams <0.60 m, but `range_min=0.40` had already clipped the plate out of that population. LESSON: check a filter doesn't already remove what you're testing for — verify at CLOUD level.** → [[feedback-check-docs-before-measuring]]
+✅ **FAIL-OPEN CLOSED (`3f74af4`):** `range_min` 0.40→**0.31** + `autonav_mode` rejects **`x<0.345 && |y|<0.225` +20 mm margin** per-ray. **Radial cuts can't express a rectangular body**; 0.40 erased real obstacles 0.337-0.40 m and **a dropped ray reads as INFINITE clearance** ⇒ 6 cm fail-open at the bumper. ⚠️ **`/scan_3d` NOW CONTAINS THE TOP PLATE by design — every consumer must reject its own footprint.** Also `ca81d2a`: corridor 0.25→0.275; Nav2 `robot_radius` 0.30→explicit rectangle (0.30 left most of the rover OUTSIDE its own footprint). Both were sized off the superseded 0.405 m plate width.
+✅ **HEIGHT BAND VALIDATED (one location):** RANSAC floor plane, 9833 inliers, RMS 9.9 mm ⇒ tilt **+0.37°**, crosses 0.12 m at **x=20.7 m**. ⚠️ repeat at 2-3 spots. 🔑 **percentiles DO NOT WORK — p5 sinks, p50 climbs with range, giving OPPOSITE wrong answers (±2.6° vs true +0.37°). ALWAYS RANSAC the plane.**
+✅ **VL53L1X = the PRE-depth-camera collision system, SUPERSEDED — not a gap.** `rov_collision_stop`+`obstacle_distance` = dead code, retire with #17. ⚠️ consequence: the reflex is in `autonav_mode`'s executor, same sensor+computer ⇒ **not independent of the companion**; perception loss fails SAFE (`require_scan=true`).
+🔴 **REFLEX SWITCH GATED — unexplained cluster: x 0.353-0.400, y +0.085..+0.161, z 0.100-0.218 (BELOW the plate, ~5 cm past its edge). NOT the VL53L1X.** Reads as 3.8 cm bumper clearance vs a 0.35 m stop ⇒ **if it's the rover, `/scan_3d` leaves it PERMANENTLY BLOCKED.** `front_overhang` couldn't catch it (2D band sits above z 0.22). **NEEDS EYES.**
+🔎 `min_height=0.12` likely too conservative (floor measured −0.012 m) ⇒ 0.06-0.08 would ~halve the 12 cm minimum visible obstacle; measure 2-3 spots first.
 
 ## [WFB_NG] → reference_wfb_ng.md
 ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc, both wlx NICs
@@ -72,8 +67,8 @@ svcs: wifibroadcast@gs, mavlink.router, ssh-tunnel-to-companion, relay_files_syn
 ## [REPOS]
 codex-work: ~/codex-work → Companion_Computer_Pxlabs, branch master (origin/main stale) | codex-relay: ~/codex-relay on vind-rly → Relay_Station_Pxlabs (mirror ~/codex-relay-mirror) | ros2_ws: ~/ros2_ws, branch main, release release/2026-02-22
 
-## [CURRENT STATE — 2026-08-01 20:10, live-verified. Nothing broken]
-All core + **5** autonav svcs active · `rover-ekf-bridge` inactive (correct) · **DISARMED, `nav_state:4`** · `/odom` publishing at rest ✅ · `/scan` 23.5 Hz · `/scan_3d` 29.2 Hz · load ~2.4/4 · `vision_streaming` inactive (deliberate). **ros2_ws CLEAN, `e0535f9` = origin/main, 0 ahead.**
+## [CURRENT STATE — 2026-08-01 22:30, live-verified. Nothing broken]
+All core + 5 autonav svcs active · `rover-ekf-bridge` inactive (correct) · **DISARMED** · `/odom` at rest ✅ · `/scan` 23.5 Hz · `/scan_3d` 29.2 Hz · `vision_streaming` inactive (deliberate, for perception testing). **ros2_ws CLEAN + PUSHED through `e1770c5`.**
 ⚠️ **`fps` is INERT — QGC's fps control does NOTHING**; resolution + bitrate DO work. 640x360 cut ffmpeg CPU 78-95% → 25.7% but bitrate still 2000K ⇒ **radio load unchanged. ⛔ frame rate NEVER hardcoded in ffmpeg — it comes from QGC via the conf.**
 ⚠️ **codex-work's last push used the plaintext PAT in its remote URL** ⇒ **#14 more urgent.** **UNDECIDED: "del mirror one" deferred — ask first.**
 

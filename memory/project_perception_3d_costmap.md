@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T15:50:46.892Z
+  modified: 2026-08-01T17:13:23.458Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -17,6 +17,37 @@ state and [[project-l4-gemini-nav2-prereqs]] for the Nav2/slam_toolbox install.
 of L1, and the depth cam is what sees the table tops and drop-offs a 2D lidar passes under or over.
 ⚠️ This file was written from a crash recovery, not from the session that did the work —
 see [[feedback-crash-recovery-checkpoint]].
+
+## 📗 GEOMETRY NOW HAS ONE HOME — `~/ros2_ws/docs/rover_geometry.md` (NEW 2026-08-01, `0759161`)
+**Read it before deriving any vehicle dimension.** Body + `base_link` footprint, camera mount and why
+`cam_x=0` / why the bracket is 70 mm, live-verified optics, the plate-sliver derivation, the
+don't-move-the-camera-forward table, `front_overhang`, the floor plane, **§6 a CONSUMER LIST of the
+six files to revisit when a number changes**, and **§7 sensors NOT on the vehicle**.
+Created because a superseded plate width (0.405 vs the real 0.450) sat in shipped code for a week.
+
+## ✅ FAIL-OPEN CLOSED 2026-08-01 22:10 — `3f74af4`. Footprint rejected PER-RAY, not radially
+`cloud_to_scan` **`range_min` 0.40 → 0.31** (just above the 0.308 m sensor floor) + `autonav_mode`
+`onScan()` now rejects **`x < 0.345 && |y| < 0.225`** (the top plate about `base_link`) **+ 20 mm margin**.
+**Why radial cuts are wrong:** they cannot express a rectangular body. 0.40 also erased real obstacles
+between the 0.337 m bumper and 0.40 m, and **a dropped ray is indistinguishable from empty space, so
+the reflex read that strip as INFINITE clearance — a ~6 cm fail-open band at the bumper.** Even 0.35
+misses an obstacle at bearing 45° / range 0.34 (x=0.24, y=0.24): beside the body, inside the corridor,
+entirely real. **The footprint test belongs in the CONSUMER, where x and y both exist.**
+⚠️ **The 20 mm margin is NOT cosmetic** — the plate's own edges lie EXACTLY on the boundary and a
+strict `<` let the side edge through as a phantom obstacle at bearing 35° / 0.392 m.
+⚠️ **`/scan_3d` NOW CONTAINS THE ROVER'S OWN TOP PLATE, by design.** Every consumer must reject its own
+footprint. `autonav_mode` does; Nav2 does via `footprint_clearing_enabled` on both costmaps.
+✅ Also fixed (`ca81d2a`): corridor half-width **0.25 → 0.275** and the Nav2 **`robot_radius` 0.30 → an
+explicit rectangle on BOTH costmaps** — 0.30 was the wheelbase half-diagonal and left most of the rover
+outside its own footprint. Both were sized off the superseded 0.405 m plate.
+
+## 🔴 OPEN — AN UNEXPLAINED CLUSTER GATES THE REFLEX SWITCH
+Live: **x 0.353-0.400, y +0.085..+0.161 (LEFT of centre), z 0.100-0.218** — below the plate (0.235),
+~5 cm past its front edge. **NOT the VL53L1X (not mounted).** Either other hardware or a real object.
+**It reads as 3.8 cm of bumper clearance vs a 0.35 m stop threshold ⇒ if it is the rover, switching the
+reflex to `/scan_3d` leaves the vehicle PERMANENTLY BLOCKED.**
+⚠️ **`front_overhang = 0.337` could not have caught it** — that was calibrated with the 2D `/scan`,
+whose band sits well above z 0.10-0.22. **NEEDS EYES, not more measurement.**
 
 ## ✅ DEPLOYED 2026-08-01 20:08 — `rover-scan-3d.service`, PARALLEL, publishing `/scan_3d`
 **`cloud_to_scan.launch.py` publishes `/scan_3d`, NOT `/scan`, and publishes NO TF.**
