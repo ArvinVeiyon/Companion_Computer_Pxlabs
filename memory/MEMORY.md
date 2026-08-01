@@ -56,8 +56,8 @@ autonav: rover-camera | rover-scan | **rover-scan-3d (NEW)** | rover-odometry | 
 ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys /etc/drone.key /etc/gs.key | multi-adapter TX via fwmark+tc, both wlx NICs
 **`wifibroadcast@` restart prints `rtw_mlmeext_disconnect` WARN + trace 2×. BENIGN — don't investigate or patch the driver.**
 **Drone TX is flawless. When video breaks, WFB has an EMPTY input queue — suspect the source.** Live stats: TCP `127.0.0.1:8102` (GS 8103), JSON; do NOT use the `wfb-cli` TUI.
-**⚡ 07-31:** downlink 99.86-99.99%; uplink loses 13.57% mavlink. **ROOT CAUSE = drone NIC-A ant0 −48.5 vs ant1 −28.3 dBm (20 dB deaf)** ⇒ **ONLY WFB JOB LEFT: reseat that antenna.** ✅ DELETED as causes: ring-buffer/EAGAIN, GS TX power, peer `10.5.6.50`.
-⚠️ **METHOD (cost a week):** compare payload `tx.incoming`→`rx.out` across 8102/8103. **Never `rx.all`** (double-counts 4 antennas). **Never infer radio health from MAVLink rates at two `tcp:5760` endpoints.**
+**⚡ 07-31:** uplink loses 13.57% mavlink. **ROOT CAUSE = drone NIC-A ant0 −48.5 vs ant1 −28.3 dBm (20 dB deaf)** ⇒ **ONLY WFB JOB LEFT: reseat that antenna.** ✅ DELETED as causes: ring-buffer/EAGAIN, GS TX power, peer `10.5.6.50`.
+⚠️ **METHOD (cost a week):** compare payload `tx.incoming`→`rx.out` across 8102/8103. **Never `rx.all`** (double-counts 4 antennas). **Never infer radio health from MAVLink rates at two `tcp:5760` endpoints.** → reference_wfb_ng.md
 
 ## [RELAY_STATION]
 vind-rly | RPi5 | `ssh vind-admin@10.5.5.77` (**sudo NEEDS A PASSWORD ⇒ journalctl of other units returns "No entries"**) | repo ~/codex-relay | tunnel 2222→drone 10.5.5.87:22 (autossh)
@@ -65,7 +65,7 @@ svcs: wifibroadcast@gs, mavlink.router, ssh-tunnel-to-companion, relay_files_syn
 **Wi-Fi Direct P2P-GO `p2p-wlan0-0`, SSID `vind_rely`, ch149, relay 10.5.6.101/24 → QGC laptop 10.5.6.50** | NO RTC → clock unreliable
 
 ## [REPOS]
-codex-work: ~/codex-work → Companion_Computer_Pxlabs, branch master (origin/main stale) | codex-relay: ~/codex-relay on vind-rly → Relay_Station_Pxlabs (mirror ~/codex-relay-mirror) | ros2_ws: ~/ros2_ws, branch main, release release/2026-02-22
+codex-work: ~/codex-work → Companion_Computer_Pxlabs, branch master (origin/main stale) | codex-relay: ~/codex-relay on vind-rly → Relay_Station_Pxlabs (mirror ~/codex-relay-mirror) | ros2_ws: ~/ros2_ws, branch main, **released `v1.2.0` 08-01** (annotated, semver; prev v1.1.0 07-19)
 
 ## [CURRENT STATE — 2026-08-01 22:30, live-verified. Nothing broken]
 All core + 5 autonav svcs active · `rover-ekf-bridge` inactive (correct) · **DISARMED** · `/odom` at rest ✅ · `/scan` 23.5 Hz · `/scan_3d` 29.2 Hz · `vision_streaming` inactive (deliberate, for perception testing). **ros2_ws CLEAN + PUSHED through `e1770c5`.**
