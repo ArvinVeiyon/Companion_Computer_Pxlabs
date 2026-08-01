@@ -114,6 +114,3 @@ G-Control.exe → pxlabs_cli.exe → SSH relay:2222 → companion:22 (relay alwa
 ## [TROUBLESHOOTING]
 no_MAVLink: ttyAMA0 baud/wiring + PX4 MAVLink instance | no_DDS: microxrce-agent.service, ttyAMA4, PX4 XRCE param | WFB_down: wifibroadcast@drone.service, wlx* adapter, /etc/drone.key | offline_AI: ollama.service + `ollama list`
 no_video: vision_streaming.service + /etc/vision_streaming.conf → then **[VIDEO_FAULTS] (check (B) latch FIRST)** | no_scan/no_cloud: **check the half-dead camera restart first** → [SERVICES]
-
-## [COMMON_COMMANDS]
-`journalctl -u <svc> -f` · `wfb-rlyctl status` · `sudo wfb-rlyctl use-standalone|use-cluster|set-nics <iface>` · `python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760` · `ai --offline "q"`
