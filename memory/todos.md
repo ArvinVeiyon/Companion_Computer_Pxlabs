@@ -89,7 +89,7 @@ vision-node flags are applied (session item 3).
 That item recorded headroom as "NEVER MEASURED". It is now: **~34% airtime used of a 13 Mbit/s MCS1
 PHY.** There IS room to raise video bitrate — go straight ahead; the old "trim MAVLink first"
 precondition is deleted (it was never a fix). ⚠️ But note the real constraint is **CPU, not radio**:
-software x264 already needs ~80-95% of a core, see [[project_ffmpeg_hung_alive_gap]].
+software x264 already needs ~80-95% of a core, see `~/ros2_ws/docs/vision_streaming.md`.
 
 ---
 
@@ -197,7 +197,7 @@ still-stale rc_control paths above). Repo copy restored in codex-work `b80034b` 
 `d64850d` committed it empty.
 
 ### 8b. Vision open items — added 2026-07-28 (audit found these tracked NOWHERE)
-From [[project_ffmpeg_hung_alive_gap]]; all three were agreed/designed but never filed:
+From `~/ros2_ws/docs/vision_streaming.md`; all three were agreed/designed but never filed:
 - **(a) backoff reset on the stall path** — `ros2_ws/src/vision_streaming/vision_streaming/
   vision_streaming_node.py:325-326` still resets `backoff_s` to 2 s after a run >60 s that
   **ended in a stall**. Longer waits are what actually recover the camera (16 s → 256 s of
@@ -210,7 +210,7 @@ From [[project_ffmpeg_hung_alive_gap]]; all three were agreed/designed but never
     retry at 640x480 → 0 frames; GStreamer → 0 buffers. **No software reset recovers this
     camera** — only physical VBUS removal. Replace the idea with: cap consecutive cold-start
     failures, then log a clear "camera requires physical replug" ERROR instead of looping
-    silently for 20 minutes. → [[project_ffmpeg_hung_alive_gap]]
+    silently for 20 minutes. → `~/ros2_ws/docs/vision_streaming.md`
 - **(b) USB autosuspend** — `/sys/bus/usb/devices/6-2/power/control` is still `auto`
   (2000 ms). Pin to `on` via udev. "Fix regardless" per the 07-27 evening finding.
   **Priority DOWN 07-30**: hygiene only, already tested and NOT a cause, and the camera on 6-2
@@ -432,12 +432,12 @@ Raising the camera to 1280x720 left `bitrate = 2000K`, dropping bits/pixel 0.129
 `active.settings` in `list --json` (→ v2.3.0); QGC = `--bitrate` through
 pxlabs_cli/PXLABSApi/CompanionControl.qml. Full design + constraints (FEC k=8/n=12,
 radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) in
-project_ffmpeg_hung_alive_gap.md. Stopped here 2026-07-28: usage limit.
+`~/ros2_ws/docs/vision_streaming.md`. Stopped here 2026-07-28: usage limit.
 
 ---
 
 ## [2026-07-30 SESSION] — WFB-ng + vision node deep analysis
-> Full detail: [[project_ffmpeg_hung_alive_gap]] (vision) and [[reference_wfb_ng]] (radio).
+> Full detail: `~/ros2_ws/docs/vision_streaming.md` (vision) and [[reference_wfb_ng]] (radio).
 
 ### Closed / killed today
 - ❌ **8b item 3 (USB port-reset escalation) — KILLED, not viable.** See item 8b above.

@@ -127,7 +127,7 @@ fault. Check QoS before diagnosing. (`/scan` publishes both RELIABLE and BEST_EF
 collision reflex sees anything**, ≈ ¼ of the 0.60 m block margin (8 cm with video off). Tolerable
 now; **L5 Nav2 costmaps/planners land on the same 4 cores**, which are already oversubscribed —
 software x264 alone needs 80-95% of one. ⇒ **don't stream FPV during autonomous driving if you want
-full reaction speed.** Related failure mode: [[project-ffmpeg-hung-alive-gap]] (CPU-starvation latch).
+full reaction speed.** Related failure mode: `~/ros2_ws/docs/vision_streaming.md` (CPU-starvation latch).
 
 ## ⏭ RESUME HERE — 2026-07-28 (floor session: #20 baseline captured, WALL CONTACT, collision-stop hardened)
 

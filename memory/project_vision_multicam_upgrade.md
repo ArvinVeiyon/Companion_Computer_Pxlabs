@@ -18,7 +18,7 @@ metadata:
 >    guard + `ensure_service_up()`) → v2.2.2 (`except BaseException`, the v2.2.1 guard was
 >    too narrow) → **v2.2.3** (`tempfile.mkstemp()` staging; the fixed `/tmp` path was
 >    blocked by `fs.protected_regular=2` — THE root cause of "resolution changes silently
->    fail to persist"). Details in [[project_ffmpeg_hung_alive_gap]].
+>    fail to persist"). Details in `~/ros2_ws/docs/vision_streaming.md`.
 > 2. **§1.1's `id` rule is SUPERSEDED.** `/dev/v4l/by-id` basenames are **NOT** boot-stable
 >    (index order shuffles). The stable key is **`usbcam-<vidpid>-<serial>-i<iface>`** from
 >    sysfs, since v2.1. Legacy by-id ids are still *accepted*, never *issued*.

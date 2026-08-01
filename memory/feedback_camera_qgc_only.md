@@ -28,7 +28,7 @@ from the operator's point of view.
 
 ## 2026-07-28 — REAFFIRMED, and the rule is BROADER than I had it
 
-After the faulty LG cam was swapped for a See3CAM ([[project_ffmpeg_hung_alive_gap]]), the conf
+After the faulty LG cam was swapped for a See3CAM (`~/ros2_ws/docs/vision_streaming.md`), the conf
 still held the dead camera's `camera_id`. I offered to make "just this one identity change" to
 `/etc/vision_streaming.conf` on the companion. User pushed back, annoyed:
 
