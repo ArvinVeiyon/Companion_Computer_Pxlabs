@@ -118,3 +118,34 @@ the honest options are: **run detection only while stopped, or add an accelerato
 ⚠️ **PROCESS NOTE:** I asserted "mapping the house needs the STL-19" on 08-01, which this very
 document had already withdrawn in §2.2. That is the SECOND time in one evening I asserted something
 the repo had already settled → [[feedback-check-docs-before-measuring]].
+
+## 📊 RTAB-MAP CPU MEASURED 2026-08-02 00:00 — **IT DOES NOT FIT AS CONFIGURED**
+Installed `ros-jazzy-rtabmap-ros` 0.22.1 (14 pkgs, apt). All required topics already publish:
+`/camera/color/image_raw`+`camera_info`, `/camera/depth/image_raw`+`camera_info`.
+**Measured `rtabmap_odom rgbd_odometry` ALONE, rover stationary:**
+| | baseline | + rgbd_odometry |
+|---|---|---|
+| load1 (4 cores) | **2.25** | **9.44** (max 10.57) |
+| `rgbd_odometry` CPU | — | **79.6% of a core** |
+| `/scan_3d` | 23.2 Hz | **17.3 Hz** |
+| `/scan` | 13.4 Hz | **7.0 Hz — HALVED** |
+| `/scan` worst gap | 462 ms | **648 ms** |
+**Its own throughput: update time 0.29-0.43 s (~3 Hz), delay 0.83-1.04 s (~1 SECOND of latency).**
+🔴 **And this is ONLY the odometry node** — the `rtabmap` node (map + loop closure) was never started,
+and **depth registration was OFF**, which RGB-D mode needs for correctness. **Real cost is higher.**
+⇒ **`autonomy_plan.md`'s "blocked on configuration and CPU" is CONFIRMED, and it is CPU.**
+
+**⏭ LEVERS, cheapest first (none tried yet):**
+1. **Colour is 1280×720 and feature cost scales with it — drop to 640×360 for ~4×.** Same lever that
+   took ffmpeg 78-95% → 25.7%. ⚠️ launch-time on the Orbbec ⇒ camera restart ⇒ **run the half-dead
+   check afterwards** (`journalctl -u rover-camera --since -1min | grep "depth Frame - Width"`).
+2. `Vis/MaxFeatures` (defaults track ~300), frame decimation, `Odom/Strategy`.
+3. Separate the two problems: the ~1 s delay is probably queueing CAUSED by starvation. If it survives
+   a CPU fix, 1 s is **fine for mapping** (drive slowly) and **unusable for control**.
+⚠️ **`depth_registration` is FALSE and colour 1280×720 vs depth 848×480 are NOT aligned.** RGB-D needs
+registration; `align_mode` is **SW** (software) ⇒ more CPU again. Launch-time only — `ros2 param set`
+reports success and does nothing, same trap as `point_cloud_decimation_filter_factor`.
+⚠️ **`Odom/Strategy` / `Vis/MaxFeatures` are STRING params** — `ros2 run ... -p Odom/Strategy:=0`
+throws `InvalidParameterTypeException`; quoting does not help, use a params file or omit.
+⚠️ Measurement hygiene: a transient `pemmican-cli` at 90-143% contaminated the first run, and
+`pgrep -f rgbd_odometry` **matched its own command line** and falsely reported the node still alive.
