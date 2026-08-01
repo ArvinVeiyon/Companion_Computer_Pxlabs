@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 93b64ead-3e68-486d-b34f-783134bfb9b6
-  modified: 2026-08-01T15:10:18.538Z
+  modified: 2026-08-01T15:41:03.871Z
 ---
 
 # rc_control_node camera-switch retry storm
@@ -42,7 +42,32 @@ if desired and desired != self.last_cam_state:
 **Move the camera switch on the TX to neutral/off** ⇒ `desired = None` ⇒ the guard is skipped and
 the storm stops. (Do NOT stop `rc_control_node` — it is the RC control path.)
 
-## FIX (not yet applied — needs the user's call)
+## ✅ FIXED + PUSHED 2026-08-01 21:08 — `9893d6b` on ros2_ws origin/main
+**Verified: 317 failures/min → 3 attempts over ~2 s, ONE log line, then silent. Load 6.5 → 2.6.**
+What the fix does (`rc_control_node.py`):
+- **Latches `cam_attempted` (the ATTEMPT), not the success** ⇒ a target is tried once, never per-message
+- **3 retries with backoff** (0.5 s, 1.0 s) first, for genuinely transient failures, then gives up
+- **Give-up logged ONCE**, with the real stderr, not at the RC rate
+- **Clears the latch when the switch sits between detents** ⇒ **cycling the switch away and back
+  re-attempts**, so a give-up is recoverable without restarting the service
+- **Spawn moved to a worker thread** + `timeout=10` ⇒ can no longer delay the shutdown/reboot stick
+  detection that runs later in the same `cb_rc`, and a hung binary cannot wedge it
+- Bounds-checks the mapped channels against `channel_count`
+- **`shutdown`/`reboot` logic deliberately UNCHANGED** (verified in the diff)
+🔴 **STILL OPEN: it keys the camera by `/dev/video0`.** That is the root trigger and violates camera
+rule (1). Real close-out is **Multicam Phase D / todo #8 → `usbcam-<vidpid>-<serial>`**.
+
+## WHAT THE NODE ACTUALLY DOES (was undocumented)
+Bridges **RC transmitter switches → companion actions**, off `/fmu/out/input_rc` at **95 Hz**.
+Config: `rc_control/config/rc_mapping.yaml`, **read once at startup — NOT ROS params**, so
+`ros2 param set` cannot change any of it.
+- **CH9, tol ±50 — camera:** 1012=front `/dev/video0` · 1514=bottom `/dev/video2` · 2014=split (both)
+- **CH10, tol ±100, hold 2.0 s — system:** 1514=`shutdown -h now` · 2014=`reboot` (one-shot latched)
+⚠️ **CH9 RESTS AT 1011 = the "front" detent.** So a camera switch is requested at all times by default.
+⚠️ Stopping `rc_control_node` costs **RC camera switching + the RC shutdown/reboot stick** — nothing
+else. It publishes **no vehicle control**; that is PX4 on the FC. Safe to stop for bench testing.
+
+## ORIGINAL FIX PLAN (kept for reference)
 - **Latch the attempt, not the success:** record what was *attempted* so a permanent failure is not
   retried; re-arm only when `desired` actually changes.
 - **Add backoff + a give-up** on repeated failure, and log once rather than 95×/s.

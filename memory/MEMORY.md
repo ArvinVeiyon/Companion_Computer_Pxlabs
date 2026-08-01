@@ -13,7 +13,7 @@
 - `project_l2_floortest_wheel0_reversed.md` (wheel-0 "reversal" = FALSE ALARM) · `project_l4_gemini_nav2_prereqs.md` · `project_vision_multicam_upgrade.md` (**Phase D remains**) · `project_ffmpeg_hung_alive_gap.md` (**READ ITS 08-01 SECTION FIRST**)
 - `project_wfb_undervoltage_dead_nic.md` — LIKELY FIXED 07-25 (XL4015 @5.25V). **DON'T raise the pot; DON'T set usb_max_current_enable=1.** `ext5v-report` reads the rail UPSTREAM
 - `project_external_wifi_uplink.md` (RTL8821CU `wlx90de80d824d6` = PRIMARY uplink @192.168.1.240) · `project_gcs_link_degraded.md` · `project_relay_ntp_setup.md` · `project_relay2_relaystn.md` (RPi4: WFB card browns out the Pi4 USB budget; fix = powered hub) · `project_companion_network_degraded.md` · `project_boxb_pcie_usb.md` · `project_codexrelay_divergence.md`
-- `project_rc_control_camera_retry_storm.md` — 🔴 **NEW 08-01. `rc_control_node` respawns `sudo vision_config_manager /dev/video0` at 95 Hz forever when it fails (2181 fails/10 min, ~100% of a core, blocks the RC callback). THIS is the "runaway" blamed twice on a stray process. Killing it never works — TX cam switch to neutral stops it.**
+- `project_rc_control_camera_retry_storm.md` — ✅ **FIXED+PUSHED `9893d6b`.** Was: `rc_control_node` respawned `sudo vision_config_manager /dev/video0` at 95 Hz forever on failure (~100% of a core, blocked the RC callback) — **THIS was the "runaway" blamed twice on a stray process.** Holds what the node does + the CH9/CH10 map.
 - `project_codexwork_token_in_remote.md` — **SECURITY: origin URL embeds a plaintext GitHub PAT; rotate + move to SSH** · `project_codexwork_branches.md` (**auto-sync does NOT git-add NEW memory files — add manually**)
 
 ## [VIDEO_FAULTS] — TWO DIFFERENT FAULTS. Full detail + proofs → project_ffmpeg_hung_alive_gap.md
@@ -92,7 +92,7 @@ All core + **5** autonav svcs active · `rover-ekf-bridge` inactive (correct) ·
 3+4+24. ❌ **ALL THREE DELETED — do not re-propose.** GS `rx_ring_size`, GS TX power (maxed 30 dBm), trim PX4 MAVLink rates (airtime-only).
 5+7+8+9+10. Antenna tracker HW (relay :14551) · /scan → obstacle_distance/Nav2 · #17 delete camera_sw_node_obsolute.py · Multicam Phase D · vision: backoff reset on STALL, pin `6-2/power/control` `on`, `--bitrate`
 23. ✅ **Throughput-floor watchdog LIVE** (`a5fb348`). **⛔ do NOT modify the ffmpeg command line** (`vision_streaming_node.py` ~176-207): `-g 30`/`-tune zerolatency`/`-pkt_size 1400` VETOED.
-25. 🔴 **NEW: fix the rc_control camera retry storm** (latch the ATTEMPT not the success, add backoff, get the blocking spawn out of the RC callback, key by usbcam id not `/dev/video0`) → its memory file
+25. ✅ **rc_control retry storm FIXED** (`9893d6b`): latches the ATTEMPT, 3 retries+backoff, off-thread, give-up logged once, cycle the switch to re-try. 🔴 **still keys `/dev/video0` — real close-out is Phase D/#8 → usbcam ids.**
 
 ## [AI_STACK]
 online: claude CLI → Claude API | offline: Ollama phi3:mini (~3 tok/s) | `ai` auto-routes | SSH login: b+Enter=bash | Enter/4s+internet=Claude | no internet=Phi-3
