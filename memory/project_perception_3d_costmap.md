@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T15:24:41.625Z
+  modified: 2026-08-01T15:50:46.892Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -121,20 +121,29 @@ beyond this.
 ⚠️ **The old 2D `/scan` never noticed this** because at 0.3 m the plate falls below its narrow row
 band. The height-aware scan is the first thing that ever looked there — expect more findings like it.
 
-## 🔴🔴 OVERTURNED 2026-08-01 20:36 — IT IS **NOT** THE ROVER. THE SELF-VIEW FINDING IS WRONG.
-**Two-pose test done** (rover physically moved to a different place AND heading, by hand, disarmed):
-| | baseline pose | new pose |
-|---|---|---|
-| beams < 0.60 m | **41** | **24** |
-| rigid beams (std<0.005 over 40 frames) | −41.8°, −39.9°, −9.9°, +10.0°, +31.9° | **+8.0..+9.5° @0.59 m · +34.9..+35.9° @0.50 m** |
-**Rigid VEHICLE structure must be identical in bearing AND range at both poses. These moved 1-4° and
-~4 cm, and the count nearly halved.** ⇒ **they are static objects in each room, not the rover.**
-⇒ **The "camera sees its own front plate / 1982 points exactly at the 0.337 m bumper plane" finding
-was a coincidence of that one spot. Do not repeat it as fact.**
-⇒ **`range_min = 0.40` has been clipping REAL nearby obstacles, not bodywork** — revisit whether 0.40
-is even wanted, and re-derive it from the sensor near limit (0.308 m) rather than from a phantom plate.
-⇒ Independently confirms **leave the camera centred** (below): there is no self-occlusion to design around.
-⚠️ Most non-rigid near beams have **std 0.16-0.81 m** = intermittent edge-of-FOV returns, not surfaces.
+## ✅ SETTLED 2026-08-01 21:20 — IT **IS** THE ROVER'S OWN **TOP PLATE**. Confirmed against the docs.
+**The user identified it ("that is top plate edge"); the measurement and the existing docs agree.**
+| source | value |
+|---|---|
+| `docs/rover_autonav_requirements.md:75` | **ground to top plate = 0.235 m** (plate 0.730 × 0.450 m) |
+| `launch/depth_to_scan.launch.py:50` | `cam_z 0.305` = **0.235 plate + 0.070 bracket** |
+| MEASURED near band (range 0.30-0.37 m) | **z mean 0.231 m, max 0.241** — matches the plate to **4 mm** |
+| MEASURED | x **0.301-0.347 m, std 4.9 mm**; global min range **0.3079 m** |
+**Why it looks like an ARC at constant range, not a flat deck:** the sensor's near limit is **0.308 m**,
+so **only the outer ~4 cm sliver of the plate is visible** — the rest of the deck is inside the blind
+zone. The inner boundary of the return IS the min-range circle, which is why range looks constant.
+🔴 **THEREFORE `range_min = 0.40` IS CORRECT AND LOAD-BEARING. DO NOT LOWER IT** to the 0.308 m sensor
+limit — that re-admits the rover's own top plate as a permanent obstacle 3 cm inside the bumper.
+✅ Also confirms **leave the camera centred** — the self-view is inherent to looking down over your own
+deck from a 7 cm bracket, and sliding the camera forward would not remove it.
+
+### ⚠️ MY 20:36 "OVERTURNED" CLAIM WAS WRONG — the error is worth keeping
+I ran a two-pose test and concluded the near returns were room objects, not the rover. **The test was
+sound; the population was wrong.** I compared **`/scan_3d` beams < 0.60 m — but `range_min = 0.40`
+CLIPS the plate (0.31-0.35 m), so those beams never contained the plate.** They were room objects,
+which correctly moved with the room. I then generalised that to "the self-view finding is overturned".
+**LESSON: before concluding a filtered signal disproves something, check the filter does not already
+remove the thing you are testing for.** Verify at the CLOUD level, where `range_min` has not applied.
 
 **🔶 SUPERSEDED (kept for the method) — RE-MEASURED 2026-08-01 19:45:**
 Live cloud, 4 consecutive frames: **18 472 points with x < 0.40 m — 8.9% of the whole cloud**, not 1982.
