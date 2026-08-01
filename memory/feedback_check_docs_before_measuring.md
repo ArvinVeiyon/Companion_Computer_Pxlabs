@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 93b64ead-3e68-486d-b34f-783134bfb9b6
-  modified: 2026-08-01T15:53:01.576Z
+  modified: 2026-08-01T15:56:24.544Z
 ---
 
 # Check the existing docs before measuring the vehicle from scratch
@@ -25,6 +25,22 @@ answerable in five minutes. Instead I measured from scratch, **published a wrong
 ("it's room objects, not the rover"), and the user had to identify it twice.
 Also missed: `front_overhang = 0.337 m` is not an abstract "bumper plane", it is **the front edge of
 that same top plate**, measured against a wall over 178 scans on 07-28.
+
+## 🔴 THE WORSE HALF: IT WAS ALREADY IN MEMORY, AND THE INDEX HID IT
+`project_l4_gemini_nav2_prereqs.md` (2026-07-26) **already contained the entire finding**:
+> "Hard floor is 17 mm … below that the rover's own deck appears in `/scan` as a permanent obstacle
+> ~0.35 m ahead and the reflex collision-stop never releases."
+> "**FOV vs the deck (user asked):** the deck IS in frame … the bottom ~third of the depth image is
+> rover. Harmless for `/scan` … **Must be cropped for the L5 Nav2 voxel layer, which consumes the full
+> cloud, or Nav2 marks a permanent obstacle round its own nose.**"
+It even predicted that a **full-cloud** consumer (which `cloud_to_scan` is) would need the crop, and
+explained why the old 2D `/scan` never saw the plate. **The user had asked about it before.**
+**I never opened it, because its MEMORY.md index line said only `(Nav2 1.3.12 + slam_toolbox 2.8.5)`.**
+⇒ **RULE: a memory file's index line must name its most LOAD-BEARING content, not the topic it was
+created for.** Package versions are the least useful thing in that file. When adding a major finding
+to an existing memory file, **update its MEMORY.md line too** — an unopened file is a lost file.
+⇒ **RULE: before investigating any physical/geometry question, grep the WHOLE memory dir, not just the
+files whose index lines sound relevant:** `grep -rniE "<dimension|part name>" ~/.claude/projects/-home-roz/memory/`
 
 **How to apply:**
 1. **Grep the docs for the dimension first** — `grep -rniE "plate|mount|overhang|bumper" docs/` — then
