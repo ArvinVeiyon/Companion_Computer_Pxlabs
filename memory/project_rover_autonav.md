@@ -5,10 +5,67 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-08-01T11:30:33.700Z
+  modified: 2026-08-02T06:36:47.456Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## 🔴🔴 2026-08-02 — **#21 GYRO-YAW ODOMETRY IS VALIDATED, AND IT FAILS.** First real driving test.
+A 206 s manual mapping run through one room + hall. **Operator CONFIRMED the rover physically
+finished where it started.** Odometry disagrees:
+| | measured |
+|---|---|
+| path length | 54.1 m |
+| **closure gap (start→end)** | 🔴 **6.83 m — pure DRIFT, ~13% of path** |
+| total rotation | 🔴 **2554°** (≈7.1 turns, for one room + a hall) |
+| net heading change | **−89.8°** ✅ **NOT an error** — operator confirms they finished on a
+DIFFERENT heading (drove forward out of the loop), so ~−90° is plausibly the true final orientation |
+| peak yaw rate | 🔴 **13.15 rad/s = 753°/s** (`RO_YAW_RATE_LIM` is 0.5; physically impossible) |
+| \|w\|>1.0 rad/s | **7.9% of samples**, 679 discrete spike events, bursty |
+
+### What it is NOT — three hypotheses KILLED by measurement, do not re-propose
+1. ❌ **NOT a tiny-`dt` division artifact.** Header-stamp `dt`: median **10.17 ms**, min 0.957 ms,
+   **zero non-positive**. Samples with |w|>5 have *normal* dt (median 11.56 ms).
+2. ❌ **NOT a bug in `rover_odometry`'s rate computation.** Reported `twist.angular.z` agrees with
+   `d(yaw)/dt` from the pose quaternion within 1 rad/s for **97.95%** of samples.
+3. ❌ **NOT fixable by clipping the rate.** Re-integrating with clips 2.0/1.0/0.5 gives gaps
+   7.94 / 4.94 / 7.98 m vs 5.67 m unclipped — **no clip closes the loop**, and heading error stays
+   72-338°. **Do not build a spike filter and call it fixed.**
+
+### What it IS
+🔑 **The jumps are REAL discontinuities in the attitude quaternion itself** — total |d(yaw)|
+integrated straight from the pose quaternions is the same **2554°**. `rover_odometry` takes heading
+from `/fmu/out/vehicle_attitude` deltas and **its `quat_reset_counter` guard is not catching these**
+(see 21a). ~679 spike events at ~11 ms each plausibly account for **most of the excess** over the
+~600-700° the route actually needed. ⇒ **the defect is UPSTREAM of `rover_odometry`, in what the FC
+publishes (or in which resets we drop), not in the arithmetic.**
+
+### 🔑 REFINED once heading was exonerated — POSITION is wrong while NET HEADING is right
+That combination is diagnostic. Errors that cancel in the *net* heading still accumulate in
+*position*, because position integrates heading **continuously**. Two mechanisms, both live:
+1. **The 679 attitude jumps** inject TRANSIENT heading error. Position integrates through each one
+   and never recovers it, even when the net washes out. This is the defect.
+2. ⚠️ **Skid-steer LATERAL SLIP — inherent, not a bug, and NOT fixable in odometry.** A skid-steer
+   *must* slide sideways to rotate, and forward-wheel odometry is blind to sideways motion. With
+   **2554° of rotation** in 206 s that is a large unobserved translation. **No amount of gyro
+   accuracy removes it** — only an exteroceptive fix (visual/lidar) can.
+⇒ **Do not expect to "fix" `/odom` into a mapping-grade prior. Even repaired, mechanism 2 remains.**
+⚠️ **2554° is NOT by itself proof of a fault** — a skid-steer manoeuvring around a room genuinely
+turns a lot. **The physically impossible 13.15 rad/s spikes are the hard evidence; the rotation
+total is not.** Do not cite the 2554° as the defect.
+
+### Consequences — act on these
+- 🔴 **`/odom` MUST NOT be used as a motion prior for RTAB-Map.** It would bend the map. **Use
+  VISUAL odometry** — the bag holds everything to try both on the same drive.
+  → [[project-autonomy-plan-reframe]]
+- 🔴 **Every `/odom`-derived pose is suspect through turns.** Straight-line speed was validated
+  (`42f9aa2`) and is unaffected; **heading is not.**
+- ⚠️ **Possible link to #20.** If the attitude source jumps, an apparent "yaw rate runaway ~21×"
+  measured against it may be partly MEASUREMENT, not motion. **Not established — but re-examine #20's
+  evidence before assuming the controller is at fault.**
+- ⏭ Next diagnostic: log `quat_reset_counter` alongside `vehicle_attitude` and see whether the jumps
+  coincide with resets that are being missed.
+- Data: `~/mapping_run2_20260802` (3.4 GiB, 99.7% capture) — re-runnable, no re-drive needed.
 
 ## ⏭ RESUME HERE — 2026-08-01 (session crashed ~16:12; state recovered + verified 16:55)
 **Verified live at recovery: services mavlink.router / microxrce-agent / wifibroadcast@drone /

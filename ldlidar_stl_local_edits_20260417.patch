@@ -1,0 +1,25 @@
+diff --git a/launch/ld19.launch.py b/launch/ld19.launch.py
+index fa24afc..34d27f1 100644
+--- a/launch/ld19.launch.py
++++ b/launch/ld19.launch.py
+@@ -32,7 +32,7 @@ def generate_launch_description():
+         {'product_name': 'LDLiDAR_LD19'},
+         {'topic_name': 'scan'},
+         {'frame_id': 'base_laser'},
+-        {'port_name': '/dev/ttyUSB0'},
++        {'port_name': '/dev/ttyAMA3'},
+         {'port_baudrate': 230400},
+         {'laser_scan_dir': True},
+         {'enable_angle_crop_func': False},
+diff --git a/ldlidar_driver/src/logger/log_module.cpp b/ldlidar_driver/src/logger/log_module.cpp
+index 61369e0..1c9f73c 100644
+--- a/ldlidar_driver/src/logger/log_module.cpp
++++ b/ldlidar_driver/src/logger/log_module.cpp
+@@ -19,6 +19,7 @@
+ 
+ #include <time.h>
+ #include <string.h>
++#include <pthread.h>
+ 
+ #ifndef LINUX
+ #include <comutil.h>  

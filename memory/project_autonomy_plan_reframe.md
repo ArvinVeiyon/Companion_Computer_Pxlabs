@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T11:34:09.503Z
+  modified: 2026-08-02T12:20:14.065Z
 ---
 
 # Autonomy plan reframe — 2026-08-01
@@ -176,3 +176,208 @@ Manual — the operator is the only safety layer.** Drive slowly (motion blur ki
 and **make deliberate LOOPS** — returning to known places is exactly what loop closure needs.
 **Revised order: USB SSD → 640×360 colour + `depth_registration` (one camera restart, then the
 half-dead check) → manual mapping run → offline RTAB-Map on the laptop → AMCL/Nav2 on the Pi.**
+⚠️ **SSD-first is superseded by `docs/indoor_mapping_plan.md` §5**, which re-measures the bag at
+640×360 FIRST — the shrink may remove the SSD requirement entirely. Measure before buying.
+
+## ✅ STEP 1 APPLIED 2026-08-02 10:51 — and SW depth registration is NOT free
+Drop-in `10-point-cloud-decimation.conf` now adds `depth_registration:=true color_width:=640
+color_height:=360` (backup: `/etc/systemd/system/10-point-cloud-decimation.conf.bak-20260802`).
+Half-dead check **PASSED** first try. Safety path improved: `/scan` 27.1 → **28.0 Hz**,
+`/scan_3d` 27.1 → **29.7 Hz**, load1 2.12.
+🔑 **`depth_registration:=true` FORCES DEPTH TO THE COLOUR RESOLUTION — depth is now 640×360, no
+longer its native 848×480.** Both camera_infos confirm 640×360. Consequence: fewer cloud columns
+(~213 not 283 after decimation 3, ~0.42°/col) and depth now carries the COLOUR intrinsics/FOV.
+🔴 **ANSWERS THE OPEN QUESTION "how much does SW registration cost?": camera container CPU went
+34.2% → 48.9% of a core (stable, 5 samples) EVEN THOUGH colour dropped 1280×720 → 640×360.**
+⇒ **SW alignment costs MORE than the resolution drop saved, ~+15 pp net.** ⚠️ the 34.2% baseline
+was a single `ps` snapshot at boot+5 min, so treat the delta as directional, not precise.
+**The camera budget and the RTAB-Map budget are SEPARATE** — RTAB-Map's 79.6% was feature
+extraction at 1280×720 and should still fall at 640×360. Whether it now fits = **Step 2, untested.**
+
+## 🔴 STEP 2 MEASURED 2026-08-02 11:18 — **640×360 DID NOT MAKE RTAB-MAP FIT. HYPOTHESIS FALSIFIED.**
+`rgbd_odometry` re-measured at 640×360 **with `depth_registration:=true`** (the correct RGB-D config):
+| | 1280×720, reg **OFF** (08-02 00:00) | 640×360, reg **ON** (now) |
+|---|---|---|
+| `rgbd_odometry` CPU | 79.6% | 🔴 **94.6%** — WENT UP |
+| `/scan` | 13.4 → 7.0 Hz | 28.0 → **19.1 Hz** |
+| `/scan_3d` | 23.2 → 17.3 Hz | 29.7 → **20.0 Hz** |
+| update time | 0.29-0.43 s | **0.25-0.39 s** (~3 Hz, barely moved) |
+| delay | 0.83-1.04 s | **0.78-1.02 s** (~1 s, UNCHANGED) |
+| load1 | 9.44 | **10.44** |
+⇒ **`indoor_mapping_plan.md` §5 Step 2's hope ("if it drops to ~20%, realtime is back on") is DEAD.
+The OFFLINE architecture stands — map on a laptop, localize on the Pi.**
+⚠️ **CONFOUNDED, state it honestly:** resolution dropped AND registration turned on in the same
+change, so the 79.6→94.6 rise cannot be attributed to one alone. The 79.6% was a *cheaper but
+incorrect* config (RGB-D needs registration). **What is solid: in the CORRECT config at 640×360 it
+still does not fit.** Isolating the two would need a 640×360 + reg-OFF run.
+🔑 **The ~1 s delay is looking INTRINSIC, not starvation** — a **4× cut in pixel count moved it
+essentially not at all**. Answers open question 2 in `indoor_mapping_plan.md` §6, provisionally.
+✅ **Silver lining: the safety path degrades far less than before** — `/scan` loses 32% (28.0→19.1)
+where it used to lose 48% (13.4→7.0), because the baseline pipeline itself is faster now.
+✅ Odometry quality was healthy throughout (150-271 inliers, std dev ~0.002 m) — it WORKS, it is
+just too slow. Recovery after kill: `/scan` 30.1, `/scan_3d` 27.0, all 5 services active.
+⚠️ Hygiene: a stray `npm` at 63.4% appeared at launch and had exited before the measurement window
+— exactly the contamination trap from the last run. **Always re-check mid-measurement, not just at
+the start.** → [[feedback-check-docs-before-measuring]]
+
+## ✅ STEP 3 MEASURED 2026-08-02 11:25 — **THE USB SSD IS NO LONGER REQUIRED (for throughput)**
+Same topic set, colour AND depth now both 640×360 (registration forced depth down too):
+| | 1280×720 + 848×480 | both 640×360 |
+|---|---|---|
+| bag growth | 🔴 **29.3 MB/s** (over the 27.4 ceiling) | ✅ **16 MB/s** — ~40% under it |
+| minutes on 27 GB | ~15 min | ✅ **~28 min** |
+| `/scan` | 13.4 → 14.2 Hz ("no cost") | 🔴 **30.5 → 23.1 Hz (−23%)** |
+| load1 | 5.64 | 🔴 **15.18** |
+🔑 **THE SSD QUESTION IS ANSWERED: throughput no longer breaches the card** (16 vs 27.4 MB/s), so an
+SSD is **optional**, not required. Capacity now gives ~28 min per run — enough for a first house
+circuit. **Do not buy hardware for this yet.**
+🔴 **BUT THE OLD "RECORDING IS FREE" CLAIM IS WITHDRAWN.** It was measured against a **degraded
+13.4 Hz baseline** where a 14.2 Hz reading looked like an improvement — that was noise, not headroom.
+Against a clean **30.5 Hz** baseline, recording costs a real **23% of `/scan`**, and load1 hits
+**15.18** (largely I/O wait: SD writes park processes in D-state, which Linux counts as load).
+⇒ **Recording is CHEAPER ON DISK but NOT free on the safety path. Drive slowly on a mapping run.**
+⚠️ **METHOD LESSON: never conclude "no cost" from a comparison taken against an already-degraded
+baseline.** Fix the baseline first, then measure the delta. → [[feedback-check-docs-before-measuring]]
+⚠️ `du` growth is bursty at start (72 MB/s for the first ~10 s, then settles) — **sample a steady
+window ≥30 s in, not from t=0.** Bag deleted after the run; disk back to 27 GB / 53%.
+
+## 🔴🔴 STEP 3'S CONCLUSION WAS WRONG — CORRECTED BY THE 11:34 RUN. **THE BAG WAS SILENTLY DROPPING.**
+First real mapping run (253 s, one room + hall). `ros2 bag info` vs live rates:
+| topic | live | recorded | captured |
+|---|---|---|---|
+| `/camera/color/image_raw` | **67.2 Hz** | 24.4 Hz | 🔴 **36%** |
+| `/camera/depth/image_raw` | 30.0 Hz | 7.7 Hz | 🔴 **26%** |
+| `/odom` | 100.5 Hz | 26.0 Hz | 🔴 **26%** |
+**`rosbag2` logged `Cache buffers lost messages ... Total lost: 73547`** against 29 440 recorded —
+**only ~29% of the data survived.**
+🔴 **THE 16 MB/s IN STEP 3 WAS NOT "IT FITS" — IT WAS THE RATE THE CARD COULD ABSORB WHILE
+DISCARDING 71% OF THE MESSAGES.** I measured write throughput and never checked for message loss.
+**Real demand: colour 46.5 + depth 13.8 = 60.3 MB/s vs the 27.4 MB/s ceiling.**
+🔑 **ROOT CAUSE — colour is running at 67 Hz.** At 640×360 the Orbbec picked a **90 fps** mode
+(`color Frame - ... fps: 90` in the start log). **Nothing needs 67 Hz colour for mapping.**
+✅ **FIX: `color_fps:=15 depth_fps:=15`** (both exist as launch args; `color_fps` L97, `depth_fps`
+L133, default `0` = auto/max) ⇒ 10.4 + 6.9 = **17.3 MB/s, comfortably under the ceiling.**
+⚠️ **METHOD — this is the same error twice in one session: a rate that looked fine hid the real
+state.** **`ros2 bag record` fails SILENTLY-ish** — the loss line appears only at shutdown.
+**ALWAYS diff `ros2 bag info` counts against live `topic hz`, and grep the recorder log for
+`lost`, BEFORE trusting a bag.** → [[feedback-check-docs-before-measuring]]
+
+## 🔴 RTAB-MAP RUN 2026-08-02 12:30 — **MAP BUILT, BUT ZERO LOOP CLOSURES. THE ROUTE WAS WRONG.**
+Ran offline on the Pi over `~/mapping_run2_20260802`, **VISUAL odometry only** (`/odom` and `/tf`
+excluded from playback so wheel odom could not contaminate it; `/tf_static` kept for
+`base_link->camera_link`). Bag replayed at **0.3×** with `--clock` + `use_sim_time`.
+✅ **Visual odometry WORKS WELL:** **93% tracking**, 370-400 inliers, **0.07-0.14 s per update**
+offline vs 0.25-0.39 s realtime. **⇒ the OFFLINE ARCHITECTURE IS SOUND.**
+🔴 **BUT: 0 loop closures.** Grid: **15 853 occupied vs only 1 253 free** cells — inverted; a good
+map is mostly free inside a thin wall shell. Cloud spans **3.64 m vertically** (−0.66..2.98) for a
+single storey ⇒ pitch/height drift down an unclosed pose chain. **Map is NOT usable.**
+🔑 **ROOT CAUSE IS THE DRIVE SHAPE, NOT A SETTING: an OUT-AND-BACK cannot close loops on a
+forward-facing camera.** Coming back, the camera sees the *opposite* view of the same corridor, and
+RTAB-Map closes loops by **recognising places from appearance** — the far end of a hall does not look
+like its near end. **This is the direct, predicted cost of the 92° forward-only sensor.**
+✅ **FIX FOR THE NEXT RUN: drive a CIRCUIT, not an out-and-back** — return to the start still moving
+FORWARD, so each place is re-seen from the direction it was first seen.
+⚙️ **Working recipe (reusable):** `rtabmap_odom rgbd_odometry` + `rtabmap_slam rtabmap`, both with
+`--params-file` (**RTAB-Map core params are STRINGS — `-p Mem/IncrementalMemory:=true` throws
+`InvalidParameterTypeException`; a YAML file with quoted values works**). Key params:
+`Odom/ResetCountdown: "1"` (**essential** — without it VO lost tracking permanently and
+`publish_null_when_lost=true` made rtabmap log *"no odometry is provided. Image N is ignored"* for
+the whole rest of the run, mapping NOTHING) and `publish_null_when_lost: false`.
+⚠️ Freed CPU first by stopping `rover-camera`/`rover-scan`/`rover-scan-3d`; restored after and the
+**half-dead check PASSED** first try. ⚠️ `pkill -f rgbd_odometry` **kills the calling shell too** —
+kill by PID.
+
+## ✅✅ 2026-08-02 SOLVED — **32 LOOP CLOSURES. THE BLOCKER WAS THE ROVER'S OWN TOP PLATE IN COLOUR.**
+🔑 **OPERATOR'S HYPOTHESIS WAS RIGHT** ("its own top plate disrupts the mapping") → [[feedback-check-docs-before-measuring]] "the operator's ID of their own hardware beats my inference".
+**GEOMETRY (computed + confirmed against a real frame):** camera is **70 mm above the plate**,
+pitched 2.33°. Bottom ray = 30.35°(½ vFOV) + 2.33° = **32.68° below horizontal**, reaching plate
+height at **109 mm** forward; plate runs to the bumper at **345 mm** (11.5° below horizontal)
+⇒ plate fills **21.2° = 35% of frame HEIGHT**.
+🔴 **DEPTH vs COLOUR DIVERGE COMPLETELY — this is the whole point:**
+| | depth | colour |
+|---|---|---|
+| geometric band | 35% | 35% |
+| min range | **0.308 m — clips it** | **NONE** |
+| actually recorded | 45 mm strip, **0.74% of pixels** | 🔴 **the full 35% band** |
+⇒ **Depth barely saw it; colour is one-third rover.** Plate features never move w.r.t. the camera and
+look identical from every pose ⇒ they match between ANY two frames, padding `matches=` while
+contributing zero consistent geometry. **That is exactly the observed signature: matches 75-102,
+inliers only 14-19/20.** RANSAC was discarding the self-view.
+✅ **FIXES THAT WORKED (all software, NO hardware change):**
+1. `point_cloud_xyz` **`min_depth: 0.45`** ⇒ ICP correspondence ratio **0.612 → 0.770**.
+2. **`Kp/RoiRatios` + `Vis/RoiRatios` = `"0.0 0.0 0.0 0.35"`** (mask bottom 35% of colour)
+   ⇒ loop-closure detections **26 → 47**. **THE key fix.**
+3. **`RGBD/OptimizeMaxError: "0"`** — detections were all still being REJECTED with
+   *"maximum graph error ratio"* because odometry had drifted **33-44° in heading**; the gate is a
+   guard against FALSE loops, but these were genuine. ⇒ **32 accepted (Loop=20, Prox=12).**
+📊 **RESULT, like-for-like:** bulk vertical span **p1-p99 3.09 → 2.31 m**, p5-p95 2.65 → 1.68 m
+(a storey is ~2.3-2.5 m ✅). Floor scatter 143 → 134 mm. ⚠️ **raw span WORSENED 3.57 → 4.91 m** —
+optimisation flung a few outliers out. Map: `~/rtabmap_final.db`, `~/map_opt_cloud.ply` (1.25 M pts).
+🔴🔴 **METHOD — REALTIME BAG REPLAY IS NOT REPRODUCIBLE. Two runs differing ONLY in a gate param gave
+47 vs 0 detections**, because `--rate 0.3` drops different frames under different CPU load, building a
+different pose graph each time. **⛔ NEVER compare RTAB-Map parameters via `ros2 bag play`.**
+✅ **USE `rtabmap-reprocess --uwarn --Param val in.db out.db`** — deterministic, reprocesses a saved
+DB, no replay, far faster. All parameter comparisons must go through it.
+## 🔴 RUN 3 (CIRCUIT) 2026-08-02 — **THE CIRCUIT DID NOT HELP. ODOMETRY IS NOW THE BOTTLENECK.**
+Re-drove as a closed circuit on my advice. Capture perfect (264 s, 67 037 msgs, **0 loss**,
+depth 99.5% / colour 99.3%). `~/mapping_run3_20260802`, db `~/rtabmap_run3_raw.db`.
+| | loops | p1-p99 | p5-p95 | floor std |
+|---|---|---|---|---|
+| run2 out-and-back | 32 | **2.31 m** | **1.68 m** | **134 mm** |
+| run3 CIRCUIT | **39** | 3.71 m | 2.24 m | 🔴 **425 mm** |
+🔴 **MORE loop closures but a WORSE map.** Route shape was not the limiter. ⚠️ **I advised the
+circuit and it did not pay off — record that so it is not re-tried as the fix.**
+✅ **`OptimizeMaxError` SWEEP (deterministic, `rtabmap-reprocess`) — MY GATE HYPOTHESIS WAS WRONG:**
+| gate | 1 | 3 | 10 | 20 | 0=off |
+|---|---|---|---|---|---|
+| loops | 0 | 0 | 6 | 36 | 39 |
+| floor std | 600 mm | 600 mm | 496 mm | 428 mm | **425 mm** |
+**Monotonic — more closures ALWAYS gave a better map.** The gate never protected against bad
+closures, it only blocked good ones. ⇒ **keep `RGBD/OptimizeMaxError` at 0 (or ≥20). Do not
+re-propose a "moderate gate" as a fix.**
+🔑 **CONCLUSION: with the plate masked and loops closing, the limiter is ICP ODOMETRY QUALITY, not
+loop closure and not the route.** run3 turned more (2731° vs 2554°) in a tighter space and its
+odometry degraded accordingly. **425-600 mm of floor scatter is the symptom to chase next.**
+## ✅ VISUAL ODOMETRY + MASK BEATS ICP (2026-08-02, same run3 data)
+| run | odom | loops | p1-p99 | floor std |
+|---|---|---|---|---|
+| run2 out-and-back | ICP | 32 | 2.31 m | 134 mm |
+| run3 circuit | ICP | 39 | 3.71 m | 🔴 425 mm |
+| run3 circuit | **VISUAL+mask** | 36 | 2.97 m | ✅ **161 mm** |
+⇒ **run3's bad map was ICP ODOMETRY, not the route or the driving.** Visual+mask also ran at
+**0.13 s delay** offline vs ~1 s under realtime load. **STANDING RECIPE: visual odometry + colour
+mask + plate crop + `OptimizeMaxError 0` + ray tracing, via `rtabmap-reprocess`.**
+🔑 **`rtabmap-export --cloud` does NOT apply `Grid/NoiseFiltering*`** — that only cleans the GRID.
+The exported cloud stays raw, which is why it still looked full of floating points while the grid was
+already clean. **Use `--noise_radius 0.06 --noise_k 12`: removed 517 793 pts (38.8%) of FLYING PIXELS
+(depth-edge interpolation artifacts, a sensor property, NOT a capture fault — capture was 99.5%),
+floor std 161 → 125 mm.** Two products, same DB: judge navigation on the GRID, not the cloud.
+
+# 🏁 2026-08-02 — **Q1 "WHERE AM I?" IS ANSWERED. RTAB-MAP LOCALIZATION WORKS; AMCL DOES NOT.**
+Map: `~/rtabmap_run3_vis_nav.db` + `~/house_map.pgm/.yaml` (11.8×11.7 m, 5 cm, **free 48.1 m²,
+free:occupied 8.9** — was 0.08 before ray tracing).
+| localizer | driving | σx | σy | σyaw | verdict |
+|---|---|---|---|---|---|
+| **AMCL** | 46.9 m | 1.10 m | 0.78 m | **28.9°** | 🔴 **plateaued at 25-30° then DRIFTED BACK UP** |
+| **RTAB-Map** | 19.6 m | **0.06 m** | **0.06 m** | ✅ **4.3°** | ✅ **CONVERGED, best 0.01/0.01/1.7°** |
+🔑 **~18× better in position, ~7× in heading, on LESS THAN HALF the driving.**
+🔴 **WHY AMCL FAILS — SAME CLASS OF MISTAKE AS `slam_toolbox` FOR MAPPING.** AMCL matches a **360°
+lidar ring** against an occupancy grid; we have a **92° forward wedge, ~4 m range**. From many spots
+along a wall that wedge is identical ⇒ irreducible ambiguity. **⛔ Do not re-try AMCL on this
+vehicle, and do not "tune" it — swap the ALGORITHM, not the parameters.**
+✅ **RTAB-Map relocalizes with the SAME visual place recognition that built the map**, publishes
+`map->odom` identically, so **Nav2 sits on top unchanged** and `map_server` still serves the grid.
+⚠️ **BEHAVIOUR IS BINARY, NOT GRADUAL: lost (σ=100 m / 5729°) or locked (σ 0.056 m / 4.3°), nothing
+between.** First lock took **150 s of driving**; **after first lock it stayed localized 100% of the
+time** with zero variation. ⇒ **The hard part is INITIAL ACQUISITION (kidnapped-robot), not
+tracking.** Seed an initial pose to skip it. **L2/L3 must treat "not yet localized" as a real state
+and refuse to drive autonomously in it.**
+⚙️ Config: `ros2_ws/src/rover_nav2/config/rtabmap_localization.yaml` (+ `localization.yaml` = the
+superseded AMCL attempt, kept as the negative result).
+🔴 **TRAP: `rover_odometry` publishes a CONSTANT pose covariance** (x/y 0.01, yaw 0.002). RTAB-Map
+derives link information from the CHANGE in covariance between poses ⇒ constant gives zero ⇒
+**FATAL in `Link.cpp:137::setInfMatrix`, node aborts.** ✅ **FIX: set `odom_frame_id: odom` +
+`odom_tf_linear_variance`/`odom_tf_angular_variance` so RTAB-Map reads odom from TF instead.**
+⚠️ Ran at ~1.2 s delay under live CPU contention — fine for localization, **NOT for closed-loop
+control**. Needs measuring before autonomous driving.
+⏭ Also unchecked: whether the 2.33° camera pitch calibration contributes to the floor tilt.
