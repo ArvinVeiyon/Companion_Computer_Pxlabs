@@ -5,10 +5,75 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-08-02T06:36:47.456Z
+  modified: 2026-08-02T13:17:34.724Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## 🏁🏁 2026-08-02 — **#20 EXPLAINED. IT IS A FRICTION DEADBAND + INTEGRAL WINDUP, NOT A BROKEN LOOP.**
+**MEASURED yaw response curve** (MANUAL, armed, stick held ≥0.8 s, gyro averaged over the settled half):
+| steer out | 0.055 | 0.230 | 0.268 | 0.281 | 0.348 | 0.425 | **0.484** | **0.573** | **0.935** |
+|---|---|---|---|---|---|---|---|---|---|
+| yaw rate | 0 | 0 | 0 | 0 | 0 | 0 | **0.67** | **1.51** | **4.11** |
+🔑 **DEADBAND 0 → ~0.45, then LINEAR: `yaw_rate ≈ 7.6 × (steer − 0.40)` rad/s.**
+(fit checks: 0.573→1.35 vs 1.51 measured; 0.935→4.10 vs 4.11 measured.)
+🔑 **MINIMUM ACHIEVABLE YAW RATE ≈ 0.67 rad/s. ⛔ NEVER COMMAND A SLOWER TURN** — Nav2 and
+`autonav_mode` must clamp to this or the rover sits and grinds while the planner thinks it is turning.
+🔴 **THE RUNAWAY MECHANISM, END TO END:** command 0.3 rad/s → correct FF lands INSIDE the deadband →
+nothing moves → error persists → **`RO_YAW_RATE_I` winds the integrator toward its limit of 1.0 (the
+whole output range)** → friction finally breaks at near-max output → `7.6 × (1.0−0.4) ≈ 4.6 rad/s`.
+**That IS the observed 5.7-6.3 rad/s "~21×".** ⇒ **P was never the culprit; lowering it 40× could not
+help.** The three misconfigurations below all pushed FF FURTHER into the deadband.
+⚠️ **A LINEAR FF CANNOT REPRESENT A DEADBAND.** Required `CORR` varies with setpoint
+(sp 0.67→2.8, sp 1.0→2.1, sp 2.0→1.3). **No single value serves both slow and fast commands** —
+pick for the mid operating range and let P cover the rest.
+⏭ **REMAINING TUNING:** `CORR` ≈ 2.0-2.5, restore a modest `RO_YAW_RATE_P` (~0.3-0.5) for authority,
+and **keep `RO_YAW_RATE_I` at 0 or very small — the deadband is exactly what makes windup dangerous.**
+⏭ Physical alternative if slow turns are ever needed: less weight / different tyres / different
+surface. This is traction, not software.
+
+## 🔑 2026-08-02 — **#20 PART 1: `RO_YAW_RATE_LIM` IS deg/s, NOT rad/s.**
+**Source of truth — the param doc in `src/lib/rover_control/rovercontrol_params.c`:**
+> *Yaw rate limit … Used to cap yaw rate setpoints and map controller inputs to yaw rate setpoints
+> in Acro, Stabilized and Position mode.* **`@unit deg/s  @min 0  @max 10000`**
+`DifferentialManualMode.cpp:52`: `_max_yaw_rate = RO_YAW_RATE_LIM * M_DEG_TO_RAD_F`.
+| setting | believed | ACTUALLY |
+|---|---|---|
+| 1.57 (old) | 1.57 rad/s | **0.0274 rad/s** |
+| **0.5 (current)** | 0.5 rad/s | 🔴 **0.0087 rad/s** |
+| `RO_YAW_RATE_TH` 3.0 | — | 0.0524 rad/s deadband |
+🔴 **THE ACRO YAW COMMAND IS 6× BELOW THE MEASUREMENT DEADBAND** ⇒ `DifferentialRateControl` zeroes
+it ⇒ **the rate controller emits EXACTLY 0.0000 and the rover cannot yaw in Acro at all.**
+✅ **MEASURED PROOF: 1820 samples, all `nav_state=10` (ACRO), all ARMED, holding yaw stick →
+`/fmu/out/rover_steering_setpoint` flat 0.0000, gyro ±0.004 rad/s.** Matches the operator's report
+("in acro only forward/reverse work, yaw sits idle") exactly.
+⚠️ **`RO_YAW_RATE_LIM` is NOT referenced by `DifferentialRateControl` at all** (only by
+`DifferentialManualMode` and the *ackermann* modules) ⇒ **it never constrained the AutoNav path where
+the 07-29 runaway happened.** The old note *"exceeds RO_YAW_RATE_LIM 1.57 by ~4×"* assumed rad/s AND
+assumed it applied — **both wrong; delete that reasoning.**
+⏭ **FIX: set `RO_YAW_RATE_LIM` ≈ 28.6 (deg/s) for a real 0.5 rad/s**, then Acro becomes a SAFE test
+bench for the rate loop at `RO_YAW_RATE_P=0.05`.
+
+## ✅ 2026-08-02 — `RO_MAX_THR_SPEED` WAS 5× WRONG: 3.0 → **0.6** (set + verified)
+Param doc: *"Speed the rover drives at maximum throttle … @unit m/s"*. The drivetrain actually reaches
+**~0.58-0.60 m/s** (which is why `RO_SPEED_LIM` was set to 0.70). It divides the feedforward in
+**BOTH** the speed and yaw-rate loops: `FF = sp*track/2 / RO_MAX_THR_SPEED` ⇒ FF was **5× too small**,
+so the PID had to supply everything — which is why `P=2.0` produced a violent command from a 0.3 rad/s
+request. **Now 0.6, verified by readback; other gains untouched.**
+
+## ⚠️ 2026-08-02 — TWO #20 HYPOTHESES KILLED. Do not re-propose.
+1. ❌ **NOT a gyro sign error.** Operator drove Manual RIGHT-then-LEFT: first burst **+5.23 rad/s**,
+   second **−5.40 rad/s** — PX4 FRD says clockwise = positive. **Sign and magnitude both correct.**
+2. ❌ **NOT "measurement never reaches the estimator".** `ATTITUDE.yawspeed` is fed from
+   `vehicle_angular_velocity`, reads ±0.0015 rad/s at rest and tracks real rotation ⇒ **that topic is
+   alive and correct.**
+🔑 **Also measured: Manual full stick = 5.2-5.4 rad/s.** The 07-29 "runaway" of 5.7-6.3 rad/s was
+therefore **≈ full-stick output**, not an exotic instability.
+⚠️ **METHOD — I briefly claimed "positive feedback" from data that was actually MANUAL driving.**
+In Manual the rate controller is not in the loop, so its output proves nothing. **ALWAYS log
+`nav_state` alongside any control-loop probe** (`tmp/rate_probe2.py` does; v1 did not).
+⏭ **STILL OPEN: the AutoNav runaway itself is NOT yet reproduced or explained.** Fix the LIM units
+first, then use Acro at P=0.05 as the safe bench.
 
 ## 🔴🔴 2026-08-02 — **#21 GYRO-YAW ODOMETRY IS VALIDATED, AND IT FAILS.** First real driving test.
 A 206 s manual mapping run through one room + hall. **Operator CONFIRMED the rover physically
