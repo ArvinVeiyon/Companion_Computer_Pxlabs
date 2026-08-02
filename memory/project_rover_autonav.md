@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-08-02T13:17:34.724Z
+  modified: 2026-08-02T13:26:17.814Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
@@ -31,6 +31,14 @@ pick for the mid operating range and let P cover the rest.
 and **keep `RO_YAW_RATE_I` at 0 or very small — the deadband is exactly what makes windup dangerous.**
 ⏭ Physical alternative if slow turns are ever needed: less weight / different tyres / different
 surface. This is traction, not software.
+✅ **FC REBOOTED 2026-08-02 right after these changes — ALL EIGHT PARAMS SURVIVED, verified by
+readback.** ⇒ **`PARAM_SET` over MAVLink (pymavlink) PERSISTS on this firmware; no NuttShell
+`param save` is needed.** FC came back **DISARMED** (it can come back armed — always check).
+`eph` reset to 0.016 m, all 7 services active, DDS re-established, `/odom` 100.3 Hz.
+🔴 **`RO_YAW_RATE_I = 0` IS DELIBERATE — do not let it drift back to 0.1.** It is the windup source
+that produced the runaway across the friction deadband.
+⚠️ **STILL RE-READ AFTER EVERY FC REBOOT ANYWAY** — persistence held once; that is not proof it
+always will, and the failure mode (silent revert to a runaway config) is expensive.
 
 ## 🔑 2026-08-02 — **#20 PART 1: `RO_YAW_RATE_LIM` IS deg/s, NOT rad/s.**
 **Source of truth — the param doc in `src/lib/rover_control/rovercontrol_params.c`:**
