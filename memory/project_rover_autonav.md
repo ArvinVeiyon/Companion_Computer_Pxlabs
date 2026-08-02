@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-08-02T13:26:17.814Z
+  modified: 2026-08-02T13:56:33.211Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
@@ -31,6 +31,26 @@ pick for the mid operating range and let P cover the rest.
 and **keep `RO_YAW_RATE_I` at 0 or very small — the deadband is exactly what makes windup dangerous.**
 ⏭ Physical alternative if slow turns are ever needed: less weight / different tyres / different
 surface. This is traction, not software.
+📗 **FULL RECORD → `~/ros2_ws/docs/rover_yaw_response.md`** (curve, mechanism, final tune, compass,
+heading-control option, companion-loop option, method notes). **READ IT BEFORE TOUCHING YAW.**
+✅ **FINAL TUNE APPLIED + FLOOR-VALIDATED:** `CORR 1.8 · P 0.08 · I 0.0 · LIM 85.9 deg/s (1.5 rad/s)
+· MAX_THR_SPEED 0.6`. 50% stick → no rotation (deadband, correct) · 65% slow · 80% turns · 100%
+fast — **monotonic and controllable**, where before Acro yaw did NOTHING and AutoNav ran away.
+Top-end holds matched the model to **0.27 rad/s** (steer 1.000 → 4.60 vs 4.56 predicted).
+⏱ **YAW IS SLOW: ~2 s time constant (2.24 s to 90%).** Steady-state needs a ~4.5 s hold ⇒ **the
+65%/80% mid-range points are STILL UNMEASURED — an OUTDOOR job** (a skid-steer spin TRANSLATES;
+no room indoors). **Nav2 must not re-plan faster than the vehicle can respond.**
+🧭 **THERE IS A WORKING COMPASS** (`SYS_HAS_MAG=1`, `CAL_MAG0_ID=396809`, live on `HIGHRES_IMU`).
+It CANNOT help the rate loop (heading ≠ rate) but **enables HEADING control via
+`DifferentialAttControl`, which PX4 already has (`RO_YAW_P = 2.0` set)** and which degrades
+gracefully against a deadband because heading error persists until the rover actually turns.
+🔑 **`minimum correctable heading error = 0.9 / RO_YAW_P` ⇒ ~26° now, ~13° at P=4.** Design Nav2
+around that number. **This is the recommended architecture** — Nav2 wants to command heading anyway.
+🔎 **Why this rover is harder than most:** TurtleBot/Roomba/warehouse AMRs are **2 driven wheels +
+casters** — casters swivel, so almost NO scrub and no deadband. This is a **4-wheel skid-steer,
+25 kg, hard floor** = close to worst case. **Not misconfigured relative to the field — different
+physics.** 4-wheel skid-steers (Husky/Jackal) cope via big torque margin + loose outdoor surfaces
++ accepting coarse yaw and planning wide arcs, not tight pivots.
 ✅ **FC REBOOTED 2026-08-02 right after these changes — ALL EIGHT PARAMS SURVIVED, verified by
 readback.** ⇒ **`PARAM_SET` over MAVLink (pymavlink) PERSISTS on this firmware; no NuttShell
 `param save` is needed.** FC came back **DISARMED** (it can come back armed — always check).
