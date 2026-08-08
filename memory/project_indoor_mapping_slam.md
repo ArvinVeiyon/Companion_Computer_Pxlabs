@@ -201,3 +201,69 @@ both existed — but rtabmap had already aborted by then, so this is probably ju
 
 → [[perception-3d-costmap]] · [[check-docs-before-measuring]] · [[eliminate-hypothesis-whole-family]]
 · [[feedback-test-before-concluding]] · [[rover-autonav]]
+
+---
+
+# 2026-08-08 EVENING — the crash is FIXED, and it was hiding a bigger problem
+
+## 11. ✅ #26 SOLVED — the wrapper published UNALIGNED depth on the ALIGNED topic
+
+**Root cause (code, not luck):** `gemini_330_series.launch.py:263` defaults `align_mode:=SW`, so
+depth is aligned to colour **in software, per frameset**. In `ob_camera_node.cpp:6157`, when a
+frameset arrives without a usable colour frame the align step is **skipped — and execution falls
+through and publishes the still-native 1280×800 depth on `/camera/depth/image_raw` anyway.**
+The skip is `RCLCPP_DEBUG`, which is why nothing was ever in the journal.
+🔑 **Upstream ALREADY KNOWS unaligned depth reaches that point — it guards `logFrameInfoOnce()`
+against this exact dimension mismatch. It guarded the LOGGING and not the PUBLISHING.**
+
+**Fix:** `isDepthAlignedToTarget()` drops the depth image **and the point cloud** for such a
+frameset, with a throttled WARN. Dropping the cloud matters as much: an unaligned cloud becomes
+one garbage `/scan_3d` frame and **the collision reflex reads that.**
+📦 `~/codex-work/orbbec_unaligned_depth_guard_20260808.patch` (`codex-work 16665f5`) — **the clone
+is GITIGNORED, so a re-clone silently restores the bug.** ros2_ws `69d9c89`. Build = 15 min 45 s.
+
+**PROOF:** 1 h 23 m soak, 9976 cycles, **0 aborts** (was ~13 min to death). Guard fired **4×**:
+🔑 **1 at EVERY camera start, 23 ms before colour's first frame — DETERMINISTIC, and it was
+publishing a 1280×800 frame every single boot.** That was a second occurrence nobody knew about.
+The other **3 were mid-run — each one would have killed rtabmap.** A 16.6 min pre-fix baseline
+never reproduced it (43 669 frames, all 640×360, colour and depth counts EXACTLY equal), so the
+event is **load-linked and rare — do not conclude "fixed" from a quiet baseline.**
+
+🛠 `tools/depth_align_watch.py` (catch the frame + colour staleness) · `tools/camera_restart_check.py`
+(**`systemctl is-active` does NOT catch a half-dead camera start**).
+⏭ **`align_mode:=HW` would move the 71%-of-a-core software alignment onto the camera AND kill this
+bug class structurally** (the align_filter_ path never runs). Check `isSupportedResolution` for
+640×360 first. Not tested.
+
+## 12. 🔴🔴 LOCALIZATION HAS NEVER RELOCALIZED — 0 accepted closures, ever
+
+🔑🔑 **ACCEPTANCE TEST = ≥1 ACCEPTED LOOP CLOSURE. `map->odom` PROVES NOTHING.** In localization
+mode RTAB-Map publishes the db's **stored** pose against a fresh odom origin (measured −7.31 m /
+−167°) and `/localization_pose` ticks 2.1 Hz **whether or not it knows where it is.**
+⚠️ **§10's "map->odom IS published — the AMCL replacement works" rests on exactly this signal and
+is NOT evidence.** It was never checked for accepted closures. Do not carry it forward.
+
+### Ruled out by measurement — do not re-propose
+| hypothesis | verdict |
+|---|---|
+| intrinsics mismatch db vs live | ❌ **IDENTICAL**: `fx 304.050 fy 304.232 cx 322.632 cy 183.795 @640×360`. **fps 15→30 does NOT change intrinsics** — they follow sensor MODE, not rate. |
+| bad/absent depth | ❌ **83% valid** in the ROI RTAB-Map uses |
+| CPU / the Pi being too small | ❌ **5–41% idle, ~0% iowait**, RAM 1.8 of 7.9 GB |
+| `Vis/MinInliers` too strict | ❌ **0 inliers is structural, not a threshold miss** |
+
+### Position 1 — blank wall: DIAGNOSED
+1466 candidates, **all rejected at exactly 0 inliers** from 26–47 matches.
+Depth p25/p50/p75 = **1.256 / 1.265 / 1.285 m ⇒ 83% of the ROI within 3 cm of ONE PLANE.**
+🔑 **A PLANE IS A DEGENERATE CONFIGURATION for PnP/RANSAC** — coplanar points cannot resolve a
+unique pose, so 0 inliers is *forced*. **83 min parked facing a wall is the worst possible test:
+no new viewpoint ever arrives.**
+📷 **Grabbing the actual colour frame settled in ONE STEP what three hypotheses could not. LOOK AT
+THE IMAGE.** (Rover ~1.27 m from a featureless green wall; own top plate in the bottom third.)
+
+### Position 2 — centre of the room: STILL FAILS, AND THE FAILURE CHANGED SHAPE
+Real structure now (drawer tower, tricycle, wardrobe; **depth spread p25–p75 = 0.52 m** vs 0.03 m
+at the wall). But **ZERO candidates are proposed** — rejections frozen at 1466, cycle time
+0.29 → 0.085 s (nothing to verify), no non-cycle log lines at all.
+⇒ **Not "proposes and fails" any more but "recognises nothing".** Next suspects: the 08-07/08
+mapping run never covered this pose/orientation · appearance or lighting differs from the bag ·
+the loop-closure hypothesis threshold. 🔴 **UNRESOLVED. This is Q1 and it is the active blocker.**
