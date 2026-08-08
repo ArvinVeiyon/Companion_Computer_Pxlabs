@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 15cc4d60-122c-4a4b-9f9b-8e1a15ef71a0
-  modified: 2026-07-31T19:13:41.420Z
+  modified: 2026-08-07T20:05:56.907Z
 ---
 
 config: /etc/wifibroadcast.cfg | ch: 161 (5GHz) | region: BO | txpower: 3000 (30dBm rtl8812eu)
@@ -114,6 +114,22 @@ internal assertion in the out-of-tree Realtek DKMS fork trips. Both NICs print
 **Verified healthy after:** `tx_errors=0` on both NICs, `operstate=up`, `type monitor`,
 `wifibroadcast@drone` `NRestarts=0`, 3 `wfb_tx` instances, video flowing.
 Taint flags `G W C OE` are expected here (OE = DKMS module, C = staging, W = a warn was issued).
+
+## STBC / LDPC — ASKED AND ANSWERED 2026-08-07: leave BOTH at 1, no change
+Live on all 3 drone TX streams: `-S 1 -L 1 -M 1 -B 20 -G long`. `/etc/wifibroadcast.cfg` is
+byte-identical to both `.cfg.bak` and `.cfg.default` — nothing has actually been changed.
+- ✅ **The flags are genuinely honored, not ignored.** The DKMS driver parses the radiotap MCS field
+  on the injection path — `/usr/src/rtl88x2eu-5.15.0.1/core/rtw_xmit.c:4990-4994` reads LDPC (bit
+  `0x10`) and STBC (bits 5-6) and `:5054-5055` writes `pattrib->ldpc` / `pattrib->stbc`.
+- ✅ Both supported at both ends (same 8812eu): `iw phy` → `RX LDPC`, `TX STBC`, `RX STBC 1-stream`.
+- 🔑 **Drone-side stbc/ldpc affect DRONE TX = the DOWNLINK, which is already 0.01% loss.** They
+  **cannot** touch the 13.57% uplink loss — that is GS TX + drone RX (the deaf NIC-A ant0, #22).
+- ⚠️ `stbc`/`ldpc` live in **`[base]`**, which is in BOTH profile lists ⇒ editing there is NOT a
+  drone-only change. A drone-only override belongs in `[drone_base]` (currently only `keypair`).
+  **Profile precedence in `server.py` was NOT verified — check before relying on it.**
+- Caveat worth knowing: STBC splits TX energy across both chains, so NIC-A is currently radiating
+  ~half its power into the dead ant0. That is an argument for **fixing the antenna (#22)**, not for
+  tuning STBC around it — and `-S` is per-`wfb_tx`, spanning both NICs, so it can't be set per-NIC.
 
 **Do NOT patch the DKMS driver to silence it** — zero operational gain and it risks the link.
 Its only real cost is distraction: it looks like a fault mid-investigation. → [[feedback_dkms_arch]]

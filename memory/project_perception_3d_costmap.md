@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-01T17:13:23.458Z
+  modified: 2026-08-08T05:32:19.931Z
 ---
 
 # Perception: 3D height-aware obstacle layer + Nav2 forward costmap
@@ -41,13 +41,33 @@ footprint. `autonav_mode` does; Nav2 does via `footprint_clearing_enabled` on bo
 explicit rectangle on BOTH costmaps** — 0.30 was the wheelbase half-diagonal and left most of the rover
 outside its own footprint. Both were sized off the superseded 0.405 m plate.
 
-## 🔴 OPEN — AN UNEXPLAINED CLUSTER GATES THE REFLEX SWITCH
-Live: **x 0.353-0.400, y +0.085..+0.161 (LEFT of centre), z 0.100-0.218** — below the plate (0.235),
-~5 cm past its front edge. **NOT the VL53L1X (not mounted).** Either other hardware or a real object.
-**It reads as 3.8 cm of bumper clearance vs a 0.35 m stop threshold ⇒ if it is the rover, switching the
-reflex to `/scan_3d` leaves the vehicle PERMANENTLY BLOCKED.**
-⚠️ **`front_overhang = 0.337` could not have caught it** — that was calibrated with the 2D `/scan`,
-whose band sits well above z 0.10-0.22. **NEEDS EYES, not more measurement.**
+## ✅ CLOSED 2026-08-08 — THE "UNEXPLAINED CLUSTER" WAS A RACK, NOT THE ROVER
+The cluster (**x 0.353-0.400, y +0.085..+0.161, z 0.100-0.218** — below the plate at 0.235, ~5 cm past
+its front edge) was treated for a week as possible rover hardware, which would have left `/scan_3d`
+**permanently self-blocked**. It is not. **The operator stated the rover had been parked facing a
+rack.** Then tested, over the 480 nodes of `rtabmap_replay_wheel.db` (per-node obstacle cells are in
+`base_link`, so a body-fixed return must recur in every node):
+
+| box tested | nodes containing it |
+|---|---|
+| near-field sanity — ANY point x 0.31-0.45 | 103/480 = 21.5% |
+| **top plate**, z 0.22-0.25 — known body-fixed | 87/480 = **18.1%** |
+| **the cluster**, z 0.100-0.218 | 3/480 = **0.6%** |
+
+**The plate appears in 84% of every node that has any near-field return at all — that is what a
+self-return looks like. The cluster appears in 3.** Near-field z is p10 0.221 / p50 0.325: returns sit
+at and above plate height, almost nothing below. ⇒ **not body-fixed.**
+
+🔑 **The 3.8 cm bumper-clearance reading was CORRECT, not a fault** — the rover really was ~4 cm off a
+rack, and the reflex was doing its job. ⇒ **`/scan_3d` is not self-blocked; the reflex switch is
+UNGATED.**
+⚠️ **METHOD, reusable:** to decide whether a return is the vehicle or the world, count what fraction of
+*many poses* contain it, and **always run a positive control** — my first control box (x 0.10-0.20) sat
+inside the camera's 0.308 m blind zone and returned 0%, which would have made the whole test vacuous.
+⚠️ `front_overhang = 0.337` could not have caught it — calibrated on the 2D `/scan`, whose band sits
+above z 0.10-0.22. That remains true and is now moot.
+→ [[feedback-check-docs-before-measuring]] (the operator's ID of their own hardware beats my inference)
+· [[feedback-test-before-concluding]]
 
 ## ✅ DEPLOYED 2026-08-01 20:08 — `rover-scan-3d.service`, PARALLEL, publishing `/scan_3d`
 **`cloud_to_scan.launch.py` publishes `/scan_3d`, NOT `/scan`, and publishes NO TF.**
