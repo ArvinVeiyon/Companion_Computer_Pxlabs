@@ -42,3 +42,22 @@ read a stated finding as a measured fact, or the whole memory is worthless.
 Sibling rules, same family: [[check-docs-before-measuring]] (grep the docs before deriving) ·
 [[eliminate-hypothesis-whole-family]] (dump every candidate before ruling one out).
 → [[indoor-mapping-slam]]
+
+## 2026-08-08 — I declared a failure from the ABSENCE of a success string
+
+Localization: I grepped for `Accepted loop closure|Loop closure detected|Global loop closure`,
+got 0 against 1466 rejections, and reported **"localization has never relocalized"** — into memory,
+as a headline blocker. It was wrong. RTAB-Map had localized successfully, and logged it as
+
+    [WARN] Rtabmap.cpp:3772::process() Localization was good, but waiting for
+           another one to be more accurate (RGBD/MaxOdomCacheSize>0)
+
+**one line after the last rejection** — different wording, different severity, no "accepted"
+anywhere in it. Three hours of silence that I read as "still failing" was actually "succeeded, now
+waiting for corroboration it can never get, because the rover never moves."
+
+🔑 **A grep that finds nothing proves my PATTERN was absent, not that the EVENT was.** Before
+concluding a thing never happened: enumerate what the success path actually PRINTS (read the
+source, or dump every distinct message type in the log), don't guess its wording.
+🔑 **Silence is not a negative result** — a component that goes quiet may have succeeded and
+changed state. Ask what state it is in, not just what it failed to emit.

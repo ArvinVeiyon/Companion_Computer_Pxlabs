@@ -260,10 +260,33 @@ no new viewpoint ever arrives.**
 📷 **Grabbing the actual colour frame settled in ONE STEP what three hypotheses could not. LOOK AT
 THE IMAGE.** (Rover ~1.27 m from a featureless green wall; own top plate in the bottom third.)
 
-### Position 2 — centre of the room: STILL FAILS, AND THE FAILURE CHANGED SHAPE
-Real structure now (drawer tower, tricycle, wardrobe; **depth spread p25–p75 = 0.52 m** vs 0.03 m
-at the wall). But **ZERO candidates are proposed** — rejections frozen at 1466, cycle time
-0.29 → 0.085 s (nothing to verify), no non-cycle log lines at all.
-⇒ **Not "proposes and fails" any more but "recognises nothing".** Next suspects: the 08-07/08
-mapping run never covered this pose/orientation · appearance or lighting differs from the bag ·
-the loop-closure hypothesis threshold. 🔴 **UNRESOLVED. This is Q1 and it is the active blocker.**
+### Position 2 — centre of the room: 🔑 IT LOCALIZED. THE BLOCKER IS THAT THE ROVER NEVER MOVES.
+
+    17:39:38.847  Rejected loop closure 413 -> 2036: 0/12 inliers
+    17:39:39.322  Rtabmap.cpp:3772::process() Localization was good, but waiting
+                  for another one to be more accurate (RGBD/MaxOdomCacheSize>0)
+
+**RTAB-Map RELOCALIZED at cycle 2037.** With `RGBD/MaxOdomCacheSize > 0` it then requires a
+**SECOND, corroborating localization, verified against the odometry travelled in between**, before
+it commits the correction. **The rover is stationary ⇒ no odometry accumulates ⇒ the second fix can
+never be verified ⇒ it waits forever.** Every candidate proposal stops dead at that line; the log
+ran another 3.5 h in silence, which is the *waiting* state, not failure.
+⇒ **Same root cause as the wall test in a different mask: a STATIONARY rover cannot finish this.**
+
+**⏭ FIX — try in this order:**
+1. **Push the rover a metre or two by hand.** Pushing turns the wheels, the VESCs wake and report
+   eRPM (nudge test, 07-26), so **wheel odom DOES accumulate** — no arming, no S1 dependency.
+2. If that is not wanted: `RGBD/MaxOdomCacheSize: 0` accepts the first fix uncorroborated —
+   faster, but it trusts a single match with no consistency check.
+
+**Map coverage is NOT the problem** — db keyframes within 1 m of the mapped centre (ids 398-409)
+show the **same drawer tower, wardrobe, green wall and black pipe the camera sees right now.**
+⚠️ But from that centre the mapping run only ever looked in **two directions (~−88° and ~+160°)**,
+and the map was built in **daylight** vs this 19:30 artificial-light test. Both are worth keeping in
+mind if matching stays marginal — neither is currently proven to matter.
+
+⚠️⚠️ **METHOD FAILURE, recorded so it is not repeated:** I reported "0 accepted closures, has never
+relocalized" — into MEMORY.md as a headline blocker — because a grep for
+`Accepted loop closure|Loop closure detected|Global loop closure` returned nothing. **The success is
+a WARN, in different words, one line after the last rejection.** A grep that finds nothing proves
+the PATTERN was absent, not the EVENT. → [[feedback-test-before-concluding]]
