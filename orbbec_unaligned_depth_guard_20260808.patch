@@ -1,0 +1,78 @@
+diff --git a/orbbec_camera/include/orbbec_camera/ob_camera_node.h b/orbbec_camera/include/orbbec_camera/ob_camera_node.h
+index 366b65d..b9e492a 100644
+--- a/orbbec_camera/include/orbbec_camera/ob_camera_node.h
++++ b/orbbec_camera/include/orbbec_camera/ob_camera_node.h
+@@ -545,6 +545,8 @@ class OBCameraNode {
+ 
+   void publishRawDepthImage(const std::shared_ptr<ob::Frame>& depth_frame);
+ 
++  bool isDepthAlignedToTarget(const std::shared_ptr<ob::FrameSet>& frame_set) const;
++
+   std::shared_ptr<ob::Frame> processDepthFrameFilter(std::shared_ptr<ob::Frame>& frame);
+ 
+   std::shared_ptr<ob::Frame> processColorFrameFilter(std::shared_ptr<ob::Frame>& frame);
+diff --git a/orbbec_camera/src/ob_camera_node.cpp b/orbbec_camera/src/ob_camera_node.cpp
+index d54bfec..39b8643 100644
+--- a/orbbec_camera/src/ob_camera_node.cpp
++++ b/orbbec_camera/src/ob_camera_node.cpp
+@@ -5541,6 +5541,29 @@ void OBCameraNode::publishPointCloud(const std::shared_ptr<ob::FrameSet> &frame_
+   }
+ }
+ 
++// With SW D2C the align step is skipped whenever a frameset arrives without a usable
++// colour frame, and the depth frame then stays at its native resolution. Callers use
++// this to drop such a frame instead of publishing it on the registered topics, where
++// consumers are entitled to assume depth is no larger than colour -- RTAB-Map asserts
++// exactly that in Memory.cpp::createSignature() and aborts the process when it fails.
++bool OBCameraNode::isDepthAlignedToTarget(const std::shared_ptr<ob::FrameSet> &frame_set) const {
++  if (!depth_registration_ || !align_filter_ || !frame_set) {
++    return true;
++  }
++  auto depth_frame = frame_set->getFrame(OB_FRAME_DEPTH);
++  if (!depth_frame || !depth_frame->is<ob::VideoFrame>()) {
++    return true;
++  }
++  auto target_frame = frame_set->getFrame(STREAM_TYPE_TO_FRAME_TYPE.at(align_target_stream_));
++  if (!target_frame || !target_frame->is<ob::VideoFrame>()) {
++    return false;
++  }
++  auto depth_video = depth_frame->as<ob::VideoFrame>();
++  auto target_video = target_frame->as<ob::VideoFrame>();
++  return depth_video->getWidth() == target_video->getWidth() &&
++         depth_video->getHeight() == target_video->getHeight();
++}
++
+ void OBCameraNode::publishRawDepthImage(const std::shared_ptr<ob::Frame> &depth_frame) {
+   if (!depth_frame || !depth_unaligned_publisher_ || !depth_registration_ ||
+       depth_unaligned_publisher_->get_subscription_count() == 0) {
+@@ -6242,11 +6265,19 @@ void OBCameraNode::onNewFrameSetCallback(std::shared_ptr<ob::FrameSet> frame_set
+       logFrameInfoOnce(stream_index, updated_video);
+     }
+ 
++    const bool depth_aligned = isDepthAlignedToTarget(frame_set);
++    if (!depth_aligned) {
++      RCLCPP_WARN_THROTTLE(logger_, *node_->get_clock(), 5000,
++                           "Depth registration is on but this frameset was not aligned (no usable "
++                           "align target); dropping its depth image and point cloud rather than "
++                           "publishing unregistered depth on the registered topics");
++    }
++
+     if (enable_stream_[COLOR] && color_frame) {
+       std::unique_lock<std::mutex> lock(color_frame_queue_lock_);
+       color_frame_queue_.push(frame_set);
+       color_frame_queue_cv_.notify_all();
+-    } else {
++    } else if (depth_aligned) {
+       publishPointCloud(frame_set);
+     }
+ 
+@@ -6273,6 +6304,9 @@ void OBCameraNode::onNewFrameSetCallback(std::shared_ptr<ob::FrameSet> frame_set
+         if (frame == nullptr) {
+           continue;
+         }
++        if (frame_type == OB_FRAME_DEPTH && !depth_aligned) {
++          continue;
++        }
+         onNewFrameCallback(frame, stream_index);
+       }
+     }
