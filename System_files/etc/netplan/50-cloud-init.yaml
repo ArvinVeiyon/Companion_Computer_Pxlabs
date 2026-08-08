@@ -34,7 +34,8 @@
 
          # External USB adapter (RTL8821CU) added 2026-07-25 — onboard wlan0
          # blocked by metal enclosure top plate; this is the primary uplink now.
-         wlx90de80d824d6:
+         #wlx90de80d824d6:
+         wlx8c86dd5beed9:
               access-points:
                    Nilan:
                     password: 6ab183855b00d5acd59eabd12437edb1caae60016c58bc41391cb1a9b0948124
