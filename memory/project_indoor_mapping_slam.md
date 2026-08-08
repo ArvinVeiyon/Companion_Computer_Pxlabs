@@ -290,3 +290,18 @@ relocalized" — into MEMORY.md as a headline blocker — because a grep for
 `Accepted loop closure|Loop closure detected|Global loop closure` returned nothing. **The success is
 a WARN, in different words, one line after the last rejection.** A grep that finds nothing proves
 the PATTERN was absent, not the EVENT. → [[feedback-test-before-concluding]]
+
+### ⏭ Exact resume command (2026-08-08 session end)
+
+```bash
+cd ~/ros2_ws && source install/setup.bash && unset ROS_DOMAIN_ID
+ros2 run rtabmap_slam rtabmap --ros-args \
+  --params-file src/rover_nav2/config/rtabmap_localization.yaml \
+  -r rgb/image:=/camera/color/image_raw \
+  -r depth/image:=/camera/depth/image_raw \
+  -r rgb/camera_info:=/camera/color/camera_info
+```
+
+Then **push the rover a metre by hand** and watch for the second localization to commit.
+⚠️ **Grep the log for `Rtabmap.cpp:3772` / "Localization was good", NOT for "accepted loop
+closure"** — the success path does not contain that string.
