@@ -41,7 +41,7 @@
 
 ## [TODOS] → memory/todos.md
 **⏭ NEXT: re-test localization fairly (above) → then S1 kill test → T2 straight goal.** ✅ CLOSED: #20 yaw · #23 watchdog · #25 retry storm · #26 depth-glitch · **#26b (`RGBD/MaxOdomCacheSize: "0"`)** · #28 camera 30 fps. #21 gyro-yaw open.
-1. Relay NTP · 2. 🔴 **NO onboard Wi-Fi fallback — recovery is WFB → relay:2222 ONLY** · 14. 🔴 **Rotate the PAT, codex-work → SSH**
+1. Relay NTP · 2. 🔴 **NO onboard Wi-Fi fallback — recovery is WFB → relay:2222 ONLY** · 14. 🔶 **PAT: SSH done 08-09; STILL MUST REVOKE THE TOKEN + check `codex-relay`**
 3+4+24. ❌ **DELETED, don't re-propose:** GS `rx_ring_size`, GS TX power (maxed), trim PX4 MAVLink rates.
 5+7+8+9+10. Antenna tracker HW · /scan → Nav2 · #17 delete `camera_sw_node_obsolute.py` (+`rov_collision_stop`, `collision_manual_mode`) · Multicam Phase D (#25 **still keys `/dev/video0`** — close via Phase D)
 27. ⏭ Reflex `/scan_3d` is a PARAM (`collision.scan_topic`), default still `/scan`. **Needs ONE low/overhanging object `/scan` misses before flipping.**
@@ -63,7 +63,7 @@ ch161 5GHz | drone-wfb@10.5.5.87 ↔ gs-wfb@10.5.5.77 | keys `/etc/{drone,gs}.ke
 ## [REPOS / GCS]
 `codex-work`: `~/codex-work` → Companion_Computer_Pxlabs, branch **master** (origin/main stale) | `codex-relay`: on vind-rly → Relay_Station_Pxlabs | `ros2_ws`: `~/ros2_ws`, **main**, SSH remote ✅
 GCS: G-Control.exe → pxlabs_cli.exe → SSH relay:2222 → companion:22 | QGC: github.com/ArvinVeiyon/PXLABS_qgroundcontrol @ PXLABS-integration
-🔴 **`codex-work` still has a PLAINTEXT PAT in its remote URL — rotate it and switch to SSH (#14).** `ros2_ws` already uses SSH.
+✅ **08-09: `codex-work` remote SWITCHED TO SSH** — no repo on this machine carries a token now (`codex-work` ✅ · `ros2_ws` ✅ · `PX4-Autopilot` public). 🔴 **BUT THE TOKEN IS STILL LIVE ON GITHUB — REVOKE IT** (github.com/settings/tokens). Switching the remote stopped it being USED; it did not rotate it. ⏭ **`~/codex-relay` on vind-rly was never checked for the same pattern.**
 
 ## [SERVICE / TROUBLESHOOTING QUICK INDEX] → full detail in setup_manual C, D2, E5
 **AIDE timer DISABLED** (~3.5 h/day of a core). **`tfmini` DISABLED — ⚠️ MUST `systemctl enable --now tfmini` for the DRONE.** **`rover-ekf-bridge` DISABLED on purpose** (wheels-up limit-cycle hazard) — it already uses `LocalPositionMeasurementInterface`, velocity-only, so **the Q1 hook is half-built.**
