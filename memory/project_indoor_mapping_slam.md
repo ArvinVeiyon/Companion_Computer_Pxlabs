@@ -305,3 +305,143 @@ ros2 run rtabmap_slam rtabmap --ros-args \
 Then **push the rover a metre by hand** and watch for the second localization to commit.
 ⚠️ **Grep the log for `Rtabmap.cpp:3772` / "Localization was good", NOT for "accepted loop
 closure"** — the success path does not contain that string.
+
+---
+
+## 13. ✅✅ 26b SOLVED 2026-08-09 — `RGBD/MaxOdomCacheSize: "0"`. §12's "MOVE THE ROVER" fix was WRONG.
+
+**The fix, committed to `rtabmap_localization.yaml`:** `RGBD/MaxOdomCacheSize: "0"`.
+Localization then commits fresh fixes **while completely stationary** — measured 21 `map->odom`
+updates in 50 s, rover parked, `odom->base` frozen. This is the STRONGER outcome: the rover can
+localize at power-on without moving, which "press go from base" needs.
+
+### §12's fix was disproven by experiment — do not re-propose "push the rover"
+The operator hand-pushed **2.4 m** (`odom->base` x 0.388 -> 2.218, y 0.028 -> 1.541, measured).
+**`map->odom` did not change once.** So "a stationary rover cannot finish this" was wrong; real
+odometry accumulated and corroboration still never happened.
+**Why:** heading comes from the PX4 EKF gyro (`wheel_odometry_node yaw_source=gyro`), which drifts
+**0.19 deg/s at rest — measured 18.6 deg over 96 s, wheels stationary, position frozen** (matches
+the "33-44 deg over a few minutes" already noted at line 47 of the yaml). Two fixes 12 s apart
+therefore disagree by ~2.3 deg of pure fiction, so the second is never "more accurate".
+⇒ **There is no trustworthy heading to corroborate against. Corroboration is not a safety feature
+on this vehicle, it is a deadlock.**
+
+## 14. 🔴 NEW FAILURE MODE — THE CAMERA SILENTLY DEGRADES OVER ~1.5 h AND KILLS LOCALIZATION
+
+**This is NOT the known half-dead-restart fault.** The camera starts healthy and **decays**:
+
+| time | colour | depth | localization |
+|---|---|---|---|
+| 11:47 (boot +45 min) | 17.9 Hz | 27.6 Hz | (not running) |
+| 12:23 | 12.6 Hz | 19.7 Hz | committing |
+| 12:31 | 9.5 Hz | 19.6 Hz | **dead, 0/12 inliers** |
+| 12:32 | 8.3 Hz | 26.5 Hz | dead |
+| **after restart 12:36** | **~18-21 Hz** | **29.6-30.0 Hz** | **committing again** |
+
+`camera_restart_check.py` **PASSES THE WHOLE TIME** — both streams negotiate 30 fps, depth-aligned-
+to-colour OK, zero errors, and rtabmap logs `Did not receive data` **0** times. Only the RATES show
+it. ⇒ **When localization dies, MEASURE THE COLOUR RATE FIRST, and restart the camera.**
+⚠️ **Colour is capped ~17-21 Hz vs 30 negotiated even when healthy** — structural, likely MJPG
+decode. **#28 was validated on `/scan`, which is DEPTH-derived, so the COLOUR rate was never
+checked after it.**
+
+### Signature to recognise
+**High descriptor matches + EXACTLY 0 inliers = bad imagery, NOT a wrong place.** Match counts
+went UP (21-34 -> 40-47) while inliers went to 0. A genuinely wrong place gives few matches; a
+degraded colour stream gives many matches whose pixel positions are mush.
+
+### Hypotheses DISPROVEN by measurement today — do not re-propose
+- ❌ **Map coverage.** It failed at the SAME spot that had worked 6 min earlier. Position was not
+  the variable. (This was my hypothesis; the operator's drive-back test killed it.)
+- ❌ **Room light / auto-exposure throttling.** Light off vs on, one process, one clock:
+  colour 17.6-21.4 Hz OFF vs 16.8-17.7 Hz ON — it went slightly **UP** in the dark; depth
+  unchanged at ~30. ⚠️ Caveat: tested at 12:40 in **daylight**, so the lamp may be a small part of
+  the illumination. This kills "the lamp throttles colour", NOT "a dark room hurts matching".
+- ❌ **Rover parked inside the 0.308 m depth minimum.** Measured 85% valid rays, min 0.49 m,
+  median 2.53 m. Depth was healthy throughout — the failure was never in depth.
+
+## 15. ⏭ WHERE IT STANDS — T6 does NOT pass yet. The blocker is now POSE QUALITY.
+Localization commits, but on a **stationary** rover the pose jitters:
+**yaw +15.31 to +36.22 deg (21 deg spread), x -6.982 to -7.594 (61 cm)** — worse than the
+±11 deg / 18 cm of the first run. 21 deg at 2 m is ~0.7 m lateral, against a 0.55 m inflation.
+**Not yet good enough to hand to Nav2.**
+Inliers run 3: 22x 0/12, **5x 11/12**, 6x 7/12, 3x 9/12, 1x 8/12, 1x 6/12 — everything scrapes the
+`Vis/MinInliers: 12` bar. ⚠️ **LOWERING MinInliers would make jitter WORSE, not better** (weaker
+fixes accepted); raising it cuts the fix rate. The real levers are **better imagery (get colour to
+30 Hz)** or **a better map** — not this threshold.
+⏭ Also never verified: that the committed pose is CORRECT, only that it commits. Needs ground truth.
+
+---
+
+# 2026-08-09 EVENING — A GOOD ROOM MAP AT LAST. THE CAUSE OF DUPLICATE WALLS WAS ODOM SCALE.
+
+**Bag `~/map_run_20260809_185011`** — 488 s, 192,207 msgs, **ZERO drops**, colour+depth matched at
+~12.3 Hz, camera restarted to 15/15 first (⚠️ it came up HALF-DEAD; the 2nd restart was fine).
+Drive: 2 validation circles (1 continuous + 1 paused), a closed forward loop with stop-and-stare
+full rotations, 2 more circles. 22.7 m over 472 s. ⛔ **We did NOT record `/fmu/out/esc_status`, so
+odometry cannot be RECOMPUTED from this bag, only rescaled. RECORD THE RAW ESC DATA NEXT TIME.**
+
+## The map lineage
+| db | what | verdict |
+|---|---|---|
+| `house_map_v3` | first map on the new camera-gyro heading | ❌ **every wall drawn MULTIPLE times** |
+| `house_map_v4` | SAME bag, odom translation × 1/1.188 | ✅ **walls collapsed to single lines** |
+| `house_map_v5` | v4 grid reprocessed, `Grid/DepthDecimation 2` | ⚠️ ROI fixed but NEW ray-tracing spikes — **NOT ADOPTED** |
+
+## 🔑 THE DUPLICATE WALLS WERE **ODOM SCALE**, NOT HEADING
+Heading was already at 0.00028 deg/s and walls still multiplied. **19% over-reported travel × 22.4 m
+= 4.3 m of error in a 3.2 × 3.9 m room.** Rescaling by 1/1.188 fixed it and shrank the room 24 cm to
+its true size. ⇒ `erpm_to_ms` 0.004633 → **0.003900** (committed `192681e`).
+🔑 **Rescaling recorded TF == driving with the corrected constant**, exactly: heading is
+gyro-derived and independent of `erpm_to_ms`, so scaling v scales x,y by the same factor. Same-bag
+re-map is therefore the RIGOROUS experiment, not merely the convenient one.
+
+## 🔴 THE ROVER'S OWN TOP PLATE IS IN THE MAP — "NEGLIGIBLE EFFECT" IS WITHDRAWN
+`Grid/DepthRoiRatios 0.0 0.0 0.0 0.35` was **IGNORED ON EVERY FRAME**: 360×0.65 = 234 rows, and
+RTAB-Map needs that divisible by `Grid/DepthDecimation` (was 4; 234/4 = 58.5). **11.8% of v4's cloud
+(31,299 of 266,053 points) was the rover's own body**, drawn at every position it occupied —
+the operator SAW the driven path traced through the floor. §5's "negligible effect" was WRONG.
+✅ Fixed for future maps: **`Grid/DepthDecimation: "2"`** (234/2 = 117) — 740 ROI errors → 0.
+⚠️ **BUT v5 gained ray-tracing SPIKES past the walls** (4× more depth points → noisy long-range
+returns become spurious rays). Could punch false free space through walls. **EVALUATE BEFORE USING.**
+⚠️ **UNPROVEN AND WITHDRAWN:** I claimed the plate marks the driven corridor as obstacle and would
+wall Nav2 in. The grid comparison does NOT support it — v4's interior is already mostly free,
+because ray tracing from later poses clears what the plate marked from earlier ones. Cloud
+contamination is MEASURED; the grid consequence was inference.
+
+## ✅ Camera gyro scale is FINE and NOT rate-dependent (retested from the bag)
+0.9996 @ 9.3 deg/s · 0.9953 @ 6.1 deg/s · **1.0012 @ 19.5 deg/s**. The earlier "−4.53% at
+32.7 deg/s" was **the probe integrating on ARRIVAL time**, not the sensor. Camera stamp clock is
+**+0.0022%** of ROS time (0.008 deg per circle). ⇒ slow paused turns are good for image sharpness
+but NOT required for scale.
+✅ Also verified from the bag: **image topics ARE in ROS time** (TF lookups correct) and
+**colour↔depth are synced to 0.3 ms**. Only `/camera/gyro/sample` uses the device clock.
+
+## ⏭ OPEN — the almirah
+Operator: walls fine, but the **blue almirah (x 0.4→1.6, y −0.85→−1.05) is still drawn several
+times** and sits INSIDE the room. Measured: that surface is **~14 cm thick vs ~9 cm for clean walls**
+(IQR, narrow strips) and is **darker and bluer** (RGB 64-153 vs 90-179). Consistent with glossy dark
+steel reflecting the IR pattern away and reading short — **but NOT proven**: an almirah is a genuine
+3D object, so some spread is real geometry. ⚠️ **Error is toward the rover ⇒ FAILS SAFE for nav.**
+⛔ Do NOT "fix" it by deleting points from the cloud — that changes the picture, not the map.
+
+## ⏭ NEXT
+1. **Localize in v4** and measure jitter against v2's 21° — the test that decides whether the map works.
+2. Evaluate the v5 spikes before adopting decimation 2 on an existing map.
+3. Camera roll **1.54°** still uncorrected (floor plane `z = +0.00638x +0.02681y −0.01203`).
+
+## ✅ LOCALIZATION IN v4 — MEASURED 2026-08-09 21:32
+110 s, 222 samples, rover verified stationary (odom moved 0.0 cm):
+| | house_map_v2 | house_map_v4 |
+|---|---|---|
+| yaw spread | 21.0 deg | **8.79 deg** (2.4x better) |
+| x spread | 61 cm | **13.5 cm** (4.5x better) |
+| y spread | — | 22.8 cm |
+| typical sd | — | **1.56 deg · 3.0 cm · 4.5 cm** |
+
+1.56 deg at 2 m = 5 cm lateral, well inside the 0.55 m inflation radius. The 8.79 deg is full
+min-to-max from an OUTLIER population, not continuous noise. Health: **35 rejections in ~1018
+cycles** (28 of them against ONE keyframe, **node 98** — suspect weak keyframe), **0 errors**,
+0.385 s/cycle (slower than v2's 0.06-0.17 s because v4 has 740 nodes vs 480).
+⇒ **The pose is USABLE where v2's was not**, and the gain tracks exactly the two root causes fixed
+today (FC heading, odom scale). **NOT yet "finished"** — the outliers are the remaining work.

@@ -694,3 +694,163 @@ acro():   rover_rate_setpoint.yaw_rate_setpoint = _max_yaw_rate * superexpo(...)
 ⚠️ **BUT the collision reflex does NOT apply in Manual** — it lives inside `autonav_mode`'s executor,
 a CUSTOM PX4 mode, so PX4 never routes through it. **In Manual the operator is the ONLY safety layer.**
 ⇒ **#20 still gates every AUTONOMOUS mode. It does NOT gate manual driving.**
+
+---
+
+# 2026-08-09 — WALL-REFERENCED ODOMETRY CALIBRATION. THE FC HEADING IS UNUSABLE; THE GEMINI GYRO IS GOOD.
+
+**Method (operator's idea, and it worked):** park square to a flat wall, RANSAC-fit a line to `/scan`
+(perpendicular distance ±1 mm, bearing ±0.26 deg — an ABSOLUTE reference, independent of the wheels),
+and compare against odometry. Tape-measured confirmation matched: `wall_d` 2.268 m at `base_link`
+minus `front_overhang` 0.337 m = 1.931 m to the bumper. Probe: `/tmp/wall_probe.py`, `/tmp/yaw3_probe.py`.
+
+## 1. FC heading (PX4 EKF, `yaw_source: gyro`) — BROKEN, AND INTERMITTENTLY SO
+Rover verified STATIONARY by the wall each time:
+
+| window | dur | wall (truth) | FC | rate |
+|---|---|---|---|---|
+| parked, cold | 476 s | −0.07 deg | −2.46 deg | −0.005 deg/s |
+| after a 0.364 m/s drive | 111 s | +0.01 deg | **−18.88 deg** | −0.170 deg/s |
+| after turning | 21 s | −0.18 deg | **+23.23 deg** | **+1.106 deg/s** |
+| after turning | 41 s | −0.07 deg | −7.17 deg | −0.175 deg/s |
+
+⛔ **It is ERRATIC, not a bias — the sign flips.** Across one 4-min session it invented **+27.1 deg**
+during stationary periods alone. Over 727 deg of real rotation its error was ~18 deg.
+❌ **NOT proportional to motor effort** — run 7 at 0.341 m/s gave +0.54 deg phantom yaw where run 1 at
+0.364 m/s gave −8.28 deg. **15x less at the same speed.** My "motor current / magnetometer" story is
+NOT supported; the fault is intermittent and unexplained. `EKF2_MAG_TYPE=1` (mag in use) — the
+disable test was never run, and with a fault this intermittent a single clean run would prove nothing.
+
+## 2. ✅ GEMINI 336L GYRO — VALIDATED ON BOTH DRIFT AND SCALE. USE IT.
+`/camera/gyro/sample`, 195 Hz, frame `camera_gyro_optical_frame`; rotate into `base_link` **via TF**,
+do not hand-derive the axis mapping.
+
+| property | value |
+|---|---|
+| bias | **+0.72 deg/s** — large but REMOVABLE |
+| bias stability, cold (9x20 s) | sd **0.0028 deg/s** |
+| bias stability, straight after driving | sd **0.0015 deg/s** — driving does NOT disturb it |
+| **scale error** | **RATE-DEPENDENT under-read — see below** |
+
+### 🔑 SCALE UNDER-READS, AND THE ERROR GROWS WITH ROTATION SPEED (3 runs, wall-referenced)
+| run | manoeuvre | rotation time | mean rate | scale | error |
+|---|---|---|---|---|---|
+| 1 | 2 circles, paused | 87 s | 8.3 deg/s | 0.99623 | **-0.38%** |
+| 3 | 2 circles, paused | 33 s | 21.8 deg/s | 0.98834 | **-1.17%** |
+| 2 | 1 circle, continuous | 11 s | 32.7 deg/s | 0.95466 | **-4.53%** |
+
+Monotonic and SUPERLINEAR (4x rate -> 12x error). ⇒ **MAP WITH SLOW, PAUSED TURNS: tap, full stop,
+pause 3-4 s.** Over ~720 deg of cumulative rotation that is ~3 deg of error instead of ~33 deg.
+⚠️ **The effect may be MY PROBE, not the sensor.** `/tmp/yaw3_probe.py` integrates on message
+ARRIVAL time; if samples drop during a fast spin (peak CPU) and the next arrives after the peak,
+the lower rate is applied across the gap ⇒ systematic under-read with exactly this signature.
+⇒ **THE PRODUCTION NODE MUST integrate on `header.stamp` deltas, NOT arrival time, and must detect
+and report gaps in the 195 Hz stream.** If the effect is the probe, full 0.4% accuracy is available
+at any speed; if it is sensor bandwidth, the "turn slowly" rule stands. NOT YET DISTINGUISHED.
+
+⇒ over a 263 s mapping run: **~1 deg of heading error, vs tens-to-hundreds from the FC.**
+⚠️ bias creeps slowly (thermal): +0.0083 deg/s over 3 min ⇒ **re-estimate at rest**, don't calibrate once.
+⚠️ **A MEMS gyro cannot observe absolute heading** — it only integrates rate. It fixes map-building
+drift; it does not give you a north reference.
+
+## 3. Translation: odom over-reports ~19% — but this is SLIP, do NOT "fix" `erpm_to_ms`
+5 runs, both directions, 0.146–0.364 m/s: ratios 1.212 / 1.224 / 1.153 / 1.155 / 1.196,
+**mean 1.188, sd 0.029.** Round trip: wall says back within **9 mm**, odom claims **0.891 m** away.
+⛔ **`erpm_to_ms` = 0.004633 is CORRECT** — derived from a hand-push over 5 counted wheel revolutions,
+which is slip-free and diameter-independent (see `config/rover_odometry.yaml`). A POWERED drive
+measures eRPM→ground, which includes slip. Rewriting the constant would bake one acceleration
+profile's slip in and be wrong everywhere else. **The 19% is real physical slip, not miscalibration.**
+
+## 4. ⛔ `yaw_source: wheels` IS NOT AN OPTION — REFUTED BY THE CONFIG
+"this is a skid-steer, so it can ONLY turn by making all four tyres scrub sideways, and the wheels
+therefore cannot observe true rotation at all." I proposed this twice; it is structurally blind.
+
+## ⏭ NEXT: add `yaw_source: camera_gyro` to `wheel_odometry_node`
+Subscribe `/camera/gyro/sample`, rotate via TF, auto-estimate bias whenever the wheels read zero,
+integrate. The `yaw_source` param + stale-fallback logic already exist — this is a new branch.
+⚠️ **It couples odometry to `rover-camera`** — needs a fallback when the camera dies, and the camera
+is the component that silently degrades (see MEMORY [SERVICES]).
+
+## ✅ SHIPPED 2026-08-09 — `yaw_source: camera_gyro` IS LIVE AND VERIFIED
+`wheel_odometry_node.py` + `config/rover_odometry.yaml`, built, deployed, service restarted.
+**ACCEPTANCE (wall-referenced, 144 s parked, 538 samples): `/odom` yaw drift `+0.00028 deg/s`,
+total 0.040 deg, spread 0.070 deg — BELOW the wall's own noise (+0.060 deg).**
+vs FC on the same wall the same afternoon: −0.170 deg/s after a drive, **+1.106 deg/s after a turn**
+(3950x worse). Over a 263 s map: **0.07 deg** instead of ~45 deg.
+
+Startup sequence to expect in the journal:
+```
+wheel odometry up: ... yaw_source=camera_gyro
+camera gyro unavailable — falling back to FC attitude   <- normal, pre-bias
+camera gyro TF locked: base_link <- camera_gyro_optical_frame row_z=(-0.0100,-0.9991,-0.0406)
+camera gyro bias established: +0.6963 deg/s from 400 at-rest samples
+heading source: CAMERA GYRO (336L, bias-corrected)
+```
+Design: TF-derived axis mapping (a remount cannot silently flip the sign) · bias re-estimated from a
+rolling 12 s at-rest window (thermal creep) · **integrates `header.stamp` deltas and REFUSES to
+integrate across >50 ms gaps**, counting them · warns if the camera stamp clock diverges >1% from
+wall clock · degrades `camera_gyro -> gyro -> wheels`, loudly · per-source yaw covariance
+**0.002 / 0.02 / 0.2** (the FC path previously advertised 0.002 — overconfident by 10x).
+
+⏭ **NOT YET RETESTED: the rate-dependent scale under-read.** The at-rest drift is fixed; whether
+`header.stamp` integration also removes the −4.53%-at-32.7 deg/s scale error needs a fresh circle
+test against the wall. **Until then, still map with slow paused turns.**
+
+🔴 **TWO DEPLOY GOTCHAS FOUND:**
+1. **`config/rover_odometry.yaml` IS NEVER LOADED** — the unit runs `ros2 run` with **no
+   `--params-file`**, so only the `declare_parameter` DEFAULTS in the node take effect. Editing the
+   yaml alone changes NOTHING. Banner added to the file.
+2. `rover-odometry` has `StartLimitBurst=10`; a crash-looping deploy **latches `failed` and stops
+   retrying**. Needs `systemctl reset-failed rover-odometry` before it will start again.
+
+### ⚠️ THE CAMERA-GYRO HEADING COSTS ~28 POINTS OF A CORE (measured 08-09)
+`wheel_odometry_node` steady-state CPU: **~25% before → 58.8% after → 53.5%** once the bias
+estimator was made O(1) (deque + running sum instead of re-summing a ~2300-sample window at 195 Hz).
+🔑 **The arithmetic is NOT where it goes** — the jump is rclpy per-message overhead on a **195 Hz**
+subscription, matching the existing "~65% executor overhead, ~4% our logic" finding. ⛔ Do not try to
+micro-optimise the callback. **The real levers: lower the IMU publish rate at the source, or the C++
+port.** ⚠️ I first claimed the O(n) mean caused the doubling — it did not; measure before asserting.
+Budget check with all this live: camera ~80%, wheel_odometry ~53%, XRCE ~20%, rc_control ~11%.
+
+### 🔎 WHY THE FC YAW IS WRONG — SENSOR INVENTORY FROM THE FC WORK QUEUE (operator-supplied 08-09)
+```
+wq:SPI1  icm42688p 395 Hz | wq:SPI2  icm45686 400 Hz | wq:SPI3  bmi088_accel/gyro 400 Hz
+wq:I2C3  bmm350 50 Hz  (the ONLY magnetometer)  |  vehicle_magnetometer 50 Hz
+wq:nav_and_controllers  vehicle_gps_position 3.3 Hz | wq:uavcan  uavcan 333 Hz
+wq:lp_default  mag_bias_estimator 50 Hz · gyro_calibration 50 Hz
+wq:rate_ctrl   vehicle_angular_velocity 397.9 Hz  (exists on the FC; NOT bridged to DDS)
+```
+⛔ **THE GYRO IS NOT THE CAUSE — 3 INDEPENDENT IMUs** from 3 vendors at ~400 Hz. Three MEMS gyros do
+not all drift 4000 deg/h together. **Measured**: `CAL_GYRO{0,1,2}_ZOFF` = −0.100 / +0.242 / −0.038
+deg/s, three distinct IDs, **all normal-sized — no corrupted calibration.** ⇒ what we measured is the
+**EKF's FUSED YAW**, not the gyro. Indoors the gyro only integrates rate; something else moves the
+reference under it. ⚠️ I repeatedly wrote "the FC gyro drifts" — wrong wording, wrong blame.
+
+**TWO CANDIDATES, NEITHER TESTED — separate them one at a time, several runs each (intermittent!):**
+| suspect | why | test |
+|---|---|---|
+| **bmm350 mag** | SINGLE, internal, inside a metal body; the ONLY yaw observer indoors; `mag_bias_estimator` actively chases the distortion | `EKF2_MAG_TYPE=5` |
+| **GPS aiding** | `vehicle_gps_position` IS publishing at 3.3 Hz over a live UAVCAN bus and `EKF2_GPS_CTRL=7` has EVERY aiding bit on, incl. GPS-velocity yaw — erratic + motion-dependent fits our signature | `EKF2_GPS_CTRL=0` |
+⚠️ **"DroneCAN GPS pending hw" is STALE** — something is already feeding `vehicle_gps_position`.
+🔑 Plausible but UNEVIDENCED: mag error → EKF yaw error → EKF gyro-bias state absorbs it →
+`gyro_calibration` writes a wrong offset → drift persists after the disturbance. Stored offsets are
+clean, so this has NOT happened yet; the runtime bias state is not readable this way.
+⛔ **NOT on the rover's critical path** (rover heading = camera gyro, 0.00028 deg/s). **It matters for
+the DRONE**, which shares this FC and needs a real mag + GPS. Any change here is ROVER-ONLY and must
+be reverted before flight.
+
+### ⏭ QUEUED (operator offered 08-09): BRIDGE `vehicle_angular_velocity` TO DDS AND A/B IT
+Already present but COMMENTED OUT at `src/modules/uxrce_dds_client/dds_topics.yaml:60` — enabling is
+uncommenting two lines, then rebuild + flash `pxlabs-fw`:
+```yaml
+  - topic: /fmu/out/vehicle_angular_velocity
+    type: px4_msgs::msg::VehicleAngularVelocity
+```
+**Why it is worth it:** 3 fused IMUs @397.9 Hz, and it **DECOUPLES ODOMETRY FROM `rover-camera`** —
+the one real weakness of the shipped camera-gyro heading, since the camera degrades silently. It is a
+RATE, not an attitude, so it should largely escape the mag problem (the mag corrupts the yaw
+REFERENCE, not the rate); it would inherit only the EKF's folded-in bias error.
+**Why NOT rushed:** it is a firmware flash on the FC **that also flies the DRONE** ⇒ own session +
+verification · we already have a measured 0.00028 deg/s ⇒ improvement, not a fix · **400 Hz costs MORE
+CPU than the camera's 195 Hz** and `wheel_odometry` is already at 53.5% — measure before assuming a win.
+**The A/B is then ~10 min** with the wall rig (`/tmp/wall_probe.py`, `/tmp/yaw3_probe.py`).
