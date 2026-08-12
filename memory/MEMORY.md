@@ -30,7 +30,7 @@
 ## [CURRENT STATE — 2026-08-13 late. ARMED SUCCESSFULLY 08-10 (S1) — the old "NEVER ARMED" is WITHDRAWN]
 🛑 **08-13 STRATEGIC CALL — STOP CALIBRATING `erpm_to_ms`** (operator raised it; agreed). The map and RTAB-Map localization **don't need it**, and no single constant can be right. It matters ONLY because PX4 closes its speed loop on `/odom`. **Against the 3.6× speed-command fault, a 9–21% scale error is second-order.** ⇒ **Gate safety on `/scan` CLEARANCE, not `/odom`.**
 ⚠️ **Rover parked ~42 mm from a wall, disarmed; `nav_state` may still read 23 (AutoNav, inert) — clear it on the RC first.**
-⚠️ **UNCOMMITTED at 08-13 close:** `ros2_ws` — `docs/autonav_reference.md` + `tools/manual_drive_log.py` modified, `tools/speed_command_test.py` + `tools/wheel_erpm_log.py` UNTRACKED. `codex-work/memory` copied, **NOT pushed**.
+✅ **08-13 close: ALL COMMITTED AND PUSHED** — `ros2_ws` **b4d945f** (⚠️ **on branch `fix/collision-perception-health-gate`, NOT main**) · `codex-work` **db19b74**.
 🔑🔑 **THERE IS NO VIO, AND NEVER WAS** — position = wheel ERPM + camera gyro dead reckoning ONLY; **RTAB-Map CONSUMES our TF odom** (`odom_frame_id: odom`) and adds `map→odom`, like AMCL. ⇒ M1/M2 need no VIO/localization. **Don't propose adding VIO.** → reference §6
 🔑 **PX4 NEVER KNOWS WHERE IT IS, BY DESIGN** — the bridge sends VELOCITY only. **Position lives in ROS, not the FC.** ⚠️ The 08-10 `v_xy_valid: false` reading was taken with the **bridge STOPPED**; with it running, 08-13 measured **true**. Always state the bridge's state when quoting those flags.
 🔴 **LOCALIZATION MAY NEVER COMMIT ITS FIXES** — `rtabmap_localization.yaml` records **4 good fixes in 12 min, NONE committed** (`map→odom` never moved). Accuracy is moot if the transform is static. **ONE RUN SETTLES IT; gates ALL M3 work — do it first.**
@@ -74,7 +74,7 @@ Both FPV-capable, port 6-2, **swap from QGC only**; **LG Smart Cam is the curren
 ## [RELAY_STATION] → `relay2_relaystn`
 `vind-rly` RPi5 | `ssh vind-admin@10.5.5.77` (**sudo NEEDS A PASSWORD ⇒ journalctl of other units = "No entries"**) | `~/codex-relay` | tunnel 2222→drone :22 | **NO RTC**. Services, Wi-Fi Direct/QGC addressing: `project_relay2_relaystn.md`.
 ## [REPOS / GCS]
-`codex-work`: `~/codex-work` → Companion_Computer_Pxlabs, branch **master** (origin/main stale) | `codex-relay`: on vind-rly → Relay_Station_Pxlabs | `ros2_ws`: `~/ros2_ws`, **main**, SSH ✅
+`codex-work`: `~/codex-work` → Companion_Computer_Pxlabs, branch **master** (origin/main stale) | `codex-relay`: on vind-rly → Relay_Station_Pxlabs | `ros2_ws`: `~/ros2_ws`, SSH ✅, ⚠️ **currently on `fix/collision-perception-health-gate`, not main — check the branch before assuming**
 GCS: G-Control.exe → pxlabs_cli.exe → SSH relay:2222 → companion:22 | QGC: ArvinVeiyon/PXLABS_qgroundcontrol @ PXLABS-integration
 🔴 **PAT STILL LIVE ON GITHUB — REVOKE IT** (github.com/settings/tokens). Remotes moved to SSH 08-09, which stopped it being USED, not rotated. ⏭ `~/codex-relay` never checked for the same pattern.
 ## [SERVICE / TROUBLESHOOTING QUICK INDEX] → full detail in setup_manual C, D2, E5
