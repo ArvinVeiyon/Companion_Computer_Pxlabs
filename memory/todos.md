@@ -502,3 +502,22 @@ radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) 
    check (`wfb_tx video incoming` ~200 pkt/s, 0 drops) does not by itself prove the picture is
    moving. Confirm at the GS when it matters. **No dup-padding problem has ever been observed on
    the See3CAM** — it ran 11:49 clean and the user saw a normal moving picture throughout.
+
+---
+
+## ✅ COMPLETED / CLOSED — moved out of MEMORY.md 2026-08-13 during compaction
+> These records lived ONLY in MEMORY.md's one-liner. Kept here so the index can stay small.
+> ⚠️ Do not delete: a grep of this file on 08-13 found none of them, which is why they were not
+> moved sooner. Full evidence for each is in `autonav_reference.md` §12/§13.
+
+**Validated on the vehicle:** A1 (collision sensing) · S1 (kill switch in AutoNav, 07-22, re-confirmed
+08-10) · S2 stands · S2 floor (wheels stop on sensor loss) · standoff n=3, tape-confirmed 0.345 m ·
+map scale vs tape (`house_map_v4`) · `/scan` range calibration (0.9845, `front_overhang` 0.337 —
+re-confirmed at a third range to 1 mm on 08-13).
+
+**Issues closed:** #20 yaw · #23 watchdog · #25 rc_control camera retry storm · #26 depth glitch ·
+#26b · #28 camera 30 fps. **#21 gyro-yaw remains OPEN.**
+
+**Closed 2026-08-13:** integral-windup and dead-EKF-feedback explanations for the speed-command fault
+(controller exonerated) · the 5-ERPM deadband as the cause of the crawl under-read (costs 0.37%).
+⛔ None of these three should be re-proposed — see `project_rover_autonav.md`.

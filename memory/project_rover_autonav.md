@@ -854,3 +854,146 @@ REFERENCE, not the rate); it would inherit only the EKF's folded-in bias error.
 verification · we already have a measured 0.00028 deg/s ⇒ improvement, not a fix · **400 Hz costs MORE
 CPU than the camera's 195 Hz** and `wheel_odometry` is already at 53.5% — measure before assuming a win.
 **The A/B is then ~10 min** with the wall rig (`/tmp/wall_probe.py`, `/tmp/yaw3_probe.py`).
+
+---
+
+## The speed-command fault: the controller is EXONERATED (2026-08-12/13)
+
+**Run:** `tools/speed_command_test.py`, commanded 0.050 m/s, 8.1 s, 3301 moving samples, armed on the
+floor with `rover-ekf-bridge` up. Log: `~/speed_cmd_20260812_231229.json`.
+
+### What was measured
+
+| quantity | value |
+|---|---|
+| throttle | **0.032 mean**, range 0.010–0.109, **saturated 0/3301** |
+| feedforward alone (cmd / `RO_MAX_THR_SPEED` 0.6) | 0.083 |
+| throttle slope | **−0.0014 /s** (integral windup predicts **+0.0050 /s**) |
+| `/odom` speed | 0.111 m/s |
+| bumper speed (independent ruler) | **0.140 m/s** ⇒ **2.80× the command** |
+| `/odom` error | **under-reads 20.9%** |
+
+### What that kills
+
+* **Integral windup (H1) — DEAD.** No ramp, no saturation. The loop pulled throttle to **2.6× BELOW
+  the feedforward**: it saw the overspeed and fought it. ⛔ Do not re-propose `RO_SPEED_I=0`.
+* **"The EKF feedback is dead" — DEAD.** `v_xy_valid: true`, `dead_reckoning: false` **with the bridge
+  running**. The 08-10 record of `false/true` was taken with the bridge STOPPED — not a contradiction,
+  a different configuration. State the bridge's state whenever quoting those flags.
+* **My "stick-slip / mechanical floor" story — WITHDRAWN, it was never real.** See below.
+
+⇒ The fault is **DOWNSTREAM of the speed controller**: allocation, ESC, or `erpm_to_ms`. Look there.
+
+### 🔑 The lesson: three agreeing numbers were ONE number wearing three hats
+
+`/odom`, the EKF feedback, and PX4's throttle response are **all** derived from wheel ERPM —
+`rover-ekf-bridge` feeds the EKF *from* `/odom`. They agreed (EKF 0.113 vs `/odom` 0.111) and that
+agreement **proved nothing**. Only the bumper, which ranges the room, broke the tie.
+⛔ **Before quoting agreement as corroboration, ask what the two numbers are DERIVED from.**
+
+### 🔑 `/odom` fakes stick-slip at crawl — I nearly recorded a drivetrain fault that does not exist
+
+`/odom` swung with **CoV 0.30**, dipping to 0.070, and I wrote it up as the rover lurching below its
+minimum sustainable speed. The bumper over the same windows: steady **0.13–0.15, CoV 0.124**. The
+rover was moving **smoothly**. ERPM is coarsely quantised at low rpm (observed 1, 5, 7, 8, 11, 12 …)
+and `/odom` inherits every step. The `H3` detector in the tool now judges lurching **only** against
+the bumper, and refuses to judge at all without one.
+
+### The tool also produced a DANGEROUS recommendation, now fixed
+
+It printed *"RO_MAX_THR_SPEED understates true full-throttle speed (≥3.45 m/s), correct it"* on a
+~0.6 m/s vehicle. Cause: `implied = speed / throttle` assumes proportionality through the origin,
+which collapses at the bottom of the range. Acting on it would have gutted the feedforward.
+Now **refused** below `THROTTLE_FLOOR_FOR_IMPLIED` (0.15) or when the bumper shows lurching.
+🔑 **A verdict printed by my own tool is not evidence — it is a hypothesis I coded earlier.**
+
+## The bumper ruler, and how the operator's tape earned it (2026-08-13)
+
+The whole conclusion rests on `/scan`, so the operator insisted on verifying it before anything was
+written down. **Correct call** — and it took three attempts to get a clean measurement:
+
+1. **Tape to a 14 mm rib** at the base of the wall ⇒ made the calibration look wrong. The `/scan` band
+   sits **0.23–0.38 m above the floor** at ~1.5 m and **cannot see a skirting rib**. Tape the wall
+   FACE at ~0.30 m up.
+2. **The operator standing beside the rover** while taping put a body in the ±20° cone — one 2° bin at
+   +18° read **1.751 m against a 2.39 m wall**, dragging the sector minimum *below* the reading from a
+   **closer** position. Profiling range-vs-angle exposed it instantly.
+3. Clean read: **predicted 2.274 m, measured 2.273 m — 1 mm.** A rival free fit (scale 0.9573,
+   overhang 0.377) that matched two closer points equally well was **refuted by 26 mm**.
+
+⇒ `/scan` scale **0.9845** and `front_overhang` **0.337** both stand unchanged, and the ×1.0155
+correction used above is correct. 🔑 **Two unknowns need three well-separated ranges — a single
+absolute reading can never separate a SCALE error from an OFFSET error.**
+
+### Still open
+
+* **0.25 → ~0.9 m/s is unexplained.** Tonight says nothing about it: at 0.05 the rover sits at the
+  bottom of the drivetrain range, a different regime. Needs a long runway, and it is the dangerous one.
+* **PX4's speed feedback is circular** — the controller inherits `/odom`'s ~21% under-read and will
+  always hold the rover ~21% faster than it believes. This sits in the safety path.
+* **The reflex uses the sector MINIMUM**, so it blocks on off-axis objects before the wall ahead
+  (a real feature at −18° persists in the profile).
+* `tools/preflight_scan_check.py`'s squareness warning is **too tight at range**: a perfectly square
+  flat wall at 1.78 m yields 0.114 m of spread from geometry alone (`d·(1/cos20°−1)`), so it cries
+  "not square" when nothing is wrong. Compare against the geometric expectation instead. NOT yet fixed.
+
+## The odometry calibration run — operator's method (2026-08-13)
+
+**Operator's proposal**, and it was the right one: drive straight, count wheel revolutions, tape the
+start and end distances. `tools/wheel_erpm_log.py` (new) logs all four ESC addresses separately at
+full rate. **RC Manual throughout — open loop, nothing armed by the companion, no EKF bridge.**
+
+### Result
+
+| | |
+|---|---|
+| duration / coverage | 21.97 s, **100%**, 0 gaps, 0 dropped frames |
+| travel, taped | **1.931 m** (1.973 → 0.042 m, operator) |
+| travel, `/scan` | **1.928 m** — agrees to **3 mm** |
+| `/odom` | 1.750 m ⇒ **under-reads 9.2%** |
+| **`erpm_to_ms` measured** | **0.004286** at **0.088 m/s** (configured 0.003900) |
+
+The tool's replication of `wheel_odometry_node`'s rule reproduces `/odom` to **0.03%**
+(0.003899 vs the configured 0.003900), so the model of the node is right.
+
+### Three things settled
+
+1. **The deadband hypothesis is DEAD.** 50% of per-wheel samples read under the 5-ERPM deadband and
+   it costs the integral **0.37%**. Zeroing a wheel that reads 2 removes 2 — the deadband can only
+   delete what is *below* 5, so it cannot produce a 20% error. A synthetic test caught this *before*
+   the run, which is the only reason it was not written up as the answer.
+2. **`tools/odom_scale_measure.py` cannot be used at crawl.** Its deadband is **40, on the COMBINED
+   mean**; the node's is **5, PER WHEEL, before averaging**. Its docstring says they match. They do
+   not, and it would have eaten **15.27%** of this run.
+3. **The real signal defect: 46% of samples read EXACTLY 0 ERPM while the rover was provably moving**
+   — 46.2 / 46.7 / 46.4 / 46.4% across the four wheels, side asymmetry 1.3%. Evenly spread, so this
+   is the **ESC's low-speed ERPM reporting dropping out**, not a wheel or a wiring fault.
+
+### 🔴 The slip story is now contradicted
+
+| run | speed | `/odom` error |
+|---|---|---|
+| AutoNav, closed loop | 0.140 m/s | −20.9% |
+| RC Manual, open loop | **0.088 m/s** | **−9.2%** |
+
+**Slower produced LESS under-read** — the opposite of "slip rising with speed". The runs differ in
+more than speed, so this is not yet a curve. ⛔ **Two points. Do not fit a story.**
+
+### On the revolution count, and a limit I pushed past
+
+4 revolutions were counted, giving 112.8 ERPM-s/rev (recorded: 103.34 = 516.7/5) and 0.4828 m/rev
+(geometric π×0.1524 = 0.4788). Both *lean* toward the recorded figures being wrong — but at ±¼ turn
+the count carries **±6.25%**, which swamps the 0.8% circumference claim and leaves the 9% encoder
+discrepancy merely suggestive. **Neither is proven.**
+🔑 **`erpm_to_ms` never needed the revolution count at all** — it is `tape ÷ ERPM-seconds`. The
+operator pointed this out after I asked them to tape the wheel; the request was for a *secondary*
+question (whether the recorded geometric bound 0.004633 was ever right) and I presented it as the
+obvious next step. **Ask what the measurement actually requires before asking for more of it.**
+
+### Fixed on the way
+
+* `tools/manual_drive_log.py` hardcoded `ERPM_TO_MS = 0.000380` against the node's `0.003900` — a
+  missing decimal place. **Every m/s that tool ever printed was ~10x too small.**
+* The bumper ruler must NOT use the reflex's ±20° minimum: edge objects silently replace the wall
+  (measured — a stationary rover read 2.01 m by minimum vs 2.27 m straight ahead). The logger uses a
+  **±5° central median** instead. The ±20° minimum remains correct for the *reflex*.
