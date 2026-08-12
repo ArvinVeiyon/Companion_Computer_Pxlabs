@@ -67,3 +67,21 @@ recognised has not really been captured.
 
 Related: [[feedback-test-before-concluding]] (never publish a number I did not measure; a grep that
 finds nothing proves the PATTERN absent, not the EVENT) · [[feedback-check-docs-before-measuring]]
+
+## Corrected constants rot in their copies (2026-08-13)
+
+`erpm_to_ms` was corrected in `rover_odometry.yaml` on **2026-08-01**, annotated there as
+"was 0.000380, which was ~12.2x TOO SMALL". Twelve days later the old value was still live in **four
+other places**: `memory/rover_odometry.md` (as the *derivation* — `π×0.1524/(7×3×60)`, so it read as
+authoritative rather than stale), `docs/rover_autonav_requirements.md` (describing the constants as
+"verified"), `tools/manual_drive_log.py` (making every m/s it printed ~10x too small), and
+`tools/odom_scale_measure.py` (making its "ratio vs current" output meaningless).
+
+**Why:** a fix lands where the bug bit. The records that *taught* the wrong value are somewhere else,
+and they keep teaching it — to me, on a later session, with no memory of the correction. I then
+"discovered" the same error again on 08-13 and briefly wrote it up as a new finding.
+
+**How to apply:** when correcting any constant, threshold, address or path, immediately
+`grep -rn` the **old value** across `docs/`, `tools/`, `src/` and the memory directory, and fix or
+annotate every hit. A correction that exists in one file is not a correction. Annotate rather than
+delete where the wrong value is likely to resurface, so it is recognisable — and say what replaced it.

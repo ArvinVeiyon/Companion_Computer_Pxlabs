@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 2d8c9512-eb8c-4b27-b518-3de2ce63ad22
-  modified: 2026-07-21T18:57:54.165Z
+  modified: 2026-08-12T19:39:20.169Z
 ---
 
 # Rover Wheel Odometry — Implementation Plan
@@ -33,12 +33,35 @@ Left side = addr {11, 13} | Right side = addr {10, 12}
 - sensor_mode: 2 (Hall sensor)
 
 ## Key Conversion Formula
-```
-ERPM_TO_MS = π × 0.1524 / (7 × 3 × 60) = 0.000380 m/s per ERPM unit
 
-wheel_RPM = ERPM / (pole_pairs × gear_ratio) = ERPM / 21
-velocity   = ERPM × 0.000380  m/s
+🔴🔴 **THE DERIVATION BELOW IS WRONG BY ~11× — CORRECTED 2026-08-13. The flying value is 0.003900.**
+
 ```
+WRONG (kept so it is recognised if it turns up again):
+ERPM_TO_MS = π × 0.1524 / (7 × 3 × 60) = 0.000380 m/s per ERPM unit
+wheel_RPM  = ERPM / (pole_pairs × gear_ratio) = ERPM / 21
+```
+
+The `7 × 3 = 21` assumption implies **1260 ERPM-seconds per wheel revolution**. Measured on the floor
+2026-08-13 by counting revolutions against a taped drive (`tools/wheel_erpm_log.py`): **≈112.8
+ERPM-s/rev**, i.e. the effective pole-pairs × gearing is **≈1.9, not 21**. ⚠️ Only 4 revolutions were
+counted, so that figure carries **±6%** — the ~11× conclusion is safe, the exact value is not.
+
+🔑 **A clean candidate: the true divisor is probably exactly 2.** That gives **120 ERPM-s/rev** and
+`erpm_to_ms = π×0.1524/120 = 0.00399` — within **2%** of the 0.003900 that is configured and that
+made the map tape true. The measured 112.8 ±6% covers 120. So `esc_rpm` on this bus is evidently
+**not** motor ERPM with 7 pole pairs and 3:1 gearing applied; the 21 came from the VESC XML
+(`si_motor_poles` 14, `si_gear_ratio` 3) and does not describe what the topic actually carries.
+⚠️ **Hypothesis, not measurement** — settle it by counting **10+ revolutions**, which drops the
+counting error to ~2.5% and separates 120 from 112.8.
+
+**Use `erpm_to_ms = 0.003900`** (the `wheel_odometry_node` parameter, and what `/odom` actually
+applies). Measured against tape on 2026-08-13: **0.004286 at 0.088 m/s** — and ⚠️ **it is
+SPEED-DEPENDENT**, so no single number is right everywhere. → `autonav_reference.md` §5/§13
+
+⚠️ **The "verified against live test data" lines below are CIRCULAR** — `696 ERPM → 0.265 m/s` is the
+formula restated, not an independent measurement. Under the real constant 696 ERPM would be ~3 m/s on
+a rover that tops out near 0.9, so that sample was almost certainly taken **on stands**, wheels free.
 
 Verified against live test data:
 - addr 11: ERPM 696 → 0.265 m/s ✓
@@ -50,12 +73,16 @@ Verified against live test data:
   until 2026-07-21, under-reporting every yaw rate by ~28%. Do not reintroduce it.
 - Wheelbase (front↔rear hub centres): **0.43m** — used only for the camera mount TF, never odometry.
 - Wheel diameter: **0.1524m**
-- ERPM → m/s: **× 0.000380** (unaffected by the track error — straight-line odom was always correct)
+- ERPM → m/s: **× 0.003900** ⚠️ (**was recorded here as 0.000380 — WRONG BY ~11×**, corrected in the config 2026-08-01 and here 2026-08-13; and it is SPEED-DEPENDENT, see the formula section above)
 
 ## Differential Odometry Math
 ```python
-v_left  = avg(ERPM addr 11, 13) × 0.000380
-v_right = avg(ERPM addr 10, 12) × 0.000380
+v_left  = avg(ERPM addr 11, 13) × 0.003900   # NOT 0.000380 -- see above
+v_right = avg(ERPM addr 10, 12) × 0.003900
+
+# NB the node zeroes EACH WHEEL under deadband_erpm (5.0) BEFORE averaging the
+# side. Measured 2026-08-13: that trips on 50% of samples at crawl and costs
+# only 0.37% of distance -- it is NOT the cause of the crawl under-read.
 
 v_linear  = (v_left + v_right) / 2.0
 v_angular = (v_right - v_left) / 0.31   # LEGACY wheel yaw — only used when yaw_source='wheels'
