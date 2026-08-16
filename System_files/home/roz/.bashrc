@@ -119,7 +119,12 @@ source /opt/ros/jazzy/setup.bash
 #source /opt/ros/jazzy/setup.bash
 export PATH=$PATH:/etc/usr/bin
 #export ROS_DOMAIN_ID=10
-source install/setup.bash
+# Absolute, not relative. As `source install/setup.bash` this only worked when the
+# shell happened to START in ~/ros2_ws; anywhere else it silently failed, leaving
+# base ROS with no px4_msgs. The symptom is "The message type 'px4_msgs/msg/
+# EscStatus' is invalid" on `ros2 topic echo /fmu/out/*`, which reads exactly like
+# a dead topic and cost an hour of misdiagnosis on 2026-08-16.
+source "$HOME/ros2_ws/install/setup.bash"
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
