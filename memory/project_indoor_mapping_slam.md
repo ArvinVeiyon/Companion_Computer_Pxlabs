@@ -445,3 +445,58 @@ cycles** (28 of them against ONE keyframe, **node 98** — suspect weak keyframe
 0.385 s/cycle (slower than v2's 0.06-0.17 s because v4 has 740 nodes vs 480).
 ⇒ **The pose is USABLE where v2's was not**, and the gain tracks exactly the two root causes fixed
 today (FC heading, odom scale). **NOT yet "finished"** — the outliers are the remaining work.
+
+---
+
+# 2026-08-16 — 🔴 LOCALIZATION HAS REGRESSED TO ZERO. IT IS NOT THE COMMIT BUG.
+
+Re-ran E3 localization against `house_map_v4.db` per setup_manual §E3, with the §14 protocol
+observed: `vision_streaming` stopped (freed 139% of a core), `rover-camera` restarted, camera
+verified healthy **before** starting — colour **24.9 Hz**, depth 30.0 Hz, `/scan` 29.8 Hz — rover
+parked, and I stayed off the CPU for the whole 6-minute window.
+
+## The result: 1213 rejected loop closures, ZERO accepted
+```
+1176 x  0/12 inliers      <- 97% of all attempts
+  11 x  7/12
+  11 x  6/12
+   7 x 10/12
+   4 x 11/12              <- never once reaches the threshold
+```
+The only "correction" line in the entire log is at startup — *"Update map correction based on last
+localization **saved in database**"* — i.e. the value restored from the db, not a live fix.
+
+## 🔑 THE TRAP THAT ALMOST PRODUCED A WRONG ANSWER
+`map→odom` **DID change** — 16 distinct values across 72 samples in 6 min, wandering ~19 cm in x and
+~4.5° in yaw. I read that as "it commits now, the gate is clear" and **published that conclusion
+before checking the acceptance count. It was wrong.** With zero fixes accepted and the rover parked,
+a moving `map→odom` is **odometry drift bleeding through a stale correction**, not relocalization.
+⇒ **`map→odom` CHANGING IS NOT SUFFICIENT.** setup_manual §E3 says "success is `map→odom` changing,
+not merely existing" — that is necessary, not sufficient. **Always confirm with the ACCEPTED-fix
+count from the rtabmap log**, never from the transform alone.
+
+## 🔴 THIS IS A REGRESSION, AND THAT IS THE IMPORTANT PART
+The section above (**08-09 21:32**) measured this same map as **35 rejections in ~1018 cycles**
+(3.4%) with a pose judged USABLE. Today the same map, same config file, gives **~100% rejection**.
+⇒ **Localization worked on 08-09 and does not work now.** Something changed in between. This is a
+much more tractable question than the old "does it ever commit" one, which is now **moot** — nothing
+is accepted, so there is nothing to commit. ⛔ **Do not keep chasing the commit/`MaxOdomCacheSize`
+deadlock; that was fixed on 08-09 and is not today's failure.**
+
+## What 0 inliers on 29–50 matches actually means
+Appearance matching (the bag-of-words stage) is **working** — it proposes candidates with 29–50
+feature matches every time. Geometric verification then finds **zero** consistent inliers. Zero, not
+a few. That pattern says the matched features have **unusable 3D positions**, which points at the
+depth/RGB relationship rather than at the rover being lost or the map being wrong.
+
+## ⏭ NEXT — ONE CHECK DECIDES WHETHER RE-MAPPING IS WORTH DOING
+Compare the **live `camera_info` (resolution + intrinsics)** against the calibration stored per node
+inside `house_map_v4.db`. Cheap, stationary, needs no FC and no clear floor.
+- **Mismatch** ⇒ the map and the current camera no longer agree ⇒ **re-mapping fixes it for free**,
+  and the operator's offer to map the whole house is the right move.
+- **Match** ⇒ the live depth pipeline is producing bad depth ⇒ **a new map would be built just as
+  broken.** Fix first, then map.
+🔑 **Do not start a whole-house mapping run before this check** — that is hours of work that a
+5-minute comparison could save.
+
+Related: [[perception_3d_costmap]] · [[rover_autonav]] · autonav_reference §13/§14 · setup_manual §E3

@@ -997,3 +997,107 @@ obvious next step. **Ask what the measurement actually requires before asking fo
 * The bumper ruler must NOT use the reflex's ±20° minimum: edge objects silently replace the wall
   (measured — a stationary rover read 2.01 m by minimum vs 2.27 m straight ahead). The logger uses a
   **±5° central median** instead. The ±20° minimum remains correct for the *reflex*.
+
+---
+
+## 2026-08-13 (late) — `erpm_to_ms` CLOSED, the speed floor SOLVED, and two of my own claims retracted
+
+### The headline: the scale constant was never the problem
+
+| source | share of the 23.3% crawl under-read |
+|---|---|
+| `erpm_to_ms` scale error | **~0%** |
+| **ESC zero-dropout corrupting `∫ERPM·dt`** | **~24%** |
+
+⛔ **`erpm_to_ms` calibration is CLOSED. Keep 0.003900. Do not re-open it.**
+
+### How the scale was finally pinned — six runs, not one
+
+Hand-rotation runs of ERPM-s per WHEEL revolution, pooled across three sessions and four wheels:
+
+| run | revs | ERPM-s/rev |
+|---|---|---|
+| orig (5 rev) | 5 | 103.34 |
+| 2026-08-13 (4 rev) | 4 | 112.80 |
+| front-left addr 11 | 20 | 133.30 |
+| rear-left addr 13 | 30 | 132.86 |
+| rear-left addr 13 | 30 | 114.46 |
+| right-front addr 10 | 20 | 120.71 |
+| **pooled** | | **119.58, sd 9.9% ⇒ R = 1.9930** |
+
+**R = 2.000 to within 0.35%.** Wheel **measured 155 mm** — a 6" nominal tyre runs *over* nominal, it
+is not worn under. Slip-free constant `π×0.155/120 = 0.004058`; the configured ground-distance
+0.003900 therefore implies **4.0% slip**, which is physical. The old 0.004633 forced 18.8%, which
+was not.
+
+⛔ **0.004633 was NEVER a valid geometric bound.** *Both* its inputs were wrong in the same
+direction (103.34 → 119.58, and 152.4 → 155 mm). The long-standing paradox that "the crawl scale
+exceeds a bound slip cannot exceed" was **the bound being wrong**. Do not reconstruct that argument.
+
+### Why R = 2 — read the firmware, don't infer it
+
+`libcanard/canard_driver.c:494` (repo `ArvinVeiyon/PXLABS_BLDC_VESC6_MK5`):
+
+```c
+status.rpm = mc_interface_get_rpm() / ((float)conf->si_motor_poles / 2.0);
+```
+
+The CAN value is **MOTOR RPM — pole-corrected, NOT gear-corrected.** The motors are **direct-drive
+Yalu 6" 24 V 250 W hub motors with no gearbox**, so R must physically be 1. It measures 2 because
+`si_motor_poles` holds the pole-**pair** count where the pole **count** belongs — a factor of exactly
+2 whatever the real pole count is.
+
+⛔ **`config/rover_odometry.yaml` claimed the ratio was `pole_pairs × gear_ratio`. That model is
+wrong** — pole pairs are already divided out in firmware. Corrected in the file.
+
+🔴🔴 **LINKED PAIR: `si_motor_poles` ↔ `erpm_to_ms`.** "Fixing" the pole count in VESC Tool halves the
+reported rpm and makes `/odom` read **2× short, silently**, straight into PX4's speed loop via
+`rover-ekf-bridge`. Neither may change without the other. Same for swapping an ESC or motor.
+
+✅ **All four ESCs verified on the same scale** — right-front 120.71 sits inside the left-side
+spread, so `wheel_odometry_node` averages like with like. **Address map: 10 = right-front (INVERTED,
+its raw integral came out negative as `SIGN` predicts) · 11 = front-left · 13 = rear-left ·
+12 = right-rear by elimination, not directly confirmed.**
+
+### The 0.14 m/s floor is `RO_SPEED_TH`
+
+`DifferentialSpeedControl.cpp:105` forces the feedback speed to **exactly zero** below
+`RO_SPEED_TH` (0.10), so the loop believes it has stopped and re-accelerates. From
+`speed_cmd_20260812_231229.json` (3329 samples): EKF speed **pinned 0.096–0.118** across the 0.10
+edge; throttle modulating **0.0258 (live) ↔ 0.0531 (zeroed) = 2.06×** switching on that boundary;
+solving `thr = FF + P·(sp−v_fb) + I` predicts the live branch to **4 decimals** and the zeroed branch
+to **1%**. **You cannot command below `RO_SPEED_TH` — structural, not tuning.**
+
+### 🔴 Two claims I made today and had to retract
+
+1. **"`RO_MAX_THR_SPEED` understates the plant gain 7.4×."** Computed as mean-speed ÷ mean-throttle
+   on a **closed-loop** run. In closed loop throttle is a *function of the error*, so that recovers
+   the **controller**, not the plant — lag correlations were all `|r| ≤ 0.28` with a −0.27
+   simultaneous term and a +0.28 short-lag term that cancel. 🔑 **A plant gain needs an OPEN-LOOP
+   sweep. Never fit one to closed-loop data.**
+2. **"The hand-spin constant agrees with the configured value to 0.38%."** A **units error**: a hand
+   spin measures the **slip-free** constant, the configured value is a **ground-distance** constant.
+   They are different quantities and must not be compared directly.
+
+Also retracted en route: a "0.18% reproduction" that was two different revolution counts coinciding;
+an implied 0.1816 m wheel diameter; and a "worn 6\" ⇒ D ≤ 152.4 mm" ceiling that the measured 155 mm
+falsified — the ceiling had been doing real work in the argument.
+
+### Method notes worth keeping
+
+* ⚠️ **The human revolution count is a ±10–16% ruler.** Two runs on the *same wheel* at a nominal 30
+  revs disagreed by 16%. **Never trust one run.** Where possible eliminate counting entirely —
+  `erpm_to_ms = taped distance ÷ ERPM-seconds` needs no count at all.
+* ⚠️ **Separate genuine stillness from dropout before quoting a zero fraction.** A raw "47.9% zeros"
+  was mostly a 10.7 s pause; interpolating across the *real* dropouts moved the integral only 2.4%.
+* 🔑 **A blind pre-registered prediction is worth more than a post-hoc fit** — predicting the
+  right-front count as 20 (actual 20) is what ruled out the side-asymmetry bug. But note it did
+  **not** discriminate R = 2 from R = 2.143; both predicted inside the stated range.
+
+### ⏭ Next on this thread
+
+**The ESC zero-dropout is now the one odometry defect.** New lead: **severity varies per ESC**, not
+just with speed — addr 10 dropped only 31.4% zeros while spun *slower* than addr 11/13 at 42–57%,
+which a pure low-speed effect predicts backwards. Also queued: read `si_motor_poles` /
+`si_gear_ratio` / `si_wheel_diameter` from **all four** ESCs in VESC Tool (confirms R = 2, no vehicle
+movement), and an **open-loop throttle sweep** to identify `RO_MAX_THR_SPEED` properly.

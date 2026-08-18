@@ -521,3 +521,211 @@ re-confirmed at a third range to 1 mm on 08-13).
 **Closed 2026-08-13:** integral-windup and dead-EKF-feedback explanations for the speed-command fault
 (controller exonerated) · the 5-ERPM deadband as the cause of the crawl under-read (costs 0.37%).
 ⛔ None of these three should be re-proposed — see `project_rover_autonav.md`.
+
+---
+
+## 🔧 PX4 PARAMETER AUDIT — 2026-08-14
+> 📄 **FULL AUDIT + CHANGE LOG: `~/ros2_ws/docs/px4_param_audit.md`** (every value as read, the
+> verified-correct list, findings P1-P9, and the derivations). **Pull from there — not duplicated here.**
+> Applied changes also land in `setup_manual.md` §A7, the canonical param changelog.
+
+**Open items:** P1 `RO_MAX_THR_SPEED` 0.60 — its §A7 basis (0.58-0.60 m/s) is CONTRADICTED by the
+~0.9 m/s measured 08-12; needs an **OPEN-LOOP throttle sweep** (closed-loop data cannot identify a
+plant gain) · P4 `RO_SPEED_TH` −1 would kill the 0.14 floor but is **GATED ON THE ESC-DROPOUT FIX** ·
+P5 `RC_MAP_KILL_SW`=12 vs docs "ch8" — **fix the DOCS, not the param** · P6 read `si_motor_poles` ×4
+in VESC Tool · P8 outdoor/M4 params · P9 not audited: `EKF2_*` (SHARED WITH DRONE), sensor/RC cal,
+per-ESC output index.
+
+⛔ **SUPERSEDED — DO NOT RE-APPLY.** `RO_DECEL_LIM` 0.5 / `RO_ACCEL_LIM` 0.3 / `RO_SPEED_LIM` 0.60
+were applied, saved and reboot-verified on 08-14 — and then **CAUSED A HARD WALL HIT IN MANUAL
+DRIVE the same day and were ALL THREE REVERTED.** This entry recorded step 1 and was never updated
+for step 2; read as-was it invites someone to restore the crash configuration.
+
+✅ **READ FROM FLASH 2026-08-16, DISARMED — the reverted values are what the FC actually holds:**
+`RO_ACCEL_LIM` **−1.0** · `RO_DECEL_LIM` **−1.0** · `RO_SPEED_LIM` **0.70**.
+🔑 **The `param save` question (old item (c)) is CLOSED.** The FC hardfaulted and rebooted **≥9
+times on 08-16**; RAM-only values cannot survive that, so the revert is provably **in flash**.
+The reboot loop accidentally performed the verification nobody had run.
+⛔ **Keep `RO_ACCEL_LIM`/`RO_DECEL_LIM` at −1** — they slew the MANUAL stick, and with them set
+centring the stick no longer stops the rover (~1.2 s powered ramp-down). → [[scope_px4_params_by_control_flags]]
+
+⏭ **STILL OPEN: ramp-tracking is NOT verified on the vehicle** — nothing has been driven since.
+Moot while both limiters are −1 (no ramp to track); it becomes live again only if they are ever
+re-enabled. **Gate on MEASURED speed, never the command.**
+
+---
+
+## 🔴🔴 FC HARDFAULT LOOP — 2026-08-16. **DO NOT SWAP THE FC.**
+> Surfaced by the operator ("hardfault after the hard hit"). Two fault logs read off the FC SD card
+> via `~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760`. ⚠️ Some logs were DELETED before
+> they were copied — **preserve `/fs/microsd/fault_*.log` before doing anything else next time.**
+
+**The two surviving faults are DIFFERENT tasks, 87 s apart:**
+| when (FC clock) | task | fault | tell |
+|---|---|---|---|
+| 05:01:15 | `wq:uavcan` | Hard Fault, `chip/imxrt_irq.c:272`, `cfsr 0x00080000` (NOCP) | **User stack `used == size` (0xe10) ⇒ STACK OVERFLOW** |
+| 05:02:42 | `mavlink_if1` | Hard Fault, `armv7-m/arm_memfault.c:101`, MemManage/DACCVIOL | trips over the damage |
+
+🔑 **Two different tasks taking MEMORY faults 87 s apart = memory corruption, not a dying board.**
+⛔ **A replacement FC runs the same binary and faults identically. This is FIRMWARE.**
+✅ **The CAN hardware is FINE** — `uavcan status`: nodes 10/11/12/13 all `OK OPERAT`, matching
+`esc_online_flags: 15`. **The wall hit did NOT break the CAN wiring.**
+🔬 **Lead to chase:** `uavcan: cycle interval avg 3000 µs, max 38490 µs` — a 12× stall on the very
+thread that overflowed. A blocked/starved uavcan thread piling up work is a plausible overflow route.
+
+⚠️ **FC clock is 5 h behind wall time** (fault 05:01:15 ↔ companion 10:01:24). Same trap as the
+journal-across-a-boot rule — don't correlate FC and companion timestamps without the offset.
+
+🔴 **FIRMWARE PROVENANCE GAP:** flashed FW is **git `f0889f3d1087…`, built May 31 2026**.
+`~/PX4-Autopilot` is on `pxlabs-fw @ a52c38b07d` — **NOT the flashed build.** This is also why
+`vehicle_angular_velocity` runs at ~92 Hz while the tree's `dds_topics.yaml:60` still has it
+commented out, and why `rover_speed_status`/`rover_rate_status`/`rover_attitude_status` are live but
+absent from that yaml. ⛔ **The checked-out yaml is NOT a map of the FC — read the live topic list.**
+⏭ **Find `f0889f3d` before attempting any stack-size fix.**
+
+### 🔑 What the reboot loop EXPLAINS (all previously misdiagnosed by me on 08-16)
+- The 9 "uXRCE-DDS session resets" (09:28, 09:30, 09:32, 10:01, 10:02, 10:05, 10:09, 10:31, 10:32)
+  are **FC reboots**, not bridge instability. Confirmed: FC uptime 14.7 min at ~10:25 ⇒ boot ~10:10,
+  matching the 10:09:35 reconnect.
+- `/fmu/out/esc_status` vanishing for ~20 min, and `online_flags=1` — the FC was gone / re-enumerating.
+- ⛔ **I wrongly blamed (1) dozing ESCs, then (2) DDS bandwidth saturation.** Both dead.
+  🔑 **The operator's "QGC shows esc_status" was the correct witness and I discounted it twice.**
+
+### ⚠️ TRAP FOUND WHILE CHASING THIS
+`~/.bashrc:122` is `source install/setup.bash` — a **RELATIVE path**. A shell started anywhere but
+`~/ros2_ws` silently gets base ROS with no `px4_msgs`, and `ros2 topic echo /fmu/out/*` then fails
+with **"The message type 'px4_msgs/msg/EscStatus' is invalid"** — which reads exactly like a dead
+topic. ⏭ Fix to `source "$HOME/ros2_ws/install/setup.bash"`.
+
+### ⛔ T2 IS PARKED ON THIS
+`tools/t2_straight_goal_test.py` is **WRITTEN** (2026-08-16) but **NOT RUN** — an FC that hardfaults
+mid-drive is loss of control. 🔑 **The tool adjudicates on TAPE, not `/odom`:** T2's tolerance is
+0.20 m over 2 m, but `/odom` under-reads ~24% at crawl (~0.48 m over 2 m) — **the instrument's error
+is more than twice the tolerance it would be judging.** It also refuses to start unless the corridor
+clears `distance × 1.35 + stop_distance`, because the under-read means the rover travels FURTHER
+than the odom goal (2.0 odom m ≈ 2.6 m of real ground).
+
+### ⚡ 2026-08-16 later — THE TRIGGER IS A NODE, AND THE SOURCE IS FOUND
+✅ **FIRMWARE SOURCE LOCATED.** `f0889f3d1087…` = **`[PXLABS] Release v1.17.0-2.0.0 — docs and
+firmware`**, on **`remotes/pxlabs/pxlabs-v1.17.0-2.0.0`** (remote `pxlabs` =
+`git@github.com:ArvinVeiyon/PXLABS_PX4-Autopilot.git`). It is a **DESCENDANT** of `pxlabs-fw`'s
+`a52c38b07d`, which is why it was invisible from the checked-out branch.
+🔑 **That commit CONTAINS the built `.elf` and `.map`** — no rebuild needed to symbolize:
+`git show f0889f3d:pxlabs/PXLabs_Firmware/px4_fmu-v6xrt_default.elf > fw.elf` (same for `.map`).
+⚠️ The binaries in the WORKING TREE are the older **May 29 / `e8d3288637`** build — not the flashed
+one. Verify by build date: the flashed build is **May 31 2026**.
+⚠️ No `arm-none-eabi-*` toolchain on this machine — symbolize by address-matching against `.map`.
+
+🔑🔑 **FAULT #3 SYMBOLIZED: `pc 0x30069848` = `strnlen + 0x10`, and `r0` (its pointer arg) =
+`0xffffffff`.** `strnlen` was handed a garbage pointer and walked into unmapped memory.
+⇒ **This is a STRING-PARSING path — DroneCAN node metadata (`GetNodeInfo`, node name, HW/SW
+version).** The fault is in code reading *what a node reports about itself*, which is why a single
+bad node can take down `wq:uavcan`. ⚠️ Not yet resolved: whether the bad parse blows the stack or
+the overflow corrupts the pointer. Both faults show `used == size` on the 0xe10 stack.
+
+**All three faults, for the record:** #1 `wq:uavcan` stack 100% · #2 `mavlink_if1` MemManage
+(collateral) · #3 `wq:uavcan` MemManage + stack 100%, **while DISARMED** — ⇒ ⛔ **not throttle, not
+vibration, not the wall hit's mechanics.**
+
+🔬 **OPERATOR-LED TEST RUNNING (11:23):** operator identified a right-side motor controller as
+coincident with the fault's appearance and removed it. ⚠️ **THE NODE THAT LEFT THE BUS IS ADDRESS
+10, NOT 12** — `uavcan status` now shows 11/12/13. The operator described it as "right rear", but
+MEMORY.md maps **10 = right-front (INVERTED)**, **12 = right-rear**. 🔴 **ONE OF THOSE IS WRONG —
+re-verify the address↔wheel mapping before trusting it for anything.**
+⚡ **EARLY SIGNAL, STRONG:** with node 10 off the bus the uavcan stall collapsed —
+**cycle max 38487 → 1453 µs, interval max 38490 → 3725 µs (~26×)**. ⚠️ Only ~5000 events sampled.
+**Ledger: 13 reboots at 11:22:06 (10=operator, 11=real fault, 12/13=power cycles for the hardware
+work, no fault files). SD card CLEAN. A #14 WITH a fault file means the removal did NOT fix it.**
+⛔ **Even if removal fixes it, the FIRMWARE BUG REMAINS** — any node emitting the same malformed
+field will reproduce it. Record the suspect ESC's serial/HW version before it goes back on.
+
+✅ **FIXED 08-16: `~/.bashrc` now sources `"$HOME/ros2_ws/install/setup.bash"` (absolute).**
+Backup `~/.bashrc.bak-20260816`. Verified: `px4_msgs` resolves from `/tmp` and from `~`.
+
+---
+
+## 🗺️ 2026-08-16 — THE 2D GRID CHECK (autonav_reference §13's "NOT ESTABLISHED" item) — CLOSED
+> Tool written: **`tools/grid_review.py`** — assembles and inspects the 2D occupancy grid inside an
+> RTAB-Map `.db`. Repeatable against any candidate map. Artefacts in `~/gridtest_v4/`
+> (`in.db` = untouched copy, `normseg_off.db`, `ground028.db`, + `_grid.png` for each).
+> ⚠️ **`~/house_map_v4.db` was NOT modified** — `rtabmap_localization.yaml:41` points at it.
+
+🔑 **HOW THE GRID IS STORED** (undocumented, cost time to work out): `Data.{ground,obstacle,empty}_cells`
+are **zlib-compressed float32, FOUR floats per point (x,y,z,pad)**, node-local frame, **NO header**.
+`Node.pose` is 12 float32 = row-major 3x4 [R|t]. `rtabmap-export` CANNOT export the 2D grid (cloud/
+mesh/poses only). `Grid/*` params are readable with `rtabmap-info <db>`.
+
+### ✅✅ VERDICT: THE v4 GRID IS ROUGHLY CORRECT. ⛔ MY "UNUSABLE" CALL WAS WRONG.
+| | free area | vs reality |
+|---|---|---|
+| **operator ground truth** | **~2 m² open floor** | the room is SMALL AND CLUTTERED |
+| `house_map_v4` as built (`MaxGroundHeight` 0.10) | **3.11 m²** | ✅ slightly generous, right ballpark |
+| `ground028` (`MaxGroundHeight` 0.28) | 6.73 m² | 🔴 **3× the truth — DANGEROUSLY OPTIMISTIC** |
+
+⛔ **DO NOT ADOPT `MaxGroundHeight` 0.28.** It "gains" free space by declaring everything under
+28 cm to be floor — which in a cluttered room is exactly where the clutter is. Optimistic is the
+UNSAFE direction for a planner. **Keep 0.10.**
+⛔ **DO NOT set `Grid/NormalsSegmentation false` either** — it reproduced the ray-tracing spikes that
+got the v5 reprocess rejected (visible as long white spurs radiating out of the room in the PNGs).
+✅ **Rover-plate contamination in the GRID is 0.06–0.13% — the grid is CLEAN.** The 11.8% plate
+problem was a CLOUD-only defect. Don't carry it forward as a grid concern.
+
+🔑 **ROI/DECIMATION BUG CONFIRMED LIVE** (was previously only inferred): reprocessing prints, per
+frame — `util3d.cpp:1251 Cannot apply ROI ratios [0,0,0,0.35] because resulting dimension
+(depth=640x234) cannot be divided exactly by decimation parameter (4). Ignoring ROI ratios...`
+**234 ÷ 4 = 58.5**, so the crop is silently DROPPED on every frame. **234 ÷ 2 = 117** — which is
+exactly why the recorded fix is `Grid/DepthDecimation: "2"`. ⇒ In v4 the bottom crop was **never
+applied**, so it was NOT starving the floor (an idea I chased and disproved).
+⚠️ **Still open, still real:** `ground Z` spans **−0.107 … +0.324 m (43 cm)** for a flat floor.
+`4 m × sin(1.54°) = 0.107 m` matches the uncorrected camera roll. Worth fixing — but it was NOT
+the cause of the grid's appearance.
+
+### 🔴🔴 THE REAL CONSTRAINT IS THE ROOM, NOT THE MAP
+**Rover footprint 0.73 × 0.56 m ≈ 0.41 m² vs ~2 m² of open floor** (≈ a 1.4 × 1.4 m clear patch).
+**The rover is a FIFTH of the room's free space.** Add Nav2 inflation and there is almost nothing
+to plan through.
+⛔ **T2 CANNOT RUN IN THIS ROOM.** Its spec is a **clear 2 m corridor**; `t2_straight_goal_test.py`
+refuses to start below `distance × 1.35 + stop_distance` ≈ **3.05 m** of clearance. It would abort
+before moving. **T2 is blocked by the ROOM, not only by the FC.**
+⏭ **OPEN GOAL-LEVEL DECISION (operator's):** (1) run T2 in a corridor / larger space — **recommended**,
+keeps the ladder comparable · (2) re-scope T2 shorter (`--distance 0.8`), proves less · (3) reconsider
+whether this room is the M3 target at all — mapped *patrol* in 2 m² is a very small mission.
+
+## ⚠️ 2026-08-16 — THE CAMERA WAS PHYSICALLY ROTATED (to reach the FC)
+🔴 **EVERY CAMERA-REFERENCED CALIBRATION IS NOW SUSPECT** until the mount is verified:
+`front_overhang` 0.337 · `/scan` scale 0.9845 · the tape-confirmed **0.345 m reflex standoff** ·
+`CORRIDOR_HALF`/`SECTOR_HALF` geometry · the **camera-gyro heading TF** (`rover-odometry` locks
+`base_link <- camera_gyro_optical_frame` **at node start** — the current lock is from 09:28 and
+describes the OLD mount) · localization against `house_map_v4` (built on the old pose) ·
+the **1.54° roll figure is now meaningless**, it described the old mount.
+⏭ **BEFORE ANY MOVING TEST:** measure the new geometry with `tools/wall_probe.py` (park square to a
+flat wall, RANSAC `/scan` — ±1 mm, ±0.26°, wheel-independent), correct the roll in TF while the
+camera is off its mount (closes a long-open item), **restart `rover-odometry`** to re-lock the gyro
+TF, then re-verify `front_overhang` and `/scan` scale.
+
+### 📌 HANDOVER STATE — 2026-08-16 12:04, operator restarting
+**FC REBOOT LEDGER THIS COMPANION BOOT (proxy = `microxrce-agent` `create_participant`; each ≈ one FC reboot):**
+`journalctl -u microxrce-agent -b | grep create_participant`
+- **#1–9** 09:28→10:32:49 — the original loop. Only 2 wrote fault files (others deleted before copying).
+- **#10** 11:05:43 — **OPERATOR reboot, deliberate.**
+- **#11** 11:09:15 — **REAL FAULT** → `fault_2026_08_16_05_39_08.log` (`wq:uavcan`, stack 100%, **DISARMED**).
+- **#12–13** 11:17:21, 11:22:06 — power cycles while removing the ESC. No fault files.
+- **#14–20** 11:49:31 … 12:00:51 — 🔴 **UNCLASSIFIED.** They fall inside the window where the operator
+  was physically working on the vehicle (camera rotated to reach the FC), so power cycles are likely —
+  **but #19/#20 are only 28 s apart, which matches the hardfault cadence (#1/#2 were 87 s).**
+  ⚠️ **I COULD NOT CHECK**: the MAVLink shell would not hold a session. **UNRESOLVED.**
+- **12:04 FC is ALIVE** — `/fmu/out/vehicle_status_v1` at 1.97 Hz, no reboot for ~3.5 min.
+
+🔑🔑 **FIRST THING ON RETURN — this is the whole experiment's result:**
+```
+printf "\n\nls /fs/microsd\n\n" | python3 ~/PX4-Autopilot/Tools/mavlink_shell.py tcp:127.0.0.1:5760
+```
+- **Any `fault_*.log` dated after 11:22** ⇒ 🔴 **removing node 10 did NOT fix it** — the trigger is not
+  that ESC, and the firmware stack overflow is reachable by other means.
+- **No fault files** ⇒ ✅ #14–20 were power cycles and **node 10 is still the prime suspect.**
+⚠️ **The card was CLEAN at 11:10** (operator deleted the earlier ones), so anything present now is new.
+
+**Bus state at handover:** nodes **11, 12, 13** online; **node 10 REMOVED** (⚠️ operator called it
+"right rear" but the address that left is 10, which MEMORY.md maps to right-FRONT — **mapping unverified**).
+**`rover-ekf-bridge` inactive** (correct for wheels-up). **Params verified in flash:** `RO_ACCEL_LIM` −1,
+`RO_DECEL_LIM` −1, `RO_SPEED_LIM` 0.70.
