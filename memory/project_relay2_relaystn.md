@@ -115,3 +115,82 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   (both relays share tunnel IP 10.5.5.77; vind-rly was the active ch161 GS). No WFB-path to the Pi4.
 - `sudo` on RELAY-STN needs password (1987) via `echo 1987 | sudo -S ...`; only wfb-rlyctl is
   passwordless (see [[reference_wfb_rlyctl.md]]).
+
+## 2026-08-23 — ⛔ PI ZERO 2 W IS NOT A VIABLE RELAY. REVERTED TO THE RPi5 SAME DAY.
+- **Operator rebuilt the relay on a Raspberry Pi Zero 2 W, configured it, could log in — but QGC
+  disconnected INTERMITTENTLY.** Reverted to the RPi5 within the hour. ⛔ **Don't retry this swap.**
+- 🔑🔑 **THE BLOCKING REASON IS A HARDWARE LIMIT, NOT A CONFIG MISTAKE: the Pi Zero 2 W's onboard Wi-Fi
+  (CYW43438) is 2.4 GHz ONLY.** The relay's QGC hotspot is a Wi-Fi Direct **P2P-GO on ch149 / 5745 MHz
+  (5 GHz) @31 dBm** (`vind_rely`, relay 10.5.6.101/24, QGC laptop 10.5.6.50). **A Zero 2 W physically
+  cannot host that.** ⚠️ It also has **ONE usable USB port**, which the rtl8812eu WFB adapter needs —
+  so there is no port left for a 5 GHz hotspot NIC either. ⇒ **the design needs a dual-band host.**
+- ⚠️ Secondary (unconfirmed, we reverted before proving it): 4×A53 @1 GHz / **512 MB** also has to run
+  WFB FEC decode + `mavlink-router` + the hotspot + the SSH tunnel. The RPi5 had headroom; this does not.
+- 📈 **MEASURED WHILE IT WAS UP (useful method, reuse it):** `ping -c 100` companion→relay gave
+  **0% loss, p50 15.5 ms, p90 16.9 ms, but two ~900 ms stalls ~16 s apart.** 🔑 **ZERO LOSS + HUGE DELAY =
+  packets QUEUED AND RELEASED = a CPU/scheduling stall on the relay, NOT an RF problem.** Loss would mean RF.
+- ✅ **THE RADIO WAS PROVEN INNOCENT at the same time** (drone-side JSON API on 8102, per
+  [[wfb-ng-config]] — query the socket, never the `wfb-cli` TUI): tunnel TX **dropped=0 truncated=0
+  fec_timeouts=0**; tunnel RX over 27,141 pkts **dec_err=0 bad=0**, lost 18, fec_rec 107. ⇒ **matches the
+  standing rule: when something breaks, WFB is sitting on an EMPTY input queue — SUSPECT THE SOURCE.**
+- 🔑 **SSH host key changes on every relay rebuild.** Zero 2 W was
+  `SHA256:LKKrmSX0vORTGbrJAUlz+NI4BWJGxiNdVjIaytAYIRM`. **Clear the old entry BEFORE swapping back or the
+  next login dies on "HOST IDENTIFICATION HAS CHANGED":** `ssh-keygen -f ~/.ssh/known_hosts -R 10.5.5.77`.
+  ⚠️ **`grep 10.5.5.77 ~/.ssh/known_hosts` returns 0 even when an entry EXISTS** (hashed known_hosts) —
+  **use `ssh-keygen -F 10.5.5.77`.** ⚠️ A fresh relay build has **no authorized_keys** ⇒ publickey denied
+  until `ssh-copy-id`; **the operator must run that himself — never take a password into the transcript.**
+- ⚠️ **`ping 10.5.6.50` (QGC laptop) FAILS by design — Windows firewall.** NOT evidence of a break.
+
+## 2026-08-23 — RELAY RESTORED FROM AN OLD SD CARD (the newer card was damaged). AUDIT + PARTIAL FIX.
+- **Context:** operator fell back to an OLDER relay SD card after the current one was damaged. RPi5 `vind-rly`,
+  Ubuntu 24.04.2, kernel `6.8.0-1018-raspi` (companion runs `-1048`).
+- ✅ **REPO BROUGHT CURRENT: `~/codex-relay` 01aa9ab (2026-03-15) → `70ef6aa` (2026-07-12)**, 9 commits, via the
+  **git-bundle method** (relay has NO internet): `git bundle create B master ^01aa9ab` on `~/codex-relay-mirror`
+  → `scp` → `git pull --ff-only B master`. ⚠️ **The old card had NO git remote configured at all.**
+  🔑 The relay's uncommitted `scripts/system_files_sync.sh` edit was **byte-identical** to the incoming commit —
+  checked with a real diff before discarding it. **Check, don't assume, before dropping a local edit.**
+- 🔑🔑 **`scripts/system_files_sync.sh` SYNCS SYSTEM → REPO, NOT REPO → SYSTEM**
+  (`rsync --files-from=list / $repo/System_files`). ⇒ **updating the repo CANNOT touch `/etc`** — verified
+  `/etc/wifibroadcast.cfg` mtime unchanged after the pull. **`System_files/` is a BACKUP of the box, not a
+  deployment source.** ⛔ **So "make /etc match the repo" is NOT a version upgrade — it is replaying an old
+  snapshot of a DIFFERENT deployment.**
+- 🔴🔴 **DO NOT COPY `System_files/etc/wifibroadcast.cfg` OVER THE LIVE `/etc/wifibroadcast.cfg`.**
+  **The ONLY delta is the `[cluster]` block (21 lines, 1 hunk — every radio-critical value is ALREADY
+  IDENTICAL: channel, MCS, txpower, FEC, keys, endpoints).** The repo version enables a **2-node WFB cluster**:
+  `nodes = {'127.0.0.1': wlx00c0cab6db3b, '10.5.7.102': CPE610 OpenWrt phy0-mon0}`, `server_address='10.5.7.100'`,
+  api_port 8203 / stats_port 8303, ssh key `~/.ssh/wfb_cluster_ed25519`.
+  **MEASURED PREREQUISITES ON THE CURRENT BOX: ssh key PRESENT ✓, but `10.5.7.100` IS NOT ON ANY INTERFACE ✗,
+  `eth0` is DOWN ✗, `10.5.7.102` UNREACHABLE ✗.** ⇒ **applying it would point wfb-server at an address the relay
+  does not hold and a node that is not attached — near-certain link loss on a link that is CURRENTLY WORKING.**
+  ⏭ Only apply if the **CPE610 is physically attached and eth0 is up on 10.5.7.100**, and then only behind the
+  **`wfb-cfg-apply` watchdog**.
+- ✅ **BACKUP TAKEN BEFORE ANY CONFIG WORK: `~/wfb_cfg_backups/wifibroadcast.cfg.<stamp>` on the relay.**
+- 🔴 **STILL BROKEN — `mavlink-router` is `inactive`/`disabled` ⇒ QGC GETS NO TELEMETRY.** Config
+  `/etc/mavlink-router/main.conf` is CORRECT (WFB-input :14560 → QGC `10.5.6.50:14550`, tracker :14551, TCP 5760).
+  **PROOF the data reaches the relay and dies there:** GS-side WFB stats (port 8103) showed mavlink RX
+  **dec_ok 17430, dec_err 6, lost 1, bad 0**, `out` 5720 → `127.0.0.1:14560` with nothing consuming it.
+  ⏭ **FIX = `sudo systemctl enable --now mavlink-router`.** 🔑 **`sudo NEEDS A PASSWORD on the relay` ⇒ I cannot
+  do this myself; the operator must run it.**
+- 🔴 **NTP still `ntp.ubuntu.com` (unreachable — no internet) ⇒ `System clock synchronized: no`.** Old card, so
+  the [[relay-ntp-setup]] plan was never applied here. ⚠️ **220 pending apt updates, and no internet to fetch
+  them — don't try.**
+- ⚠️ **`wfb-cfg-apply` watchdog: now TRACKED in the repo (`System_files/usr/local/sbin/`) but NOT INSTALLED**
+  to `/usr/local/sbin` — the repo pull does not deploy (see the system→repo direction above). Needs sudo.
+- ✅ **Healthy and untouched:** WFB ch161/5805 MHz MCS1 BW20 STBC+LDPC `default_route=False`; hotspot `vind_rely`
+  ch149 up at 10.5.6.101 with **the QGC laptop `10.5.6.50` ASSOCIATED and REACHABLE**; SSH tunnel :2222 listening.
+
+### 2026-08-23 ~22:15 — MAVLINK IS UP (operator fixed it). ⚠️ BUT NOT UNDER SYSTEMD.
+- ✅ **`mavlink-routerd` IS RUNNING: PID 750, PPID 1, `-c /etc/mavlink-router/main.conf`**, started ~21:21 IST
+  (~54 min uptime) — i.e. AFTER the 21:06 audit that found it dead, so that audit was right at the time.
+- ✅ **PATH VERIFIED END TO END:** WFB GS mavlink `dec_ok` 98513→98789 in 5 s (~46 pkt/s), `lost=2`, `bad=0`;
+  `out` advancing 15 pkt/s into `127.0.0.1:14560`; QGC laptop `10.5.6.50` **REACHABLE, inactive 0 ms,
+  tx 86.6 Mbit/s** on `p2p-wlan0-0`.
+- 🔴 **THE UNIT IS STILL `inactive`/`disabled` WITH AN EMPTY `ExecMainStartTimestamp` — THE DAEMON WAS STARTED
+  OUTSIDE SYSTEMD ⇒ IT WILL NOT SURVIVE A REBOOT.** The relay has no RTC and does get power-cycled.
+  ⏭ **`sudo systemctl enable mavlink-router`** (persists at next boot).
+  ⛔ **NOT `enable --now`** — PID 750 already holds UDP 14560, so `start` fails "address in use".
+  To hand it to systemd immediately: `kill 750` first, then `enable --now`.
+- 🔑 **TRAP FOR NEXT TIME: `systemctl is-active` SAID `inactive` WHILE THE DAEMON WAS RUNNING FINE.**
+  A hand-started daemon is invisible to the unit. **Check `ps -eo pid,ppid,etimes,args | grep mavlink` and
+  who holds the port BEFORE concluding a service is down.** ⚠️ `ss` shows no `users=` for another user's
+  socket without root — an unowned-looking bound port is a hint something else holds it.
