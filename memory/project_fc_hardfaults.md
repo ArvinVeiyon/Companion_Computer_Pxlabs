@@ -1681,3 +1681,35 @@ and flagged the alternative in the note. PC picks one and uses it in tag + OEM s
 set and crossed the DLL off for two days. The lock bits say it locked, NOT where in the read window it landed.
 ⚠️ `rover-autonav-mode` reads **failed** — operator says autonav + other services are deliberately removed
 for this testing. **Not a fault, don't debug it.**
+
+## 41. 2026-08-29 09:11 — ✅✅✅ **CAMPAIGN CLOSED. 8 h SOAK PASSED CLEAN. THE CAUSE WAS THE FlexSPI DLL READ STROBE.**
+✅✅ **THE PROOF, INSTRUMENT-COUNTED (`fc_soak.py` pid 712835, verified alive + output growing — not a
+status-file snapshot):** **09:11:49 IST, FC uptime 480.7 min = 8.01 h, reboots 0, new fault logs 0**,
+**SINGLE BOOT 01:11:02** (one continuous window, nothing stitched), card baseline 0, under REAL load
+(uXRCE-DDS + EKF2 + camera + `/scan` + `/scan_3d` + wheel odometry), `throttled=0x0`, ~51 °C.
+🔑 **WHY 8 h IS THE BAR (§29.2): P(quiet ≥8 h) = 0.0%** over 38 gaps, median 5.4 min, p90 73 min, longest
+quiet gap EVER in the fault era 7.3 h ⇒ **this window is outside anything the bug itself produced.**
+🎯 **CAUSE: the RT1176 BOOT ROM does not CENTRE the FlexSPI DLL delay that samples the octal-NOR DQS read
+strobe** ⇒ marginal XIP instruction fetch at 200 MHz octal DDR ⇒ the CPU executed words that were NOT what
+is stored in flash. **FIX = PX4 PR #28141** (Peter van der Perk/NXP, merged 08-04, `9f4bc80006c`, ONE file
+`boards/px4/fmu-v6xrt/src/init.c`) — RAM-resident boot sweep, picks the MIDPOINT of the widest passing range.
+✅ **FLYING BUILD = `860013bab7`** (PC's tree, cherry-picked from `9f4bc80006c`). ⛔ **`flight_sw_version`
+reads `1.17.0` WITH OR WITHOUT the pick — IT CANNOT DISCRIMINATE. Verify by GIT HASH only.**
+✅ **PUBLISHED: `v1.17.0-2.1.0`** + `HARDFAULT.md` at the repo root of `ArvinVeiyon/PXLABS_PX4-Autopilot`
+(PC side, commit `244afd0991`, branches `pxlabs-v1.17.0-2.1.0` + `-dev`). My handoff + release-note draft:
+`codex-work` `4c9ed19`. ⛔ **My `r2.1` naming was SUPERSEDED — the published tag is `v1.17.0-2.1.0`.**
+🔑🔑 **THE LESSON WORTH KEEPING — `LOCKED ≠ CENTRED`.** §35 read `STS2` = both DLL lock bits set and
+`DLLCR 0x00400079` = NXP's recommended ≥100 MHz setting, and I struck the DLL off the list **for two days**.
+The lock bits say the DLL LOCKED; they say NOTHING about WHERE IN THE READ WINDOW it landed. **§35's caveat
+sentence ("locked and per-recommendation ≠ has margin at this temperature on this board") was the
+load-bearing one and I under-weighted it against my own confident table of correct-looking registers.**
+🔑 **2nd lesson: 4 FCs / 2 sites / USB-only changed the rate BY NOTHING — and that was the CLUE, not the
+mystery.** A defect identical on every board is a defect in something identical on every board: the ROM.
+I read it as "hardware is eliminated, so it must be our config" and never asked what is invariant ACROSS boards.
+⏭ **STILL OPEN, DO NOT FOLD INTO "RESOLVED":**
+ **(1) `g_dll_cal` NEVER READ — the direct mechanism evidence is still missing.** Symbol at **`0x20252774`**
+ (BSS, 12 B) in build `860013bab7`. ⛔ **MCU-Link IS UNPLUGGED** (no `1fc9:0143`, no `/dev/ttyACM*`) — ask
+ the operator to RESEAT, then `--connect attach` read of `g_dll_cal` + `FLEXSPI1 DLLCR/STS2 @0x400CC000`
+ vs the ROM baseline **ASLVSEL=12 / AREFSEL=11**. ⛔ **Don't take the 57 MB ELF — the address is enough.**
+ **(2) uXRCE-DDS NULL-DEREF (§30.4) IS UNTOUCHED BY THIS.** Its base rate was far below the DLL population,
+ so 8 h of absence is NOT evidence it is gone. Still worth its own upstream issue.
