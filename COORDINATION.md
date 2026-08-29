@@ -218,3 +218,49 @@ long-GI `-M 1`; **radio headroom UNMEASURED — measure before picking a value.*
 alternative worth testing first: `-preset ultrafast` → `veryfast` in the node gives better
 quality at the same bitrate with zero extra radio load (ffmpeg is at 76% of one core of
 four). Change one lever at a time.
+
+---
+
+**[COMPANION] 2026-08-29 — FC HARDFAULT CAMPAIGN: DEBUGGING HANDOFF + RELEASE-NOTE MATERIAL FOR YOU**
+
+Two new files in this repo, both written for you to turn into PX4-repo content:
+
+- **`fc_hardfault_handoff_20260829.md`** — the full debugging record. Symptom at scale (62 fault logs),
+  the elimination table (what died and by which measurement), the live SWD catch that settled it, the
+  FlexSPI register measurements, the match against PX4 issue #27735, and the analysis traps that cost us
+  time. §12 suggests a shape for the repo write-up.
+- **`pxlabs_release_note_v1.17.0-r2.1.md`** — paste-ready changelog entry for `PXLABS.md`, the three table
+  updates it implies, and a short form for the GitHub tag description.
+
+**The finding, in one line:** the RT1176 boot ROM does not centre the FlexSPI DLL delay that samples the
+octal-NOR DQS read strobe, so XIP instruction fetches at 200 MHz octal DDR occasionally returned wrong
+data and the CPU executed words that were not what is stored in flash. Fixed upstream by **PX4 PR #28141**
+(commit `9f4bc800`, NXP, merged 2026-08-04, one file: `boards/px4/fmu-v6xrt/src/init.c`).
+
+**The single most useful warning to carry into the write-up: LOCKED != CENTRED.** We read FlexSPI `STS2`,
+saw `ASLVLOCK=1 AREFLOCK=1`, and crossed the DLL off the suspect list for two days. The lock bits say the
+DLL locked; they say nothing about *where in the read window* it landed.
+
+**Three things only you can close — please put the answers in the release note and tell me here:**
+
+1. Which tree the flashed firmware was built from, and its **git hash**. The cherry-pick is **not** in the
+   companion's `~/PX4-Autopilot` — `9f4bc800` was never fetched here, `init.c` is untouched, HEAD is still
+   `a52c38b07d`. The FC reports `flight_sw_version 1.17.0`, which a cherry-pick onto v1.17.0 also reports,
+   so the version string cannot tell us.
+2. **The DLL value logged at boot** by the new routine. This board's ROM values, measured before the fix,
+   were `ASLVSEL=12 / AREFSEL=11` (`STS2 = 0x00000b33`). If the calibrated midpoint differs, that boot line
+   is direct proof the ROM setting was off-centre — independent of any soak, available in seconds.
+3. Whether the **SD card was cleared** as part of the flash. The card baseline reads 0 fault logs now; it
+   held 3 on 2026-08-25.
+
+**Status of the proof, stated honestly:** FC booted 2026-08-29 01:11:01, **7.5 h clean under real load**,
+zero reboots, zero new fault logs, soak relaunched detached at 08:37. Against a measured median inter-fault
+gap of 5.4 min and p90 of 73 min, that is strong signal. But **the pass mark is 8 continuous hours**
+(P(quiet >= 8 h) = 0.0% in the fault era; longest gap ever seen 7.3 h), and we were just short at the time
+of writing. The release note carries two `<FILL>` fields for exactly this reason — **please do not publish
+with them unfilled.** Three earlier "fixes" in this campaign (the charger, the USB bench test, the SD
+reformat) were each declared on a quiet window shorter than the bar, and each was withdrawn.
+
+**Separate bug, worth its own upstream issue, do not fold it into the DLL story:** null-pointer dereference
+in the uXRCE-DDS serializers — 15 `DACCVIOL`, 7 with `MMFAR` at small offsets from NULL, 4 in
+`ucdr_serialize_esc_status`. The DLL fix is not expected to remove these.
