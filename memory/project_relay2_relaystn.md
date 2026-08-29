@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
-  modified: 2026-07-26T08:28:55.442Z
+  modified: 2026-08-28T17:36:29.891Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -174,8 +174,10 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
 - 🔴 **NTP still `ntp.ubuntu.com` (unreachable — no internet) ⇒ `System clock synchronized: no`.** Old card, so
   the [[relay-ntp-setup]] plan was never applied here. ⚠️ **220 pending apt updates, and no internet to fetch
   them — don't try.**
-- ⚠️ **`wfb-cfg-apply` watchdog: now TRACKED in the repo (`System_files/usr/local/sbin/`) but NOT INSTALLED**
-  to `/usr/local/sbin` — the repo pull does not deploy (see the system→repo direction above). Needs sudo.
+- ✅ **[SUPERSEDED 2026-08-28 — NOW INSTALLED, see the 08-28 entry at the end of this file.]** ~~`wfb-cfg-apply`
+  watchdog: TRACKED in the repo but NOT INSTALLED to `/usr/local/sbin`~~ — 🔑 **the still-true part: a repo
+  pull does NOT deploy anything, the sync direction is system→repo. Installing is always a manual
+  `sudo install` step.**
 - ✅ **Healthy and untouched:** WFB ch161/5805 MHz MCS1 BW20 STBC+LDPC `default_route=False`; hotspot `vind_rely`
   ch149 up at 10.5.6.101 with **the QGC laptop `10.5.6.50` ASSOCIATED and REACHABLE**; SSH tunnel :2222 listening.
 
@@ -194,3 +196,76 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   A hand-started daemon is invisible to the unit. **Check `ps -eo pid,ppid,etimes,args | grep mavlink` and
   who holds the port BEFORE concluding a service is down.** ⚠️ `ss` shows no `users=` for another user's
   socket without root — an unowned-looking bound port is a hint something else holds it.
+
+### 2026-08-28 ~22:55 IST — LINK AUDITED HEALTHY AFTER A REBOOT. MAVLINK-UNDER-SYSTEMD IS CLOSED.
+- ✅ **`mavlink.router.service` = `enabled/active`, pid 831, `ExecStart` FROM SYSTEMD** (journal shows
+  `Started mavlink.router.service` at that boot). **It survived the reboot ⇒ the 08-23 "will not survive a
+  reboot" risk is CLOSED. Do not re-raise it.** Endpoints opened: UDP server WFB-input `0.0.0.0:14560`,
+  UDP client QGC `10.5.6.50:14550`, UDP client tracker `127.0.0.1:14551`, TCP server `:5760`.
+- ✅ **TRAFFIC MEASURED, not inferred:** `tcpdump -ni any udp port 14560` caught 8 packets in <1 ms
+  (724 seen by the filter in 6 s) arriving from `127.0.0.1:36538` — the WFB tunnel feeding the router.
+  Chain drone→WFB→relay→router is LIVE.
+- ✅ Relay reachable from the companion: ping 12.5 ms 0% loss, SSH fine, `:2222` tunnel listening,
+  5 `wfb_*` procs, `wifibroadcast@gs` active, relay→companion (10.5.5.87) 0% loss.
+- 🔑🔑 **NEW TRAP — PING TO THE QGC LAPTOP IS A FALSE NEGATIVE.** `ping 10.5.6.50` = **100% loss**, yet
+  `ip neigh` says `10.5.6.50 dev p2p-wlan0-0 lladdr d8:80:83:5e:d5:57 REACHABLE` and `iw station dump`
+  shows it ASSOCIATED with **inactive time 0 ms**. The laptop firewall drops ICMP. ⛔ **Never call the last
+  hop dead on ping alone — use `ip neigh` + `iw dev p2p-wlan0-0 station dump`.** (08-23's "REACHABLE" reading
+  came from those, not ping.)
+- 🔑 **`ss -tunp` AS A NON-ROOT USER PRINTS NO `users=` FIELD** ⇒ a grep for the process name returns EMPTY
+  and looks like "no sockets". **Use `sudo ss -tunap`.** This nearly reproduced the 08-23 false "it's down".
+- 🔑 **BOOT-CLOCK TRAP AGAIN: `who -b`/`last reboot` said "Aug 23 15:32, still running" while `uptime` said
+  51 minutes.** No RTC ⇒ the clock is ~3 days behind (relay `date` = Aug 25 08:30 UTC when real time was
+  Aug 28 17:31 UTC). **Read `/proc/uptime`, never a boot timestamp.** [[relay-ntp-setup]] still unapplied.
+- ⚙️ Mode state confirmed: `wifibroadcast@gs` **active**, `wifibroadcast-cluster@gs` **disabled/inactive**,
+  `wlx00c0cab6db3b` in **monitor ch161/5805**, hotspot `p2p-wlan0-0` P2P-GO SSID `vind_rely` **ch149/5745**
+  at 10.5.6.101, two stations associated.
+
+### 2026-08-28 — ⛔ RETRACTION: "THE `[cluster]` BLOCK BREAKS THE LINK" WAS WRONG
+- **Mode is selected by WHICH UNIT RUNS, not by editing the config.** Standalone = `wifibroadcast@gs`
+  (`wfb-rlyctl use-standalone`), cluster = `wifibroadcast-cluster@gs` (`wfb-rlyctl use-cluster`). The
+  standalone unit runs `wfb-server --profiles gs --wlans ${WFB_NICS}` and **never reads `[cluster]`** ⇒ a
+  populated cluster block is **STAGED AND INERT**. `RELAY_STATION_SETUP.md` §5.4 states this explicitly.
+- ✅ **`wfb-rlyctl` IS installed** at `/usr/local/sbin/wfb-rlyctl` with passwordless sudo. → [[wfb-rlyctl]]
+- 🔴 **So the relay's EMPTY cluster block is a DEFECT, not a deliberate standalone choice.**
+- 🔴 **IT IS A RECURRING WIPE.** `system_relay.md` records: wiped 2026-02-22 during a mavlink-router session,
+  the **auto-sync committed the wiped state**, v1.0.0–v1.0.2 all shipped it, fixed 2026-07-10 (v1.0.3).
+  **Commit `a9e4eae` (08-23) is the SAME incident repeating** — the old SD's wiped `/etc` synced up and
+  reverted vinoth's v1.0.3 fix. Symptom when cluster mode is next tried: **`Cluster is empty!`**.
+- ✅✅ **EXECUTED 2026-08-28 ~23:05 IST, OPERATOR-APPROVED, ALL VERIFIED — THE WIPE/REVERT LOOP IS CLOSED:**
+  1. **`relay_files_sync.timer` DISABLED + stopped**, gone from `timers.target.wants`, not in
+     `list-timers`. ⚠️ **`systemctl mask` FAILS on it — "File /etc/systemd/system/…timer already exists"
+     (mask needs to symlink over the path, and the unit is a REAL FILE in `/etc/systemd/system`).
+     `disable` is the correct verb here; the unit file is preserved for re-enable.**
+  2. **`[cluster]` block RESTORED** into `/etc/wifibroadcast.cfg` (5375→5580 B, md5
+     `9f368f0d…`→`d93d7844…`). Backup: **`~/wifibroadcast.cfg.bak.pre-cluster-restore`**.
+     Applied by `cat new > /etc/…cfg` (redirect preserves owner/mode/inode; the file is
+     `vind-admin:vind-admin` 664, **no sudo needed**). Diff confirmed = cluster block ONLY.
+  3. **Repo `reset --hard 70ef6aa`**, `a9e4eae` dropped, tree clean. Recoverable via reflog;
+     hash saved to `~/codex-relay-dropped-commit.txt`, dirty log to `~/system_files_sync.log.bak.pre-reset`.
+     ⚠️ **`~/codex-relay` has NO REMOTES configured — pushing from the relay is impossible, don't try.**
+     The 2 lines `a9e4eae` also added to `system_relay.md` were just the sync script's own changelog noise.
+- ✅ **PROOF THE OLD WARNING WAS WRONG: after writing the cluster block the link was UNCHANGED** —
+  `wifibroadcast@gs` active, all 5 `wfb_*` procs and `mavlink-routerd` still at the SAME 59-min elapsed
+  (never restarted), 1396 MAVLink pkts / 5 s on `:14560`, tunnel + 10.5.5.87 0% loss. **Standalone really
+  does ignore `[cluster]`.**
+- 🔑 **`/etc/wifibroadcast.cfg` is now byte-identical to `~/codex-relay/System_files/etc/…` ⇒ even if the
+  timer is re-enabled it has nothing to commit. Keep them equal and the loop cannot restart.**
+- ✅ **4. `wfb-cfg-apply` WATCHDOG INSTALLED 2026-08-28 (operator gave the sudo pass) — step 4 CLOSED:**
+  `/usr/local/sbin/wfb-cfg-apply` **755 root:root, sha256 `cbaae331…` = BYTE-IDENTICAL to the companion's
+  copy** (independent match to [[reference_wfb_cfg_apply]]), plus `/etc/wifibroadcast.cfg.default`
+  **5580 B 644 root:root**. Both were already listed in `System_files_list.txt` (lines 7 + 27); source =
+  `~/codex-relay/System_files/…`. Verified: `bash -n` clean · active-unit auto-detect resolves to
+  **`wifibroadcast@gs`** · refuses a bogus path (`ERROR: … not found`) without touching anything ·
+  live cfg md5 unchanged · **wfb procs never restarted**. Inert until QGC/`pxlabs_cli` invokes it.
+- ✅✅ **INDEPENDENT CONFIRMATION OF THE STEP-2 RESTORE: the tracked `wifibroadcast.cfg.default` baseline
+  (pre-dates 08-28, from the good v1.0.3+ state) is BYTE-IDENTICAL to the `/etc/wifibroadcast.cfg` I
+  restored.** Two separate rulers agree ⇒ the restored cluster config is right. → [[feedback_independent_rulers]]
+- 🔑 **SELF-MATCH TRAP, COUNTING FLAVOUR: `pgrep -c -f "[w]fb_"` returned 6 not 5 because MY OWN command
+  line contained the string `wfb_procs`.** The `[w]` bracket trick defeats the grep-sees-itself case but
+  NOT my own shell echoing the pattern. **Count with `ps -C wfb_rx -C wfb_tx` / `pgrep -x`, and never put
+  the pattern in the same command line.** Same family as the `pkill -f` self-kill rule.
+- ⏭ **STILL OPEN:** [[relay-ntp-setup]] (clock ~3 days behind) · sync still never backs up `iptables`,
+  `netplan`, `sudoers.d/wfb-rlyctl`. ⛔ **Do NOT run `wfb-rlyctl use-cluster` — the CPE610 is not connected.**
+- ⚠️ Still open, lower priority: the unprivileged sync never backs up `iptables`, `netplan`, or
+  `sudoers.d/wfb-rlyctl` (that last one gates `wfb-rlyctl` itself).

@@ -1538,3 +1538,146 @@ any catcher re-arm (6 USB re-enums/35 min killed the last session and stranded t
 tools `fc_fault_resolve.py` + `fc_fault_catch.py` (both in `~/ros2_ws/tools/`, uncommitted on
 `fix/collision-perception-health-gate`).
 🔑 **READ §36 (plan) → §36.9/36.10 (final ranking) → §32 (the caught-fault verdict) before doing ANYTHING.**
+
+## 38. 2026-08-28/29 — 🔴 **BUILD TEST (a) IS DEAD ON ARRIVAL · A PEER SESSION'S LINKER LEAD REFUTED · POST FILED TO THE PX4 FORUM**
+
+### 38.1 ⛔⛔ **`serialClkFreq` 200→100 MHz DOES NOT BOOT — §36.10's TOP QUEUED ACTION IS INVALID AS WRITTEN**
+**OPERATOR-CONFIRMED 08-28** (also reported independently by a peer Claude session on the PC): the 100 MHz
+change was tried and **the board does not boot at all.** ⛔ **Do NOT re-queue "(a) serialClkFreq 200→100"
+as a one-line test — §36.10/§37 and the MEMORY.md index were both wrong to.**
+🔑 **BUT THIS DOES NOT REFUTE THE READ-MARGIN HYPOTHESIS.** The test was UNDER-SPECIFIED: per §35.1 the
+config block carries **20 dummy cycles (encoded `0x28`) + TCSS=1/TCSH=1, tuned for 200 MHz octal DDR.**
+Halving the clock without re-deriving the dummy-cycle count breaks boot regardless of cause.
+⏭ **If retried: re-derive dummy cycles for the new clock FIRST.** Survivor #1 is still alive and unTESTED.
+
+### 38.2 ⛔ **REFUTED BY MEASUREMENT: "v1.17.0 folded `.ram_vectors` into `.itcmfunc` ⇒ corrupted vector fetch"**
+A peer session (PC, `/home/pxlabs/PX4-Autopilot`) proposed this and named the discriminator itself:
+**`HFSR.VECTTBL`** (bit 1), set when a bus fault occurs fetching from the vector table.
+✅ **THE FACT IS CORRECT** — verified in OUR tree: we are on `pxlabs-v1.17.0-r2-Beta` (a52c38b07d) and
+`boards/px4/fmu-v6xrt/nuttx-config/scripts/script.ld:86` really does have `*(.ram_vectors)` inside the
+`.itcmfunc` block (lines 80-93). **The CONCLUSION is dead.**
+🔬 **MEASURED, n=62 logs + 3 live catches: `VECTTBL` IS NEVER SET.** 61× `hfsr:0x00000000`, 1× `0x40000000`
+(**FORCED only**, bit 30). The catcher already prints it: `HFSR 0x40000000 FORCED=1 VECTTBL=0`.
+🔑 **2nd, independent kill:** the `.itcmfunc` copy happens **ONCE AT BOOT** ⇒ corruption would be static and
+deterministic for that boot. Our faults are intermittent (median gap 5.4 min) with the system running for
+hours. **A corrupted vector table cannot behave like that.**
+⚠️⚠️ **TRAP THE PEER ALMOST FELL INTO — WILL RECUR:** they proposed "check whether the faulting PC lands in
+ITCM `0x00000000`-`0x00040000`". **IT DOES, AND IT MEANS NOTHING** — two known artifacts stack: vector catch
+halts in the HANDLER not at the fault (§32.1: `pc 0x0000083c` = `exception_common`, `lr 0xffffffe9`), and
+**ITCM is mapped at `0x00000000` so addr2line names a plausible function for a null/handler pc (§30.5).**
+**A naive check here is a FALSE-CONFIRMATION GENERATOR.**
+
+### 38.3 ✅ **NEW MEASUREMENT — THE FAULTING PCs DO NOT CLUSTER ⇒ NOT A BAD FLASH PAGE/SECTOR**
+Extracted every XIP faulting pc across all 62 logs: **42 UNIQUE addresses, `0x30069848` → `0x30269230`
+≈ 2.1 MB of `.text`** — essentially the whole application image, only a handful of repeats.
+🔑 **A worn erase block / bad page / corrupted sector WOULD CLUSTER. This does not.** ⇒ points at a
+**GLOBAL fetch-path** defect (read margin · prefetch · I-cache), not damaged storage at any address.
+✅ Independently reinforces §34's "the victim is EXPOSURE, not identity" — scatter tracks code density.
+📊 Victim tasks over the corpus: `uxrce_dds_client` 22 · `wq:INS0` 13 · `wq:uavcan` 10 · `wq:ttyS3` 4 ·
+`mavlink_if1` 3 · `hpwork` 3 · `wq:nav_and_controllers` 2 · `wq:hp_default` 2. **45/62 pcs are `0x30xxxxxx`.**
+
+### 38.4 ⚠️ **"NO FAULT ON v1.16.2" IS NOT A RESULT — THE BUILD RAN UNDER AN HOUR (operator, 08-29)**
+⛔ **DO NOT let this become a remembered fact.** Our own stat: **P(quiet ≥1 h) = 15.8%** (§29.2) — a sub-hour
+clean run is fully consistent with the fault being present and not yet fired. **This is precedent #4 of the
+same shape** (charger §20, USB §25.1, EMI §26.1). ⏭ **To settle it: reflash v1.16.2 and soak 8 CONTINUOUS h.**
+✅ **DOES hold: reproduces on STOCK UPSTREAM PX4 v1.17.0** ⇒ **our vendor changes are eliminated.**
+
+### 38.5 🌡 **THERMAL / "NO FAN IN THE CASING" — DEAD AS A CAUSE (operator asked 08-28)**
+⛔ **§29.1 ALREADY RAN THE EXPERIMENT:** FC out of the vehicle, no casing, open air, USB-only, different
+building — **the largest thermal delta available, far bigger than fitting a fan — and it faulted in 10-15 min,
+statistically identical to on-vehicle.** A cause must move the rate when removed; this moved it by NOTHING.
+⛔ **The DEBUGGER is likewise not a cause: SWD was first attached 08-27 00:15; all 62 logs predate it.**
+🟡 **What survives:** temperature is still a MODULATOR of survivors #1/#3 (§34b "load/temperature dependent",
+§35 "locked ≠ has margin AT THIS TEMPERATURE"). The bench test did NOT control ambient (same city, same August).
+🔬 **DIE TEMP HAS NEVER BEEN MEASURED, AND IS HARDER THAN IT LOOKS — I MIS-SOLD IT AS "READ-ONLY, 2 MIN":**
+ - ✅ **Read-only recon DONE (no writes, no halt, PX4 undisturbed):** ANADIG base `0x40C84000`;
+   `VDDLPSR_AI_CTRL 0x40C848E0 = 0x00010000` (RWB=1, addr 0) · `AI_WDATA 0x40C848F0 = 0` ·
+   `AI_RDATA_TMPSNS 0x40C84910 = 0x0000501C` (boot/reset state, **NOT a temperature — do not decode it**).
+ - ✅ **CROSS-CHECK PASSED, reusable:** `ARM_PLL_CTRL 0x40C84200 = 0x200060A6` → DIV_SELECT 166 →
+   24 MHz×166/4 = **996 MHz**, matching §36.6. **Use this to prove any future attach + base address.**
+ - 🔴 **THERE IS NO TMPSNS DRIVER** in NuttX rt117x or the fmu-v6xrt board support — **the sensor is powered
+   down.** Getting °C needs **WRITES**: `AI_CTRL`+`AI_WDATA`+toggle `TMPSNS_AI_TOGGLE`, clear `PWD`/`PWD_FULL`
+   in `CTRL1`, set `START`, poll `STATUS0.FINISH`. ⚠️ **TMPSNS carries ALARM/threshold regs that NXP's driver
+   configures BEFORE power-up — powering it with reset-state thresholds could trip an alarm on a shared FC.**
+ - ⛔ **STILL MISSING:** `ANADIG_TEMPSENSOR` offsets + `TEMPSNS_OTP_TRIM_VALUE` (the `Ts25c` term). NuttX's
+   header does not define them. **Get the RT1170 RM or NXP's `MIMXRT1176_cm7.h` — do NOT guess these.**
+ - Conversion (NXP `fsl_tempsensor.c`): `T = (-Ts21 - sqrt(Ts21² - 4·Ts22·(Ts20 + Ts25c - raw))) / (2·Ts22)`,
+   `Ts20=133.6 Ts21=-5.39 Ts22=0.002`. **OCOTP fuse shadow is directly readable at `0x40CAC800`**
+   ⚠️ **stride is 0x10, NOT 0x4** — a 4-byte walk returns each word 4× and looks like corruption.
+ - 🔑 **Build test (b) core 996→~700 MHz is a SUPERSET of a cooling experiment** (cuts timing margin AND
+   self-heating) ⇒ **prefer it over any fan/thermal work.**
+
+### 38.6 ✅ **POSTED TO THE PX4 FORUM (operator posted it himself, 08-29)**
+📄 `scratchpad/px4_forum_pack/px4_forum_post_hardfault.md` + **6 UNDEFINSTR logs** (all `a52c38b07d`, all
+ELF-resolvable) + the live catch `caught_20260827_084935.txt`.
+**Post asks:** UNDEFINSTR-on-XIP seen before? · v1.16.2→v1.17.0 fetch-path delta? · is 200 MHz octal DDR
+marginal? · correct way to downclock XIP (dummy cycles)? · is `XECC` on the XIP region viable? · AHB prefetch off?
+⏭ **WATCH FOR REPLIES — the XECC and dummy-cycle answers are the two that unblock real tests.**
+
+## 39. 2026-08-29 — 🎯🎯 **NXP ANSWERED: PX4 PR #28141 — "calibrate FlexSPI DLL read strobe at boot". THIS IS PROBABLY OUR BUG.**
+**Author Peter van der Perk (NXP). MERGED 2026-08-04 → commit `9f4bc80006caf7d5d8bcf809b4ccd046fb5eded6`
+(NOT a merge commit, parent `caa1dc03`), ONE FILE: `boards/px4/fmu-v6xrt/src/init.c`, +217/−13. Fixes issue
+#27735.** NXP asked the operator directly: **test v1.18-beta2 or cherry-pick it.**
+🔑🔑 **MECHANISM: "the boot ROM does not always place the DLL delay used to sample the flash DQS strobe near
+the CENTRE of the valid read window"** ⇒ marginal XIP instruction fetch. Fix = RAM-resident boot routine that
+sweeps the DLL delay, reads a known pattern via a direct command at each setting, **picks the midpoint of the
+widest passing range**, follows NXP's DLL update sequence (stop mode, DSB/ISB, **ERR011377 post-lock settle**),
+falls back to the ROM setting on failure, stores it in `g_dll_cal` and **LOGS it from `board_app_initialize()`**.
+🔑🔑 **THIS LANDS EXACTLY IN THE HOLE §35 LEFT OPEN.** §35 measured DLL **LOCKED**, `DLLCR 0x00400079`
+per-recommendation, `STS1=0` — and I concluded the CONFIG was correct **but explicitly wrote "locked and
+per-recommendation ≠ has margin at this temperature on this board."** ⇒ **LOCKED ≠ CENTRED. §35 never refuted
+this; it refuted the config-defect version only. The caveat was the load-bearing sentence.**
+📊 **EVIDENCE MATCH (issue #27735 vs our corpus):** `cfsr 0x00010000` **UNDEFINSTR quoted verbatim** ✓ ·
+their `pc 0x2fb20542` "not a valid code address" ↔ **our garbage pcs `0x2fd930d2`/`0x250330fc` — same shape,
+just below the `0x30000000` XIP base** ✓ · **load-dependent 3-6 min streaming vs ~30 min normal** ↔ our median
+5.4 min / p90 73 min ✓ · victim = busiest task (theirs mavlink/uORB, ours DDS/INS0/uavcan) ✓ · stored
+bytes==ELF (flash fine, the READ is wrong) ✓ · pc+lr both `0x30xxxxxx` ✓ · **§38.3 42 unique pcs over ~2.1 MB,
+no clustering = global read margin** ✓ · **4 FCs/2 sites/USB-only changed NOTHING — because the ROM's DLL
+placement is identical on every board** ✓✓ (this finally explains the campaign's most baffling fact) ·
+temperature as a modulator (read window shifts with temp) ✓.
+⚠️ **The #27735 REPORTER blamed "heap corruption / wild write". NXP overruled that with the DLL diagnosis —
+we were one step from the same wrong turn.**
+🔑 **Our build is v1.17.0 built May 31 2026 ⇒ PREDATES the 08-04 merge.** 🔑 **This is a BOOT-ROM issue ⇒
+v1.16.2 would be affected TOO — more reason §38.4's "v1.16.2 is clean" was noise.**
+⏭⏭ **PLAN — CHERRY-PICK, DO NOT JUMP TO v1.18-beta2** (beta2 changes everything else at once and would
+confound the result). Single file, clean pick onto `pxlabs-fw`. ⚠️ `git fetch origin` FIRST — the commit is
+not in our clone yet (`cat-file` fails). ⚠️ **OPERATOR GATES FLASHING (FC shared with the drone).**
+✅✅ **FREE CONFIRMATION, INDEPENDENT OF THE SOAK — DO THIS ON THE FIRST BOOT:** the PR **logs the chosen DLL
+value**. **I MEASURED THE ROM'S CURRENT VALUES ON OUR BOARD: `STS2 = 0x00000b33` → ASLVSEL=12, AREFSEL=11**
+(§35). **If the calibrated midpoint differs materially from 12/11, that is direct evidence OUR board's ROM
+setting was off-centre** — visible in boot output before any soak.
+⛔ **PROOF BAR IS STILL 8 CONTINUOUS HOURS** (P(quiet ≥8 h)=0.0%), counting fault logs AND reboots, soak
+**LAUNCHED DETACHED** (`setsid nohup …` — §29.5, it has died silently TWICE). **3 prior false "fixes."**
+
+## 40. 2026-08-29 — 🎯 **OPERATOR REPORTS THE CHERRY-PICK FIXED IT. 7.7 h CLEAN AND COUNTING — BUT THE BUILD IS UNVERIFIED FROM HERE. HANDOFF SHIPPED TO THE PC.**
+✅ **MEASURED THIS MORNING (08-29 08:37→08:47):** FC **booted 01:11:01, uptime 459 min = 7.66 h, 0 reboots**,
+**SD card baseline 0 fault logs — CLEAN** (it held 3 on 08-25 ⇒ the card was cleared, presumably with the flash).
+Load is REAL not idle: camera + `/scan` + `/scan_3d` + wheel odometry up, `throttled=0x0`, 51 °C.
+🔑 **Against median 5.4 min / p90 73 min, 7.7 h clean under load is STRONG SIGNAL, not noise** (§29.2:
+P(quiet ≥8 h)=0.0%, longest fault-era gap ever 7.3 h). ⛔ **BUT THE BAR IS 8 CONTINUOUS h AND WE WERE ~21 min SHORT
+WHEN THIS WAS WRITTEN. DO NOT RECORD "SOLVED" UNTIL 480 min.** Precedent: 3 withdrawn fixes (§20 charger,
+§25.1 USB, §29.3 SD reformat) were each declared on a shorter quiet window.
+✅ **SOAK RELAUNCHED DETACHED 08:37:21 (pid 712835, `soak_detached_20260829.out`)** — it had been **DEAD since
+08-26 22:39**, so nothing was counting during the whole quiet window. ⇒ **the 7.7 h is uptime+card evidence,
+not soak-counted evidence.** Say that when quoting it.
+🔴🔴 **THE BUILD IS NOT VERIFIABLE FROM THE COMPANION — THE CHERRY-PICK IS NOT IN OUR TREE.** `~/PX4-Autopilot`
+on `pxlabs-fw`: **`git cat-file 9f4bc800` STILL FAILS (never fetched)**, `boards/px4/fmu-v6xrt/src/init.c`
+mtime **2025-08-03 untouched**, HEAD still `a52c38b07d`, **no build dir**. ⚠️ **`flight_sw_version` reads
+`1.17.0` — a cherry-pick onto v1.17.0 reports THE SAME, so the version string CANNOT discriminate.**
+⇒ **The flash came from the PC's tree. 3 questions only the PC can close: (1) which tree + git hash (2) the
+DLL VALUE LOGGED AT BOOT vs our ROM's `ASLVSEL=12/AREFSEL=11` (§39 free check — seconds, soak-independent)
+(3) was the card cleared by the flash.**
+✅ **HANDOFF WRITTEN AND PUSHED (`codex-work` `4c9ed19`, master):**
+ · **`fc_hardfault_handoff_20260829.md`** — the full record for the PC to turn into PX4-repo content:
+   symptom at scale, the elimination table (every suspect + the measurement that killed it), the live SWD
+   catch, the FlexSPI register table, the #27735 evidence match, the analysis traps, §12 = suggested shape.
+ · **`pxlabs_release_note_v1.17.0-r2.1.md`** — paste-ready `PXLABS.md` changelog + the 3 table updates +
+   GitHub tag short form. **Carries two deliberate `<FILL>` fields (calibrated DLL value, soak hours)
+   so it CANNOT be published as "fixed" without the evidence.**
+ · **`COORDINATION.md`** — `[COMPANION]` entry with the 3 questions for the PC.
+🔑 **NAMING: operator said "17.0.0 2.1.0"; fork convention (r1 / r2-Beta) ⇒ I used `pxlabs-v1.17.0-r2.1`
+and flagged the alternative in the note. PC picks one and uses it in tag + OEM string + all 3 tables.**
+🔑 **THE ONE WARNING PUT IN FRONT OF EVERYTHING: `LOCKED ≠ CENTRED`.** §35 read `STS2` = both DLL lock bits
+set and crossed the DLL off for two days. The lock bits say it locked, NOT where in the read window it landed.
+⚠️ `rover-autonav-mode` reads **failed** — operator says autonav + other services are deliberately removed
+for this testing. **Not a fault, don't debug it.**
