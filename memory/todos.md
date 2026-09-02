@@ -5,11 +5,11 @@
 
 ## ⏭⏭ NEXT SESSION (2026-09-03) — AGREED WITH THE OPERATOR 09-02. DO THESE TWO FIRST.
 
-### 1. FINISH THE HARDFAULT PURGE
-**The full list — 5 paths to delete, 2 paths to KEEP and why, the prose still to trim, 2 open git
-decisions — is the RESUME-HERE block at the top of [[fc_hardfaults]].** Open that file, work the
-list, don't re-derive it. 🔑 **Operator asked TWICE: keep the RESOLUTION only (cause → fix → how to
-verify the fix is in → pointer to `HARDFAULT.md`). RCA narrative is NOT wanted.**
+### 1. ⛔ HARDFAULT PURGE — **DROPPED BY THE OPERATOR 2026-09-03. Do not raise it again.**
+The handoff doc was deleted and pushed (`codex-work` `489c126`); the rest of the RESUME-HERE list in
+[[fc_hardfaults]] stays undone **on purpose**. Leftovers are disk clutter, not risk — the one real
+hazard is noted there (`~/fc_firmware` holds the **PRE-FIX** build; never reflash from it).
+🔑 **Focus from 09-03 is AUTONAV** — see the NEXT list below, starting with (b) gate safety on `/scan`.
 
 ### 2. ✅ COMPACT `MEMORY.md` — **DONE 2026-09-02. 21 542 → 17 375 B (cap 17 408), 79 lines.**
 **No entries were dropped** — every one was grep-verified present after the edit. Method used, if it

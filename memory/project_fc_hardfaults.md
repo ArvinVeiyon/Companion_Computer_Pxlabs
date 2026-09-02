@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b80d31dc-3854-48b9-81c3-8a01be477e0a
-  modified: 2026-09-01T19:42:16.789Z
+  modified: 2026-09-02T18:44:47.461Z
 ---
 
 # FC HARDFAULTS — ✅ CLOSED 2026-08-29. **DO NOT REOPEN.**
@@ -14,7 +14,12 @@ metadata:
 analysis docs and all 8 tools were **deleted 2026-09-02 at the operator's instruction.**
 **Nothing below is a live investigation. Do not start one, and do not try to reconstruct one.**
 
-## ⏭ RESUME HERE 2026-09-03 — THE PURGE IS ONLY HALF DONE
+## ⛔ THE PURGE WAS DROPPED BY THE OPERATOR 2026-09-03 — DO NOT WORK THE LIST BELOW
+**"stop about the hardfault thing; from next we focus on AutoNav."** The handoff doc was deleted and
+pushed (`codex-work` `489c126`); everything else below stays as-is **on purpose**. Keep this file for
+the one live hazard only: **`~/fc_firmware` holds the PRE-FIX build — never reflash from it.**
+
+## 🗄 (ARCHIVED) RESUME-HERE LIST — NOT A TODO ANY MORE
 
 **The operator asked TWICE (09-02) to cut this down to "what resolved it and how" — RCA/analysis
 narrative is NOT wanted. Pass 1 ran; pass 2 was interrupted before executing. Finish it.**
