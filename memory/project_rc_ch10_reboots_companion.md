@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 6126dc14-53e8-400a-80c4-99e8d59e8dbf
-  modified: 2026-08-16T09:26:52.778Z
+  modified: 2026-09-01T18:43:00.609Z
 ---
 
 # The "uXRCE connection reboots the companion" symptom is RC CH10 — 2026-08-16
@@ -47,11 +47,11 @@ Every boot ended via `systemd-reboot.service` (**clean, software-requested**) �
   `ExternalShutdownException` is just the node being SIGTERM'd *by* the shutdown. Reading them as
   the cause wastes a session. → [[test_before_concluding]]
 
-## 🔴 SUSPECT THE 08-16 "FC HARDFAULT LOOP, ≥9 reboots" ENTRY
-`todos.md` item (c) records `wq:uavcan` stack overflow with "≥9 reboots 08-16". **Today's ~14
-reboots were the COMPANION, RC-triggered.** Before doing any FC firmware work, **re-check which
-device each of those reboots belonged to** — the count may have been pooled across two devices.
-Do not swap or reflash the FC on the strength of that number alone. → [[independent_rulers]]
+## ✅ RESOLVED — the 08-16 reboot count WAS pooled across two devices
+The ~14 reboots on 08-16 were the **COMPANION**, RC-triggered. Separately the **FC** really was
+faulting — cause found 2026-08-29 (FlexSPI DLL read strobe, → [[fc_hardfaults]]), unrelated to CH10.
+🔑 **The lasting lesson: two devices reboot, one ledger — always ask WHICH DEVICE each reboot
+belonged to before counting.** → [[independent_rulers]]
 
 **Why:** the reboot arrives on the DDS link, so it *correlates perfectly* with plugging the UART in
 and points every hypothesis at the transport. The actual cause is a physical switch on the RC

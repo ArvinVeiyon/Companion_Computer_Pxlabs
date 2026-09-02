@@ -1,91 +1,97 @@
 ---
 name: fc_hardfaults
-description: "FC hardfaults CLOSED 2026-08-29 — cause was the FlexSPI DLL read strobe, fixed by PX4 PR #28141; 2 items still open"
+description: "FC hardfaults CLOSED 2026-08-29 — cause was the FlexSPI DLL read strobe, fixed by PX4 PR #28141; all local evidence deleted 2026-09-02, record lives in HARDFAULT.md"
 metadata: 
   node_type: memory
   type: project
-  originSessionId: 42e05df1-d455-448f-b77b-66b31270019f
-  modified: 2026-08-29T04:09:13.870Z
+  originSessionId: b80d31dc-3854-48b9-81c3-8a01be477e0a
+  modified: 2026-09-01T19:42:16.789Z
 ---
 
-# FC HARDFAULTS — ✅ CLOSED 2026-08-29
+# FC HARDFAULTS — ✅ CLOSED 2026-08-29. **DO NOT REOPEN.**
 
-**This file is the RESULT only.** The 1715-line debugging campaign was deliberately flushed on
-2026-08-29 at the operator's instruction. **Nothing below is a live investigation — do not resume one.**
+**This file is the RESULT only.** The campaign file, the 62 raw fault logs, the soak data, both
+analysis docs and all 8 tools were **deleted 2026-09-02 at the operator's instruction.**
+**Nothing below is a live investigation. Do not start one, and do not try to reconstruct one.**
+
+## ⏭ RESUME HERE 2026-09-03 — THE PURGE IS ONLY HALF DONE
+
+**The operator asked TWICE (09-02) to cut this down to "what resolved it and how" — RCA/analysis
+narrative is NOT wanted. Pass 1 ran; pass 2 was interrupted before executing. Finish it.**
+
+**⏭ STILL TO DELETE (found on the 2nd sweep, all confirmed hardfault-RCA only):**
+- `~/fc_faults_backup_20260821_220223` — 1.2 MB, 27 fault logs
+- `~/fc_faults_ftp` — empty dir
+- `~/fc_firmware` — 62 MB, the **PRE-FIX** `CLEAN_v1.17.0-2.0.0` bin/elf/px4. ✅ **VERIFIED
+  RECOVERABLE** from `pxlabs/pxlabs-v1.17.0-2.0.0` → `pxlabs/PXLabs_Firmware/*.{bin,elf,map,px4}`.
+  🔑 It is the FAULTY build — keeping it is a reflash hazard, not an asset.
+- `~/pyocd-venv` — 77 MB, the SWD analysis rig (its catch tools are already gone ⇒ orphaned)
+- `/etc/udev/rules.d/99-cmsis-dap.rules` — inert once the venv goes (needs sudo)
+
+**⛔ DO NOT DELETE — these are NOT hardfault RCA (judgment call, flag it if the operator disagrees):**
+`~/fc_param_backups` (192 KB, 7 PX4 param files — MEMORY.md actively cites these) ·
+`~/fc_ulogs` (11 MB, 13 flight logs — general vehicle data).
+
+**⏭ THEN TRIM THE PROSE** in this file, `MEMORY.md` and `todos.md` §"FC HARDFAULTS" down to:
+symptom signature → cause → fix → how to verify the fix is in → pointer to `HARDFAULT.md`.
+**Cut the two lessons, the open-items section and the SWD rig block** unless the operator says keep.
+
+**⏭ ONE GIT DECISION STILL OPEN (operator's call, do not act unasked):**
+1. ✅ **DONE 2026-09-02** — `ros2_ws` deletions **COMMITTED** as `68f6280` on
+   `fix/collision-perception-health-gate` (4 files, 1400 deletions), then **ff-merged to `main` and
+   PUSHED** — all four refs at `68f6280`. The deletions net to zero against old main (added and
+   removed on the same branch), so no trace of the evidence survives in the merged tree.
+2. `codex-work`: the memory edits + the deleted handoff are **uncommitted and unpushed** (backup is
+   manual by design). The **1715-line campaign file still lives in git history at `e67fb32`** — only
+   a history rewrite removes it.
 
 ## The answer
 
-**CAUSE:** the i.MX RT1176 **boot ROM does not CENTRE the FlexSPI DLL delay** that samples the octal-NOR
-DQS read strobe. The app runs **XIP at 200 MHz octal DDR** (the most timing-critical mode the part offers),
-so an off-centre sampling point made instruction fetches fail rarely and randomly ⇒ **the CPU executed
-words that were not what is stored in flash.**
+**CAUSE:** the i.MX RT1176 **boot ROM does not CENTRE the FlexSPI DLL delay** that samples the
+octal-NOR DQS read strobe. The app runs **XIP at 200 MHz octal DDR** (the most timing-critical mode
+the part offers), so an off-centre sampling point made instruction fetches fail rarely and randomly
+⇒ **the CPU executed words that were not what is stored in flash.**
 
-**FIX:** PX4 **PR #28141** (Peter van der Perk, NXP; merged 2026-08-04; commit `9f4bc80006c`; ONE file
+**FIX:** PX4 **PR #28141** (Peter van der Perk, NXP; merged 2026-08-04; ONE file
 `boards/px4/fmu-v6xrt/src/init.c`). A RAM-resident boot routine sweeps the DLL delay and picks the
 **midpoint of the widest passing range**.
 
-**SHIPPED:** flying build **`860013bab7`**, released as **`v1.17.0-2.1.0`** with `HARDFAULT.md` at the repo
-root of `ArvinVeiyon/PXLABS_PX4-Autopilot`.
-⛔ **`flight_sw_version` reads `1.17.0` WITH OR WITHOUT the fix — it cannot discriminate. Verify by GIT HASH.**
+**SHIPPED:** flying build **`860013bab7`**, released as **`v1.17.0-2.1.0`**.
+⛔ **`flight_sw_version` reads `1.17.0` WITH OR WITHOUT the fix — it cannot discriminate.
+VERIFY BY GIT HASH.**
 
-**PROOF (instrument-counted, `tools/fc_soak.py`):** 2026-08-29 09:11:49 IST — **480.7 min = 8.01 h, single
-boot (01:11:02), 0 reboots, 0 fault logs**, card baseline clean, under real load (uXRCE-DDS + EKF2 + camera
-+ `/scan` + `/scan_3d` + wheel odometry). Bar was 8 h because the fault-era distribution (38 gaps) gave
-**median 5.4 min, p90 73 min, longest quiet gap ever 7.3 h, P(quiet ≥ 8 h) = 0.0%.**
+**PROOF:** 2026-08-29 — **8.01 h on a single boot, 0 reboots, 0 fault logs**, under real load
+(uXRCE-DDS + EKF2 + camera + `/scan` + `/scan_3d` + wheel odometry). The bar was 8 h because the
+fault-era distribution gave **median 5.4 min, p90 73 min, longest-ever quiet gap 7.3 h,
+P(quiet ≥ 8 h) = 0.0%**.
 
 ## The two lessons worth carrying
 
-🔑🔑 **`LOCKED ≠ CENTRED`.** I read FlexSPI `STS2` = both DLL lock bits set and `DLLCR 0x00400079` matching
-NXP's recommended ≥100 MHz setting, called the read path "correctly configured", and **struck the DLL off
-the suspect list for two days.** The lock bits say the DLL locked; they say **nothing about where in the
-read window it landed.** My own caveat sentence ("locked and per-recommendation ≠ has margin at this
-temperature on this board") was the load-bearing one and I under-weighted it against a table of
-correct-looking registers.
+🔑🔑 **`LOCKED ≠ CENTRED`.** FlexSPI `STS2` showed both DLL lock bits set and `DLLCR 0x00400079`
+matched NXP's recommended ≥100 MHz setting, so I called the read path "correctly configured" and
+**struck the DLL off the suspect list for two days.** The lock bits say the DLL locked; they say
+**nothing about where in the read window it landed.**
 
-🔑 **"4 FCs / 2 sites / USB-only moved the rate by NOTHING" was the CLUE, not the mystery.** I read it as
-"hardware eliminated ⇒ must be our config" and never asked the right question: *what is identical across
-every board?* Answer: the boot ROM. **When swapping the hardware changes nothing, suspect what the hardware
-all shares.**
+🔑 **"4 FCs / 2 sites / USB-only moved the rate by NOTHING" was the CLUE, not the mystery.** I read
+it as "hardware eliminated ⇒ must be our config" and never asked: *what is identical across every
+board?* Answer: the boot ROM. **When swapping the hardware changes nothing, suspect what the
+hardware all shares.**
 
-## ⏭ Still open — NOT covered by "resolved"
+## ⚠️ Two things "resolved" did NOT cover — now un-evidenced by choice
 
-1. **`g_dll_cal` HAS NEVER BEEN READ** — the direct mechanism evidence is still missing. Symbol at
-   **`0x20252774`** (BSS, 12 B) in build `860013bab7`. **The MCU-Link is UNPLUGGED** (no `1fc9:0143`, no
-   `/dev/ttyACM*`). Ask the operator to reseat, then `--connect attach` (read-only, PX4 undisturbed) and
-   read `g_dll_cal` + `FLEXSPI1 DLLCR/STS2 @ 0x400CC000` against the **pre-fix ROM baseline `ASLVSEL=12 /
-   AREFSEL=11`** (`STS2 = 0x00000b33`, `DLLCR = 0x00400079`). ⛔ Don't accept the 57 MB ELF — the symbol
-   address is enough. The PC side will fold the value into `HARDFAULT.md`.
-2. **uXRCE-DDS NULL-DEREF is untouched by this.** 15 `DACCVIOL` in the corpus, 7 with `MMFAR` at small
-   offsets from NULL (`0x00,04,08,0a,0c,14,20`), **4 in `ucdr_serialize_esc_status`**; also
-   `ucdr_serialize_vehicle_local_position` / `_vehicle_odometry` / `_input_rc`. Its base rate was far below
-   the DLL population, so **8 h of absence proves nothing about it.** Worth its own upstream issue.
+1. **`g_dll_cal` was never read** — direct mechanism evidence was never captured. Still reachable
+   via SWD if it ever matters (symbol `0x20252774` in build `860013bab7`; MCU-Link + `pyocd` in
+   `~/pyocd-venv`, target `mimxrt1170_cm7`, **always `--connect attach`** — anything else resets a
+   flying FC). ⚠️ The catch tooling is deleted and the probe is unplugged.
+2. **A uXRCE-DDS NULL-DEREF was seen in the same corpus and is untouched by this fix** (`DACCVIOL`
+   at small offsets from NULL, several in `ucdr_serialize_esc_status`). Its base rate was far below
+   the DLL population, so **the 8 h soak proves nothing about it.** ⚠️ **The 62-log corpus that
+   evidenced it is deleted** — if it ever recurs, it starts from zero.
 
-## SWD rig — keep, it is what open item 1 needs
+## The only surviving record
 
-NXP MCU-Link (CMSIS-DAP, `1fc9:0143`) on the companion + **pyocd 0.45.1 in `~/pyocd-venv`** (venv; system
-python untouched), target **`mimxrt1170_cm7`**, **ALWAYS `--connect attach`** (anything else resets/halts a
-flying FC).
-⛔ udev rule MUST be named `99-*` — a `50-*` file gets its MODE reset by `50-udev-default.rules` ⇒ "No
-available debug probes". udev also preserves perms on an already-enumerated node: replug after installing.
-🔑 **ONE PROBE = ONE SESSION** — a second concurrent `pyocd` call returns EMPTY OUTPUT, not an error.
-🔑 Reusable attach cross-check: `ARM_PLL_CTRL 0x40C84200` must read `0x200060A6` (→ 996 MHz). Use it to
-prove any attach + base address before trusting a register read.
-⚠️ Probe USB is flaky — reseat the cable before blaming the target.
-⛔ Only if a *catch* is ever re-armed (`tools/fc_fault_catch.py`): `--vc-all` is mandatory, because with a
-probe attached an uncaught fault **cannot reboot** (SYSRESETREQ inhibited) and **wedges** in
-`up_systemreset()`; cure is `pyocd ... -O reset_type=hw -c reset` (a plain reset does not work).
+**`HARDFAULT.md`** at the repo root of **`ArvinVeiyon/PXLABS_PX4-Autopilot`**, branch/tag
+**`pxlabs-v1.17.0-2.1.0`** (`244afd0`). 191 lines: symptom at scale, the full ruled-out table, the
+live SWD catch signature, the soak numbers, and the open items. **Go there — do not re-derive.**
 
-## Where the full record lives — go here instead of re-deriving anything
-
-| What | Where |
-|---|---|
-| **The 1715-line campaign file** (all 41 sections, every eliminated suspect) | `git show e67fb32:memory/project_fc_hardfaults.md` in `~/codex-work` |
-| **The write-up handoff** — symptom at scale, elimination table, live SWD catch, FlexSPI registers, #27735 match, analysis traps | `~/codex-work/fc_hardfault_handoff_20260829.md` |
-| **Published record** | `HARDFAULT.md`, repo root of `ArvinVeiyon/PXLABS_PX4-Autopilot` |
-| 62-log resolution report | `~/ros2_ws/docs/fc_fault_resolution_20260826.md` |
-| Earlier analysis doc | `~/ros2_ws/docs/fc_hardfault_analysis.md` |
-| Raw evidence | `~/fc_faults/` (62 logs), `~/fc_faults/caught/` (3 live SWD catches), `~/fc_soak/` |
-
-⚠️ **One trap that survives in the raw logs:** 48 of the 62 are firmware `a52c38b0…`; **14 are `f0889f3d…`
-and we have no ELF for them.** Resolving those against our ELF yields confident nonsense. `Build datetime`
-reads identically on both — **trust the git hash, not the datetime.**
+Related: [[debug_before_documenting]], [[test_before_concluding]], [[independent_rulers]].

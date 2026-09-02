@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ed82ad73-5296-4ccf-a23b-4d17a56b063d
-  modified: 2026-08-22T02:23:00.143Z
+  modified: 2026-09-01T19:29:42.434Z
 ---
 
 # Working on this machine — what the manuals do not cover
@@ -27,6 +27,21 @@ ghost `/camera/*` nodes for minutes after a stop (08-22).
 applies to any *detector*: prove the detector itself was live across the window (the
 `create_participant` FC-reboot detector was blind for the whole 08-21 soak because
 `microxrce-agent` was stopped with the stack). → [[fc_hardfaults]]
+🔴 **09-02: the `ros2` CLI ITSELF is an unreliable ruler here.** `ros2 topic hz /scan` and
+`ros2 topic echo /scan --once` BOTH returned nothing while `rover-scan` + `rover-camera` logged
+perfectly healthy and `topic list` showed the topic registered. ⛔ **`--no-daemon` is NOT a valid
+flag on `topic hz`** (arg error — it exists on `list`/`echo` only), so the usual workaround does
+not apply. **Result: the FPV video's `/scan` cost went UNMEASURED.** Don't call `/scan` dead on CLI
+silence — reach for a ruler that isn't the ros2 CLI. → [[independent_rulers]]
+
+## Proving `vision_streaming` is ACTUALLY streaming (not just `active`)
+✅ **09-02 method, fast and decisive:** `pgrep -af "[f]fmpeg"` should show the encoder at **~110% CPU**,
+and `printf '<pw>\n' | sudo -S ss -unap | grep 5602` should show **`wfb-server` bound on 5602**
+receiving the RTP. Encoder live + radio path bound = genuinely streaming.
+⛔ **Do NOT use `/proc/<pid>/io` `wchar`** — RTP goes out via `sendto`, which does **not** increment
+it. You will see ~200 B/s (just the `-progress pipe:1` output) and wrongly conclude the stream is
+dead. 🔑 The node resolves the camera by ID, so a `/dev/videoN` shift is normal and handled: it
+logged "conf says `/dev/video0`, resolved to `/dev/video8`" and worked.
 
 ## Domains, tools, access
 ⚠️ **Replays need `ROS_DOMAIN_ID=42`; the LIVE stack is domain 0.**

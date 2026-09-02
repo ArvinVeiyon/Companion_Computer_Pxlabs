@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 6daf144e-af4b-4b5f-9eaf-ca7a2efa94a8
-  modified: 2026-08-16T18:44:15.943Z
+  modified: 2026-09-01T19:01:41.228Z
 ---
 
 **Repeated `mavlink_shell.py` invocations wedge the FC's MAVLink instance.** Observed 2026-08-16
@@ -19,13 +19,13 @@ Confirmed by enumerating `tcp:127.0.0.1:5760`: only `(255,190) HEARTBEAT` (the G
 🔑 **The FC was ALIVE the whole time. Only its MAVLink instance was dead.** Do not read "GCS lost
 MAVLink" as "FC crashed".
 
-🔑 **It was NOT a hardfault** — after recovery `ls /fs/microsd` showed no `fault_*.log`. Per
-`docs/fc_hardfault_analysis.md` §7.3 a hardfault ALWAYS commits a log; this committed none. This is
-the same "different failure" class as the 14:57/15:05 restarts already noted in that doc.
+🔑 **It was NOT a hardfault** — after recovery `ls /fs/microsd` showed no `fault_*.log`, and
+**a hardfault ALWAYS commits a log**; this committed none. Different failure class entirely.
+(The 08-16 hardfaults are closed and unrelated → [[fc_hardfaults]].)
 
-**Why:** PX4 has very few MAVLink/FTP sessions and does not free them when the client exits — the
-hardfault doc already warned of this for FTP. Every failed/hung `mavlink_shell.py` leaks one until
-the instance stops serving.
+**Why:** PX4 has very few MAVLink/FTP sessions and does not free them when the client exits — this
+was already known to bite FTP. Every failed/hung `mavlink_shell.py` leaks one until the instance
+stops serving.
 
 **How to apply:**
 - ⛔ **Budget ONE `mavlink_shell.py` session per FC boot.** If a call returns an empty result, STOP —
