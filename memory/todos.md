@@ -3,7 +3,20 @@
 
 ---
 
-## ⏭⏭ NEXT SESSION (2026-09-03) — AGREED WITH THE OPERATOR 09-02. DO THESE TWO FIRST.
+## ⏭⏭ NEXT SESSION (2026-09-04) — AUTONAV. START HERE.
+**Stack is UP and verified as of 09-04 00:10** (`/scan` 25.9 · `/scan_3d` 28.8 · `/odom` 49.9 Hz,
+heading source CAMERA GYRO). ⚠️ **It was ALL DEAD when this session started while every unit read
+`active` — re-verify rates before assuming, and remember the camera restart alone does NOT revive
+`/scan` or `/odom`.** → [[project_rover_autonav]] 09-04
+1. 🔑 **OPERATOR ACTION FIRST: park the rover SQUARE and CLOSE to a flat, featureless wall.**
+   Nothing else can proceed. Then `python3 ~/ros2_ws/tools/wall_probe.py --scans 40 --overhang`
+   (✅ the tool now exists — it never did before 09-04).
+2. Correct the camera roll in TF while the camera is off its mount, restart `rover-odometry` to
+   re-lock the gyro TF, then re-verify `front_overhang` (0.337) and the `/scan` scale (0.9845).
+3. Only then: localization — live `camera_info` vs the calibration inside `house_map_v4.db`.
+⛔ **No moving test until 1–2 are done.**
+
+## (previous) NEXT SESSION (2026-09-03) — AGREED WITH THE OPERATOR 09-02.
 
 ### 1. ⛔ HARDFAULT PURGE — **DROPPED BY THE OPERATOR 2026-09-03. Do not raise it again.**
 The handoff doc was deleted and pushed (`codex-work` `489c126`); the rest of the RESUME-HERE list in

@@ -1101,3 +1101,56 @@ just with speed — addr 10 dropped only 31.4% zeros while spun *slower* than ad
 which a pure low-speed effect predicts backwards. Also queued: read `si_motor_poles` /
 `si_gear_ratio` / `si_wheel_diameter` from **all four** ESCs in VESC Tool (confirms R = 2, no vehicle
 movement), and an **open-loop throttle sweep** to identify `RO_MAX_THR_SPEED` properly.
+
+## 2026-09-04 — AutoNav resumed: the whole perception stack was DEAD, and the gating tool did not exist
+Session was "prepare and continue AutoNav". Nothing about AutoNav itself got tested, because the
+bring-up check failed at step one. Both findings are the useful output.
+
+### 1. 🔴 `tools/wall_probe.py` NEVER EXISTED — now written (`ros2_ws` `b52d732`)
+`autonav_reference.md` §14 and `setup_manual.md` §E4 have cited it as **the** wheel-independent
+ruler since 08-14, and there was no such file and **nothing in git history**. So the 08-16
+camera-rotation recovery — the item gating every moving test — was blocked on a tool that was not
+there. ⚠️ **Two manuals citing a thing is not evidence the thing exists; `ls` it.**
+Written passive (subscribes `/scan` only, never arms): RANSAC + total-least-squares line fit,
+deterministic sampling, reports perpendicular distance · wall-normal bearing · fit RMS · inlier
+fraction · sector coverage, and judges its own run (coverage < 0.35 reflex gate, RMS > 10 mm,
+sd > 5 mm, > 2° off square).
+**First run, 40/40 scans fitted:** `1.6260 m sd 5.0 mm · bearing −7.88° · RMS 5.4 mm ·
+coverage 0.80 · inliers 0.30` ⇒ correctly reporting **the rover is NOT parked square** (it is not).
+⏭ **THE ACTUAL NEXT ACTION: operator parks the rover SQUARE and CLOSE to a flat featureless wall,
+then re-run.** Everything camera-referenced waits on that.
+
+### 2. 🔴 THE CAMERA HAD BEEN DEAD FOR HOURS AND EVERY UNIT READ `active`
+Measured before touching anything: **depth 0.0 Hz · colour 0.0 Hz · `/scan` 0.0 Hz**, after ~23 h
+of uptime. `systemctl is-active` said `active` for all six rover units — the documented lie (D2).
+🔑 **The tell in the journal:** `Depth registration is on but this frameset was not aligned (no
+usable align target); dropping its depth image and point cloud` — that guard fires when the
+frameset arrives **without a usable colour frame**, so a dead COLOUR stream silently kills depth,
+the cloud, `/scan`, `/scan_3d` and localization together.
+🔑🔑 **RESTARTING `rover-camera` IS NOT ENOUGH — and this is the part that will bite again.**
+After the camera restart: depth **26.9 Hz**, colour **20.7 Hz**, alignment OK — but **`/scan` was
+still 0.0 Hz** and `/odom` still silent. The downstream nodes do not recover on their own.
+**Restart order that actually worked:** `rover-camera` → `rover-scan` + `rover-scan-3d` →
+`rover-odometry`. Result: `/scan` **25.9 Hz** · `/scan_3d` **28.8 Hz** · `/odom` **49.9 Hz**.
+⚠️ `rover-odometry` matters most: while the camera was dead it logged **"camera gyro unavailable —
+falling back to FC attitude"**, i.e. it had quietly demoted itself to the heading source known to
+invent 23° in 21 s. After the restart: **`heading source: CAMERA GYRO`, bias +0.7303 °/s** — which
+independently corroborates §5's +0.72 °/s.
+
+### 3. Smaller facts measured today
+- **`UAVCAN_ENABLE = 3`, not 0** — MEMORY.md's "(silent again while `UAVCAN_ENABLE=0`)" was wrong.
+  `/odom` was silent because the NODE needed restarting, not because of CAN.
+- `/scan` frame is **`camera_depth_frame`**, spans **−46.1..+46.7°** over **640 rays**;
+  276 rays fall in the ±20° reflex sector.
+- New warning worth watching: `camera stamp clock runs at 0.9835x wall clock — every integrated
+  angle is scaled by this factor` (21:40, while the camera was dying). §5 records the camera clock
+  at **+0.0022%**, so 0.9835 is ~1.65% out and appeared only as the camera failed. **If it recurs
+  on a HEALTHY camera it invalidates every integrated gyro angle — check it before the wall run.**
+- Vehicle was **DISARMED** (`arming_state 1`, `nav_state 4`, no failsafe) throughout. Nothing moved.
+- `ros2 topic list` returned an INCOMPLETE list (no `/scan`, `/odom`, `/tf`) while
+  `count_publishers()` found publishers on all of them — the CLI-is-an-unreliable-ruler trap again.
+  ⚠️ `/proc/<pid>/io` is ALSO a weak ruler here: DDS shared-memory writes do not move `wchar`.
+
+⏭ **RESUME HERE:** park square → `wall_probe.py` → correct the roll in TF → restart
+`rover-odometry` → re-verify `front_overhang` + `/scan` scale → then localization
+(`camera_info` vs the calibration baked into `house_map_v4.db`). ⛔ No moving test before that.
