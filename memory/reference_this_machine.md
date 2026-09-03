@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ed82ad73-5296-4ccf-a23b-4d17a56b063d
-  modified: 2026-09-03T18:15:00.456Z
+  modified: 2026-09-03T18:56:04.653Z
 ---
 
 # Working on this machine — what the manuals do not cover
@@ -49,6 +49,14 @@ logged "conf says `/dev/video0`, resolved to `/dev/video8`" and worked.
 ✅ **I can read/write PX4 params myself:** `python3 ~/ros2_ws/tools/set_param.py NAME [value]`
 (refuses while armed). **Don't ask the operator to read QGC.** ⚠️ writes are **RAM ONLY** —
 finish with `param save`. 🔑 autopilot is `1:1`; never read vehicle state from the GCS at `255:190`.
+
+## Sessions survive the link (09-04)
+✅ **`tmux`/`screen`/`byobu` were ALREADY installed** — nothing to install; what was missing was
+using them. **Long jobs go in `tmux new -As rover`** (bags, replay-maps, floor tests) or they die
+with the SSH link. `~/.tmux.conf` = 50 k scrollback + mouse + `aggressive-resize`.
+✅ **sshd now probes dead peers** — `ClientAliveInterval 30` / `CountMax 4` in
+`/etc/ssh/sshd_config.d/60-keepalive.conf` (was 0 = never probe, so dead sessions parked).
+🔑 **That reaps the SESSION, not the WORK — it makes tmux MORE necessary.** → setup_manual §E4b
 
 ## Interfaces (09-03) — the names in the older docs are WRONG
 🔑 **Uplink is `wlx8c86dd5beed9`** (static `192.168.1.240/24`, route metric 50) — measured 09-03 as

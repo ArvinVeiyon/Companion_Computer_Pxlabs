@@ -4,6 +4,7 @@ etc/udev/rules.d/99-usb-cameras.rules
 etc/systemd/system/wifibroadcast@drone.service
 etc/ssh/sshd_config
 etc/ssh/sshd_config.d/50-cloud-init.conf
+etc/ssh/sshd_config.d/60-keepalive.conf
 etc/pam.d/sshd
 etc/netplan/50-cloud-init.yaml
 etc/netplan/60-eth0-recovery.yaml
@@ -35,4 +36,5 @@ etc/systemd/system/block-traffic.service
 boot/firmware/config.txt
 etc/systemd/system/ollama.service
 home/roz/.bashrc
+home/roz/.tmux.conf
 home/roz/.claude/projects/-home-roz/memory/MEMORY.md
