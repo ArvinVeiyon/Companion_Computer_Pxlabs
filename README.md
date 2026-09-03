@@ -32,9 +32,11 @@ Companion computer configuration, service files, and living documentation for th
 | `/dev/ttyAMA3` | STL-19 lidar (RX-only, disabled — unit with other team) | 230400 |
 | `/dev/ttyAMA4` | FC uXRCE-DDS → MicroXRCEAgent | 921600 |
 
-**Network (2026-07-25):** mgmt/internet uplink = external USB RTL8821CU `wlx90de80d824d6`, static
-`192.168.1.240/24` (SSID `Nilan`). Onboard `wlan0` is out of netplan (link DOWN) — see
-`system_companion.md` §6 *Network* for the caveat about `dtoverlay=disable-wifi`.
+**Network (2026-09-03):** mgmt/internet uplink = `wlx8c86dd5beed9`, static `192.168.1.240/24`
+(SSID `Nilan`) — measured 09-03 as a **TP-Link Archer T2U PLUS `2357:0120` (RTL8821AU)** on
+`rtl88xxau_wfb`, **not** the RTL8821CU / `wlx90de80d824d6` this file used to name.
+Onboard `wlan0` is **gone**, not merely down — `dtoverlay=disable-wifi-pi5` is live and
+`brcmfmac` is unloaded. Wired last resort on `eth0` (see below). Detail: `system_companion.md` §4.
 
 **Key Services:**
 | Service | Role |
@@ -70,6 +72,14 @@ Relay (`vind-rly`) bridges WFB-NG to the ground station:
 - GCS also SSHes relay directly (port 22) for WFB mode control via `wfb-rlyctl`
 - See `system_companion.md` §15 (GCS Interface) and `Setup_Procedure_for_Relay_Station.docx`
 - Relay docs: `ArvinVeiyon/Relay_Station_Pxlabs` (mirror at `~/codex-relay-mirror`)
+
+## Reaching the companion when the radio is down
+
+Every remote path above rides WFB, and there is no onboard Wi-Fi to fall back to. Since 2026-09-03
+`eth0` is a wired last resort: plug a cable in and use `ssh roz@10.10.10.10` (laptop side static
+`10.10.10.20/24`) or `ssh roz@Vind-Roz.local` (works with the laptop left on "automatic").
+It cannot disturb the normal uplink — DHCP route metric 300 vs the uplink's 50 — and boot never
+waits on it. Detail: `system_companion.md` §4/§8, `ros2_ws/docs/setup_manual.md` §E5b.
 
 ## PX4 MAVLink Utility
 

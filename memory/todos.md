@@ -127,7 +127,12 @@ Attempted 2026-07-11, aborted mid-install — see `project_relay_ntp_setup.md` a
 **`lsmod | grep brcmfmac` returns EMPTY**, and `ip -br link` shows **NO `wlan*` interface at all** —
 only `eth0` (DOWN), the two WFB NICs `wlx782288d98f91` / `wlx782288d993c0`, the uplink
 `wlx90de80d824d6`, and the `drone-wfb` tunnel. `config.txt:76 dtoverlay=disable-wifi-pi5` is live.
-🔴 **THERE IS NO ONBOARD WI-FI FALLBACK ANY MORE. Recovery is WFB → relay:2222 ONLY.**
+🔴 **THERE IS NO ONBOARD WI-FI FALLBACK ANY MORE.** Remote recovery is WFB → relay:2222.
+✅ **09-03: "ONLY" NO LONGER HOLDS — `eth0` is now a WIRED fallback:** plug a cable →
+`ssh roz@10.10.10.10` (laptop `10.10.10.20/24`) or `roz@Vind-Roz.local`. Boot never waits on it
+(`optional` + `RequiredForOnline=no`), DHCP metric 300 can't outrank the uplink's 50.
+⚠️ **CABLE-UNTESTED.** ⚠️ the uplink named on line 129 is stale — it is `wlx8c86dd5beed9`.
+→ setup_manual §E5b
 ⚠️ Boot-clock trap recurred at this reboot: `uptime -s` said 10:23, `who -b` said 07-25, and
 `vision_streaming`'s 9h12m duration implies a third value. **Don't correlate journals across it.**
 
@@ -431,6 +436,10 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
    not exist) + `lsmod | grep brcmfmac` (empty). **TODO #2 stays open until this passes.**
 2. **Establish what NIC RELAY-STN actually has.** `wlx90de80d824d6` is on the companion now, so the
    relay's documented uplink is gone and `.221` does not answer. See [[project_relay2_relaystn]].
+   🔴 **09-03: `wlx90de80d824d6` IS NOT ON THE COMPANION EITHER — `0bda:c811` is absent from
+   `lsusb`.** The companion uplink is a **TP-Link Archer T2U PLUS `2357:0120` (RTL8821AU)** =
+   `wlx8c86dd5beed9`. **So that adapter is loose/elsewhere — find the physical hardware before
+   planning around it.** → [[project_boxb_pcie_usb]], [[reference_this_machine]]
 3. **Fit the printed camera bracket, then run the 4-step as-built check** at the foot of
    `ros2_ws/launch/depth_to_scan.launch.py` (measure to the left IR imager, re-derive pitch/roll from
    `/camera/accel/sample`, restart rover-scan, tape-measure a `/scan` return). **Blocks L5.**

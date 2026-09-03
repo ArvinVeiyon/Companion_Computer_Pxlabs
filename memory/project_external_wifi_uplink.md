@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 711b1827-1cb0-4b8c-bdac-d95d7be22cd4
-  modified: 2026-07-30T18:07:54.063Z
+  modified: 2026-09-03T18:16:16.435Z
 ---
 
 2026-07-25: Closing the enclosure (metal top plate → Faraday effect) killed/weakened the RPi5 onboard WiFi (`wlan0`, brcmfmac BCM4345). Added an **external USB adapter** as the primary management uplink.
@@ -62,3 +62,27 @@ Reboot verification finally happened (boot 2026-07-30 22:41:45). **It still did 
 
 ### (superseded, and see the correction above) Onboard wlan0 DISABLED 2026-07-25 (was: finalizes TODO #2): wlan0 = phy0 = brcmfmac (USB adapters are phy1/2 rtl88x2eu WFB, phy3 rtw_8821cu = this uplink). (1) removed wlan0 stanza from netplan (commented) + `ip link set wlan0 down` → out of routing immediately, only .240 default route remains. (2) added `dtoverlay=disable-wifi` to `/boot/firmware/config.txt` (beside existing `disable-bt`; backup `.bak.*`) → firmware-level removal of onboard radio, kills 5GHz WFB ch161 interference. **Rebooted 2026-07-25 to finalize** — after reboot wlan0 no longer exists; uplink = wlx90de80d824d6 @ 192.168.1.240. rfkill NOT installed on this box. Supersedes [[feedback_wlan0_persistent_name]] wifi0-rename plan (radio now gone entirely).
 - Note: onboard wlan0 still weakly associated (192.168.1.208, metric 600) during apply — marginal, not fully dead, but external wins routing. Relates to TODO #2 (disable onboard wifi0/ex-wlan0, 5GHz WFB interference).
+
+### ✅ 2026-09-03 — the "no fallback if the RTL8821CU fails" gap is CLOSED (wired)
+The worry stated twice above — *if the external adapter ever fails there is no onboard-Wi-Fi
+fallback, recover via WFB → relay:2222* — no longer describes the box. **`eth0` is now a third,
+independent way in**, and it does not depend on any radio: plug a cable →
+`ssh roz@10.10.10.10` (laptop side static `10.10.10.20/24`) or `ssh roz@Vind-Roz.local`
+(avahi/mDNS; works with the laptop left on "automatic", which link-locals to 169.254.x on both ends).
+- Config `/etc/netplan/60-eth0-recovery.yaml` + a `RequiredForOnline=no` drop-in under
+  `/etc/systemd/network/10-netplan-eth0.network.d/` — netplan's `optional: true` did **not** emit
+  that key on this version, so I added it by hand.
+- **It cannot hijack the uplink:** DHCP route metric **300** vs the uplink's **50**.
+- ⚠️ **Address exists only while carrier is present.** Empty `ip -br addr show eth0` with no cable
+  in is CORRECT. Judge it by `networkctl status eth0` → `State: routable`.
+- ⚠️ **CABLE-UNTESTED as of 09-03** — the address bind was proven by forcing
+  `ConfigureWithoutCarrier=yes` temporarily, not by plugging anything in.
+- 🔴 **NOT JUST A NAME CHANGE — THE ADAPTER ITSELF WAS SWAPPED.** This whole file is about an
+  **RTL8821CU `0bda:c811` = `wlx90de80d824d6`**. Measured 09-03: **that device is not in `lsusb`
+  at all.** The live uplink is a **TP-Link Archer T2U PLUS `2357:0120` (RTL8821AU)** on driver
+  **`rtl88xxau_wfb`**, syspath `4-2`, as **`wlx8c86dd5beed9`** — carrying the same
+  `.240`/metric-50 netplan stanza, which is why nothing looked broken.
+  ⚠️ **So the "leave the `wlx90de80d824d6` stanza in place as the fallback" plan (line 23) is
+  DEAD** — that stanza is commented out and its hardware is gone. **Find the physical RTL8821CU
+  before planning around it.** → [[project_boxb_pcie_usb]], [[reference_this_machine]],
+  setup_manual §E5b

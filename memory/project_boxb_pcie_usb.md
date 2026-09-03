@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cf514875-1225-439c-98e9-08753257c44a
-  modified: 2026-07-25T05:21:53.988Z
+  modified: 2026-09-03T18:15:49.047Z
 ---
 
 # BOX-B PCIe→USB3.2 expansion — link training failure (OPEN, started 2026-07-19)
@@ -78,6 +78,23 @@ Earlier note "one WFB NIC on BOX-B, the other on RP1 native" was WRONG. Full acc
 - **RPi5 onboard RP1 USB** (controllers `xhci-hcd.0/.1`) carries the other two:
   - LG Smart Cam / FPV (30c9:009d) → Bus 4, syspath 4-2, 480M
   - RTL8821CU internet uplink (0bda:c811) → Bus 6, syspath 6-2, 480M → `wlx90de80d824d6`
+
+### 🔴 RE-WALKED 2026-09-03 — FOUR of the lines above are now WRONG
+Whole tree re-measured with `lsusb -t` + sysfs. **Everything on the BOX-B/RP1 split still holds;
+the per-device rows do not.** Current truth:
+| Device | Bus / syspath | Name |
+|---|---|---|
+| Orbbec Gemini 336L `2bc5:0807` | Bus 2, **`2-4`** (was 2-3), 5000M | — |
+| WFB NIC `0bda:a81a` | **`1-1.1`** | **`wlx782288d98f91`** (doc had these two SWAPPED) |
+| WFB NIC `0bda:a81a` | **`1-1.3`** (was 1-1.2) | **`wlx782288d993c0`** |
+| LG Smart Cam `30c9:009d` | Bus **6**, `6-2` (was Bus 4) | FPV |
+| **TP-Link Archer T2U PLUS `2357:0120` (RTL8821AU)** | Bus **4**, `4-2` | **`wlx8c86dd5beed9`** uplink, `rtl88xxau_wfb` |
+
+🔴 **THE UPLINK ADAPTER WAS PHYSICALLY SWAPPED AND NO DOC CAUGHT IT** — `0bda:c811` (RTL8821CU,
+`wlx90de80d824d6`) **is not in `lsusb` at all**. Same `.240`/metric-50 netplan, different silicon
+and a different driver. ⛔ **Never key anything on a syspath or NIC name from this file — re-walk
+the tree.** (The 480M-is-not-a-fault conclusion below survives: RTL8821AU is USB 2.0 silicon too.)
+→ [[reference_this_machine]]
 - **KEY: 480M on the Realtek radios is NOT a fault or a wrong-port issue.** Both `0bda:a81a`
   (RTL8812AU, WFB pair) and `0bda:c811` (RTL8821CU, uplink) are **USB 2.0 silicon** — 802.11ac ≠ USB3.
   480M is their inherent ceiling regardless of port. Moving the uplink to a USB3 port gains nothing.

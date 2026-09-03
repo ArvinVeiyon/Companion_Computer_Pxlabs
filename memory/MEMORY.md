@@ -21,7 +21,7 @@
 ⚠️ **`pkill -f <pat>` MATCHES MY OWN SHELL** (⇒ self-kill, exit 144). Use `pgrep -x` / `pgrep -f "[p]attern"` then `kill <pid>`.
 🔴 **I AM A MAJOR CPU CONSUMER — BUDGET FOR IT:** `claude` runs **55-86% of a core**. Power check = `vcgencmd get_throttled` (0x0 clean).
 ✅ **I can read/write PX4 params myself:** `python3 ~/ros2_ws/tools/set_param.py NAME [value]`. **Don't ask the operator to read QGC.**
-📄 **Measurement hygiene · `cpu_catcher.sh` · "prove the DETECTOR was live too" → `this_machine`.** ⚠️ **Boot clock WRONG until NTP steps it.** ⚠️ **Replays = `ROS_DOMAIN_ID=42`, live = 0.**
+📄 **Measurement hygiene · `cpu_catcher.sh` · "prove the DETECTOR was live too" → `this_machine`.** 🔴 **EVERY NIC NAME/SYSPATH IN THE DOCS IS STALE — the uplink ADAPTER was swapped (`lsusb` first).** ⚠️ **Boot clock WRONG until NTP steps it.** ⚠️ **Replays = `ROS_DOMAIN_ID=42`, live = 0.**
 
 ## [CURRENT STATE — ARMED SUCCESSFULLY 08-10 (S1); the old "NEVER ARMED" is WITHDRAWN]
 ✅ **08-21 CAN IS BACK — MEASURED:** `esc_status` live, `esc_count 4`, **flags 15**, 24.67 V, errorcount 0 ⇒ **"CAN GONE / rover IMMOBILE" is WITHDRAWN; todos (a)(d)(f)(h) UNBLOCKED.** ⚠️ **flags=15 is BUS PRESENCE, not motion — re-verify `/odom` under wheel motion** (silent again while `UAVCAN_ENABLE=0`).

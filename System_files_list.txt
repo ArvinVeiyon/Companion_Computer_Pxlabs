@@ -6,6 +6,8 @@ etc/ssh/sshd_config
 etc/ssh/sshd_config.d/50-cloud-init.conf
 etc/pam.d/sshd
 etc/netplan/50-cloud-init.yaml
+etc/netplan/60-eth0-recovery.yaml
+etc/systemd/network/10-netplan-eth0.network.d/10-no-wait-online.conf
 etc/mavlink-router/main.conf
 etc/systemd/system/ros2_px4_translation_node.service
 etc/systemd/system/rc_control_node.service

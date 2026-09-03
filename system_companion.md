@@ -242,17 +242,29 @@ optional secondary cam ────────────┘    PiP overlay
 - The `192.168.1.100` / `192.168.1.215` / ZeroTier UDP endpoints are **commented out** in the live
   `main.conf` (verified 2026-07-26) — kept as reference blocks only
 
-**Network (updated 2026-07-25):**
+**Network (updated 2026-09-03):**
 - WFB tunnel drone side: `10.5.5.87/24` (`drone-wfb`)
 - WFB tunnel relay side: `10.5.5.77/24`
-- **Mgmt / internet uplink: external USB RTL8821CU `wlx90de80d824d6`, netplan STATIC
-  `192.168.1.240/24` on SSID `Nilan`, route metric 50** — this is the PRIMARY uplink
-- **Onboard Wi-Fi (`wlan0`, brcmfmac): removed from netplan → link is DOWN and never associates.**
-  ⚠️ **The `dtoverlay=disable-wifi` in `/boot/firmware/config.txt` is NOT in effect** (verified after
-  the 2026-07-26 07:57 boot: `wlan0` still exists and `brcmfmac` is still bound). Cause: the line
-  carries a **trailing `#` comment on the same line** — `config.txt` has no inline-comment support,
-  so the whole remainder is parsed as part of the overlay name and the overlay is silently dropped.
-  Fix = put the comment on its own line above it. Until then the radio is present but idle.
+- **Mgmt / internet uplink: `wlx8c86dd5beed9`, netplan STATIC `192.168.1.240/24` on SSID `Nilan`,
+  route metric 50** — this is the PRIMARY uplink.
+  🔴 **THE ADAPTER WAS SWAPPED AND THIS DOC MISSED IT.** Measured 09-03: it is a **TP-Link Archer
+  T2U PLUS, `2357:0120`, RTL8821AU**, on driver **`rtl88xxau_wfb`**, at USB syspath **`4-2`**.
+  It is **not** the RTL8821CU this doc claimed — `0bda:c811` does not appear in `lsusb` at all,
+  and `wlx90de80d824d6` (that adapter's MAC-derived name) is commented out in
+  `50-cloud-init.yaml`. **Read `ip -br addr` + `lsusb`, never an adapter name out of a doc.**
+- **Onboard Wi-Fi (`wlan0`, brcmfmac): GONE — not merely down.** ✅ Verified 09-03:
+  `ip -br link` shows **no `wlan*` at all** and `lsmod | grep brcmfmac` is **empty**.
+  `/boot/firmware/config.txt:76 dtoverlay=disable-wifi-pi5` is live and in effect.
+  🔑 The Pi 5 needs the **`-pi5`** variant; plain `disable-wifi.dtbo` is silently ignored on
+  this board, which is why this was twice recorded as done while the radio was still up.
+- **`eth0` — WIRED RECOVERY FALLBACK, added 09-03** (`/etc/netplan/60-eth0-recovery.yaml`):
+  `optional`, so an unplugged cable never delays boot. DHCP (**route metric 300**, so it can
+  never outrank the uplink's 50) + IPv4 link-local + static **`10.10.10.10/24`**.
+  Direct cable → `ssh roz@10.10.10.10` (laptop side `10.10.10.20/24`) or
+  `ssh roz@Vind-Roz.local` (avahi, works with the laptop left on "automatic").
+  ⚠️ The address exists **only while carrier is present** — an empty `ip -br addr show eth0`
+  with no cable in is correct, not a fault. **Cable-untested as of 09-03.**
+  Full procedure: `ros2_ws/docs/setup_manual.md` §E5b.
 - WFB NICs (`/etc/default/wifibroadcast`): `WFB_NICS="wlx782288d993c0 wlx782288d98f91"` — both
 - ROS2 DDS: multicast blocked on WFB interface (block-traffic.service)
 
@@ -751,6 +763,21 @@ the relay phase) — relay `N` (60 normal / 120 for channel/bandwidth), companio
   EOF
   ```
 
+**Cannot reach the companion at all (WFB down AND Wi-Fi uplink down):**
+- There is **no onboard Wi-Fi** to fall back to — the radio is gone at device-tree level (§4).
+- **Plug an Ethernet cable into `eth0`**, then, in order of what the far end offers:
+
+  | Far end | Companion address | Connect with |
+  |---|---|---|
+  | Laptop, static `10.10.10.20/24` | `10.10.10.10/24` | `ssh roz@10.10.10.10` |
+  | Laptop on "automatic" (no DHCP server) | `169.254.x.x` link-local | `ssh roz@Vind-Roz.local` |
+  | Router / phone tether | DHCP lease (metric 300) | whatever it hands out |
+
+- Verify with `networkctl status eth0` → expect `State: routable`. ⚠️ Do **not** judge it by
+  `ip -br addr` before the cable is in: no carrier means no address, by design.
+- Config: `/etc/netplan/60-eth0-recovery.yaml` + `RequiredForOnline=no` drop-in under
+  `/etc/systemd/network/10-netplan-eth0.network.d/`. Detail: `setup_manual.md` §E5b.
+
 **Companion cannot control vehicle:**
 - Confirm arming rules and OFFBOARD enable
 - Check failsafe and mode switching
@@ -932,6 +959,9 @@ G-Control.exe  (Windows GCS, 10.5.6.50)
 **SSH user on companion:** `roz`
 **Password source:** keyring / env `PXLABS_COMPANION_PASSWORD`
 **Relay tunnel:** `ssh-tunnel-to-companion.service` (autossh) on vind-rly — always must be running for GCS→companion SSH to work.
+⚠️ **Both branches above ride WFB.** If WFB is down, G-Control has no path at all — the wired
+`eth0` fallback (§4, §8) is a **manual laptop-at-the-rover** recovery, not something `pxlabs_cli`
+can probe or select.
 
 ### Binaries Called on Companion (must exist)
 

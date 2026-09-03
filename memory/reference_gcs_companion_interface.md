@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: e79112a7-c1a7-4e17-b896-f229835ddaf4
+  modified: 2026-09-03T18:13:02.427Z
 ---
 
 # GCS ↔ Companion Interface (PXLABS G-Control)
@@ -34,6 +35,12 @@ G-Control.exe (Windows GCS, 10.5.6.50)
 **RELAY IS ALWAYS IN THE MIDDLE** — `ssh-tunnel-to-companion.service` on vind-rly must be running.
 SSH user on companion: `roz`
 Password: from keyring / env PXLABS_COMPANION_PASSWORD
+
+⚠️ **BOTH branches ride WFB** — PRIMARY and "FALLBACK" are not independent; if WFB is down,
+G-Control has **no path at all**, and `pick_companion_host()` will probe both and fail.
+✅ **09-03: `eth0` wired recovery exists** — `ssh roz@10.10.10.10` (laptop `10.10.10.20/24`) or
+`roz@Vind-Roz.local`. ⛔ **It is a laptop-at-the-rover procedure, NOT a path the GCS can select** —
+don't add it to `pick_companion_host()` expectations. → setup_manual §E5b
 
 ---
 
