@@ -51,7 +51,9 @@ Ruled out with evidence: int14 overflow (`math::interpolate` clamps at MAX; RC o
 
 `110 + 8082 = 8192` → neutral **exactly 4096**, no reliance on the VESC ±0.02 deadband. Peak command 0.973 at each end (~2.7 % of max current; invisible unloaded). Disarmed still sends 0, so the guard still stops the motors.
 
-Verified: full reverse −1514/−1513/−1568/−1534 rpm; neutral-armed 0 rpm / 0.00 A (identical to pre-fix baseline). **Bench only** — not yet driven on ground. Recorded in `ros2_ws/docs/rc_configuration.md` and `setup_manual.md §A7`.
+Verified: full reverse −1514/−1513/−1568/−1534 rpm; neutral-armed 0 rpm / 0.00 A (identical to pre-fix baseline). **Bench only** — not yet driven on ground. Recorded in [`rc_configuration.md`](rc_configuration.md) (this repo) and in `setup_manual.md` §A7,
+which remains in the **`ros2_ws`** repo (`ArvinVeiyon/ros2_ws`, `docs/setup_manual.md`) as the canonical
+parameter changelog.
 
 **These values must stay until Item B below is landed and verified.** After that, Item D restores `10 / 8191`.
 
