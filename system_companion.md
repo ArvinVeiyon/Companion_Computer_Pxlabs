@@ -1322,3 +1322,9 @@ To add a new service to the GCS Services panel, add it to `COMPANION_SERVICES` l
 **2026-09-03 21:43**
 - M	System_files/etc/vision_streaming.conf
 - M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+**2026-09-04 21:42**
+- A	System_files/etc/netplan/60-eth0-recovery.yaml
+- A	System_files/etc/ssh/sshd_config.d/60-keepalive.conf
+- A	System_files/etc/systemd/network/10-netplan-eth0.network.d/10-no-wait-online.conf
+- M	System_files/home/roz/.claude/projects/-home-roz/memory/MEMORY.md
+- A	System_files/home/roz/.tmux.conf

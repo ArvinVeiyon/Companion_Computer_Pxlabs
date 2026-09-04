@@ -1,0 +1,41 @@
+# Emergency wired fallback — added 2026-09-03.
+#
+# WHY: the companion has NO onboard Wi-Fi fallback (wlan0 is disabled at the
+# device-tree level, see 50-cloud-init.yaml). If WFB and the external RTL8821CU
+# uplink are both down, there is otherwise no way in. This gives eth0 three
+# independent ways to come up, in one interface, with no boot-time cost.
+#
+#   1. DHCP        - plug into any router / phone-tether / laptop sharing.
+#                    route-metric 300 so it can NEVER outrank the Wi-Fi uplink
+#                    (metric 50) while that uplink is alive.
+#   2. link-local  - 169.254.x.x if there is no DHCP server. A laptop set to
+#                    "automatic" does the same, so a direct cable works with
+#                    ZERO configuration on either end:
+#                        ssh roz@Vind-Roz.local      (avahi/mDNS is enabled)
+#   3. static      - always present, deterministic, needs no name resolution:
+#                        ssh roz@10.10.10.10
+#                    (laptop side: static 10.10.10.20/24, no gateway needed)
+#
+# 10.10.10.10 is deliberately trivial to remember under pressure - laptop side
+# is 10.10.10.20. It collides with nothing in use: 192.168.1.0/24 = LAN uplink,
+# 10.5.5.0/24 = WFB/relay tunnel, 10.5.7.0/24 = relay cluster plan, and it
+# leaves 10.41.10.0/24 (the PX4 ethernet default) free for a future wired FC
+# link instead of spending it here.
+#
+# optional: true  -> boot never waits on a cable that is not plugged in.
+#
+# To revert: rm this file, then `sudo netplan generate && sudo networkctl reload`.
+
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      optional: true
+      dhcp4: true
+      dhcp4-overrides:
+        route-metric: 300
+      link-local:
+        - ipv4
+      addresses:
+        - 10.10.10.10/24
