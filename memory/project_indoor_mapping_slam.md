@@ -500,3 +500,57 @@ inside `house_map_v4.db`. Cheap, stationary, needs no FC and no clear floor.
 5-minute comparison could save.
 
 Related: [[perception_3d_costmap]] · [[rover_autonav]] · autonav_reference §13/§14 · setup_manual §E3
+
+---
+
+# §17 — 2026-09-04: THE LOCALIZATION FAULT IS REAL AND IT IS GEOMETRIC, NOT VISUAL
+
+**Adjudicated by replaying `~/map_run_20260809_185011` — the bag `house_map_v4.db` was BUILT from —
+back through `rtabmap_localization.yaml` on a COPY of the map** (`ROS_DOMAIN_ID=42`, `use_sim_time`,
+rtabmap started 20 s before playback so it restores the DB first). Recipe kept in the scratch script
+`replay_reloc.sh`; it is the strongest possible test because it removes viewpoint as a variable.
+
+## RESULT: 0 accepted / 20 rejected over 649 processed frames
+| inliers | attempts | |
+|---|---|---|
+| **0** | 17 | `Vis/MinInliers` = **12** |
+| 6 / 7 / 9 | 1 each | best ever reached = **9** |
+
+**2D matches are plentiful — median 56, min 29, max 92.** So appearance retrieval works and
+**geometric verification is what fails.** Fed its own source images from the pose that created map
+node 1, it still cannot verify. ⇒ **NOT a viewpoint/coverage problem. NOT "the rover is somewhere
+unmapped."** A systematic depth error would CANCEL between map and replay (same images, same
+pipeline) and still verify — so the surviving explanation is that **the map's 3D features and the
+localization-time features are built under DIFFERENT PARAMETERS.**
+
+## ❌ HYPOTHESES KILLED BY MEASUREMENT — do not re-propose
+1. **`camera_info` mismatch** (the #1 queued suspect). Map-build bag and live are **IDENTICAL to 4
+   decimals**: `640x360`, fx **304.0501**, fy **304.2317**, cx **322.6317**, cy **183.7952**, frame
+   `camera_color_optical_frame`, `plumb_bob` D all-zero.
+   🔴 **THE DOCS' `fx=fy=409.85 @ 848x480` IS STALE** — that is the UNREGISTERED depth path. With
+   `depth_registration:=true` depth is resampled into the COLOUR frame at 640x360. **Anything derived
+   from 409.85 is computed off the wrong intrinsics — including the `scan_height: 40` ⇒ ±2.79° figure.**
+2. **Corrupt / feature-less map.** `Data` 740 rows, **740 with image, 740 with depth**; `Feature`
+   **615 983 rows, EVERY ONE with non-null `depth_x/y/z`**. Node 333 = 917 features, all 3D,
+   plausible ranges (~0.7-0.8 m). The map is intact.
+3. **Missing live depth.** `/camera/depth/image_raw` 16UC1 640x360: **56.7% valid in the top-65% ROI**
+   (307-5331 mm, median 416). Bottom 35% is 5.5% valid — that is the rover's own top plate, which is
+   exactly what `Kp/RoiRatios "0 0 0 0.35"` masks. Working as designed.
+
+## ⏭ NEXT LEAD (untested): DB-inherited parameters
+**RTAB-Map inherits parameters from the database**, and `rtabmap_localization.yaml` already documents
+one case where that bit (`Grid/DepthRoiRatios` at 640x360 leaves 234 rows, not divisible by
+`Grid/DepthDecimation=4`). Compare what `house_map_v4.db` baked in against the localization YAML —
+**`Kp/DetectorStrategy` + descriptor first** (a detector/descriptor mismatch gives exactly this
+signature: words still match, 3D never verifies), then `Kp/RoiRatios` vs `Vis/RoiRatios`.
+Read it with `rtabmap-info <db>`. ⚠️ `sqlite3` CLI is NOT installed — use python `sqlite3`.
+
+⛔ **DO NOT "FIX" THIS BY LOWERING `Vis/MinInliers` TO 6-9.** That manufactures acceptances at exactly
+the confidence that produced the FALSE 08-02 map (38 loop closures accepted with rejection disabled,
+34 of which failed the check). The threshold is not the bug until the inlier distribution says so,
+and a distribution of 17x0 says the opposite.
+
+⚠️ **MEASUREMENT CAVEAT:** the bag player logged repeated `Message queue starved` — a 6.6 GB bag off
+the SD card while RTAB-Map saturates the CPU. Timestamps come from the bag under `--clock` so pairing
+should hold, but **if a future run's numbers look marginal, re-run with `--read-ahead-queue-size`
+before concluding anything.**

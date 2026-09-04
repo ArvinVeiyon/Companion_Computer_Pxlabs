@@ -3,7 +3,91 @@
 
 ---
 
-## ⏭⏭ NEXT SESSION (2026-09-04) — AUTONAV. START HERE.
+# 🎯 REQUIREMENTS REALIGNMENT — 2026-09-04. **READ THIS BEFORE PICKING UP ANY ITEM BELOW.**
+> Why: the requirements live in `docs/rover_autonav_requirements.md` (R1-R7), the goals in
+> `docs/autonomy_plan.md` (M0-M4 modes, L0-L5 layers, A1-A9 features, S/T tests) — and **this file
+> tracked neither.** Most of the list below is radio/vision/hardware; **most of the unbuilt
+> requirements had no todo at all.** This section is the bridge. Everything under the old headings
+> stays valid as detail, but is no longer the plan.
+
+## 0. LADDER OWNERSHIP — settled, stop re-deriving it
+| Scheme | Means | Status |
+|---|---|---|
+| **M0-M4** (`autonomy_plan.md` §5) | **what the rover DOES for a user** — the GOAL ladder | ✅ authoritative |
+| **L0-L5** (`autonomy_plan.md` App. A+B) | **capability layers we must BUILD** | ✅ authoritative |
+| **R1-R7** (`rover_autonav_requirements.md` §3) | **the requirements themselves** | ✅ authoritative |
+| ~~L0-L7~~ (`rover_autonav_requirements.md` §4 build order) | env-first bring-up order | 🗄 **RETIRED — it is the third scheme.** L0-L4 all closed; its L5/L6/L7 are just M2/M3/the S+T tests. Do not plan off it. |
+
+✅ **DOC FAULT CLOSED 09-04: "the L0-L5 ladder appears TWICE in `autonomy_plan.md`" (flagged 08-10)
+is NOT a duplication.** Appendix A = *what to build*, Appendix B = *definition of done*. They agree
+layer-for-layer (L0 ✅ · L1 🔧 · L2-L5 ❌). Nothing to resolve, nothing to delete.
+
+## 1. WHERE WE ACTUALLY ARE AGAINST THE REQUIREMENTS
+| Req | State | The one thing blocking it |
+|---|---|---|
+| **R1** localization | 🔴 **DEAD** — 1213 rejected / **0 accepted** (08-16) | live `camera_info` vs the calibration inside `house_map_v4.db` → **G1** |
+| **R2** perception | ✅ `/scan` · 🔧 `/scan_3d` exists but **nothing consumes it** | voxel layer + reflex `scan_topic` → **G4** |
+| **R3** planning | 🔧 `nav2_forward.yaml`/`nav2_mapped.yaml` written, **never run** | the ROOM (~2 m² free vs 0.41 m² rover) → **G3** |
+| **R4** control bridge | ✅ built · 🔴 **speed commands not honoured** (0.05→0.140, 0.25→~0.9) | open-loop `RO_MAX_THR_SPEED` sweep → **G2** |
+| **R5** safety | ✅ 1,2,3 proven · ❌ **R5.4 stopping buffer unverified** · ❌ **R5.5 companion-crash disarm NEVER TESTED** | **G2** / **G6** |
+| **R6** compute ≤2.0 cores | ❌ **never measured as a total** — and RTAB-Map + voxel go on top | **G4** gate |
+| **R7** frames | 🔴 broken — **camera physically rotated, roll uncorrected** | `wall_probe.py` → **G0** |
+
+🔑 **R1's stated acceptance ("<0.3 m over a 20 m loop") CANNOT BE RUN HERE** — same room constraint
+that blocks T2. It needs a corridor or a re-scope; that is an operator decision, see **G3**.
+🔴 **R1 doc conflict, unfixed in the source:** `rover_autonav_requirements.md` R1 still names
+**`slam_toolbox`**; `autonomy_plan.md` §2.2 superseded it with **RTAB-Map** and that is what is
+actually configured (`rtabmap_localization.yaml`). The requirements doc is the stale one.
+
+## 2. 🔴 REQUIREMENTS THAT WERE TRACKED **NOWHERE** UNTIL NOW
+Not late — **never filed.** These are the actual product, and none of them is a hardware problem:
+- **N1. `/rover_health` monitor (L2, A9).** Level + reason string, never a bare boolean. Every row of
+  its watch-table is a failure this project already hit **and only caught by hand** (`eph` 682 m ·
+  ESC doze · CPU-starvation latch · yaw 21× command). ⇒ **mandatory for unattended.**
+- **N2. Supervisor / decision layer (L3).** Owns the mission above Nav2; Nav2 has no answer to
+  "blocked, now what" and both its recoveries are disabled here (blind at 92°). ⇒ **L3 IS the
+  unattended milestone** — the first stage that changes what the OPERATOR must do.
+- **N3. Waypoint sequencer (A6).** Drive a LIST of goals. Small node. Gates M3 "patrol".
+- **N4. Return to base (A8).** ⚠️ **NOT inheritable from PX4** — RTL targets a **GPS** home and on
+  this rover drives there with **zero obstacle avoidance**. Must be built in N2.
+- **N5. Failsafe policy decisions — design only, no hardware, nothing started:**
+  `NAV_RCL_ACT=6` (**disarm**) is right for the bench and **wrong for a mission** · lost-localization
+  → stop+hold **does not exist** · no-route-to-goal **does not exist** · battery-low → return
+  **not configured**. → `autonomy_plan.md` §6.
+- **N6. R5.5 companion-crash disarm** — PX4 offboard-timeout behaviour, never bench-tested.
+- **N7. R6 total CPU budget** — measure the whole stack against ≤2.0 cores **before** adding
+  RTAB-Map or the voxel layer. ⚠️ **budget for `claude` itself: 55-86% of a core.**
+
+## 3. THE REALIGNED ORDER — gates, not a wish list. Each one unblocks the next.
+**G0 — GEOMETRY TRUTH.** ⛔ *Nothing may move until this closes.* Operator parks the rover square +
+close to a flat wall → `wall_probe.py --scans 40 --overhang` → correct roll in TF **while the camera
+is off its mount** → restart `rover-odometry` (re-locks the gyro TF) → re-verify `front_overhang`
+0.337 and `/scan` scale 0.9845. **Fixes R7; un-suspects every camera-referenced constant.**
+**G1 — LOCALIZATION ALIVE (R1).** Live `camera_info` vs `house_map_v4.db`'s calibration. 🔑 **Adjudicate
+on the ACCEPTED-FIX COUNT — a changing `map→odom` with 0 accepted is drift, not health.** ⛔ Do not
+re-map the house first.
+**G2 — MOTION TRUTH (R4, R5.4, T1).** Open-loop `RO_MAX_THR_SPEED` sweep (d) · ESC zero-dropout (a) ·
+`si_motor_poles` (h) · **(b) gate safety on `/scan` clearance, not `/odom`** · then **T1**.
+⛔ Gate every moving test on MEASURED speed, never the command.
+**G3 — VENUE DECISION → M2 PROVEN.** ⏭ **OPERATOR CALL, still open:** corridor (recommended) ·
+re-scope T2 to 0.8 m · or drop this room as the M3 target. Then **T2 → T3 → T4 → T5** = M2 done.
+⚠️ T3+ need turning, so **S3 (yaw open/closed) gates them.**
+**G4 — 3D PERCEPTION (R2/A5) + N7.** Wire `/scan_3d` into a Nav2 `voxel_layer` and flip the reflex's
+`collision.scan_topic` (#27 — **needs one low object `/scan` misses** as the proof). Measure R6 first.
+**G5 — N1 `/rover_health` (L2).** Faults **INJECTED**, not waited for; 8 checkboxes in App. B.
+**G6 — N2+N3+N4+N5+N6 (L3) → M3.** The unattended milestone.
+**G7 — M4 outdoor.** O1-O5 + the **mission-ownership decision** (PX4 vs Nav2 — `roadmap.md` picked
+Nav2; decide it consciously **before** building, it sets whether RTL is PX4's or ours).
+
+## 4. ⏸ PARKED — real, but NOT on the requirements critical path. Do not let these set the agenda.
+WFB block (**only action left is HW: reseat drone NIC-A ant0**) · vision_streaming node fixes (8b,
+07-30 item 3) · camera bitrate / v2.3.0 · multicam Phase D · doc-fix items (#5 ch157→ch161, P5
+kill-switch doc) · #7 aide.db · #17 delete `camera_sw_node_obsolute.py` · #14 PAT rotation
+(🔴 **except the operator browser-revoke, which stays live**).
+
+---
+
+## ⏭⏭ NEXT SESSION (2026-09-04) — AUTONAV. START HERE. **= G0 then G1 above.**
 **Stack is UP and verified as of 09-04 00:10** (`/scan` 25.9 · `/scan_3d` 28.8 · `/odom` 49.9 Hz,
 heading source CAMERA GYRO). ⚠️ **It was ALL DEAD when this session started while every unit read
 `active` — re-verify rates before assuming, and remember the camera restart alone does NOT revive
