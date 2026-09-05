@@ -78,3 +78,15 @@ dtoverlay=uart0
 dtoverlay=uart2
 dtoverlay=uart3-pi5
 dtoverlay=uart4
+
+# 2026-09-05: Waveshare RS485 CAN HAT (rev 2.1, 12 MHz crystal) -> MCP2515 on spi0.0 (CE0=GPIO8),
+# INT on GPIO25. Bus is 1 Mbit to match PX4 UAVCAN_BITRATE=1000000 and VESC can_baud_rate=3
+# (CAN_BAUD_1M). Purpose: DroneCAN firmware update of the four VESCs (node IDs 10-13).
+# NOTE: config.txt has NO inline-comment support - keep the dtoverlay line free of trailing "#".
+# NOTE: SPI0 takes GPIO8/9, so dtoverlay=uart3-pi5 (STL-19 lidar, ttyAMA3) loses the pins and
+# does not probe. That was ALREADY true before this line - dtparam=spi=on is set at line 12.
+# VERIFY AFTER REBOOT WITH:  ip -details link show can0   (must exist)
+# NOT with "lsmod | grep mcp251x" alone - the module can load without the device binding.
+# 2026-09-06: 10000000 gave "MCP251x didn't enter in conf mode after reset", probe err=110.
+# RP1 SPI on the Pi 5 clocks differently from BCM2835; 10 MHz is the MCP2515 ceiling. Trying 1 MHz.
+dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=1000000
