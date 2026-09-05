@@ -1,0 +1,89 @@
+### comm/comm_can.c:1337-1352 -- UAVCAN mode discards every frame (why VESC Tool over CAN is impossible)
+static THD_FUNCTION(cancom_process_thread, arg) {
+	(void)arg;
+
+	chRegSetThreadName("CAN process");
+	process_tp = chThdGetSelfX();
+
+	for(;;) {
+		chEvtWaitAny((eventmask_t)1);
+
+		if (app_get_configuration()->can_mode == CAN_MODE_UAVCAN) {
+			continue;
+		} else if (app_get_configuration()->can_mode == CAN_MODE_COMM_BRIDGE ||
+				app_get_configuration()->can_mode == CAN_MODE_UNUSED) {
+			CANRxFrame *rxmsg_tmp;
+			while ((rxmsg_tmp = comm_can_get_rx_frame(0)) != 0) {
+				CANRxFrame rxmsg = *rxmsg_tmp;
+
+### comm/comm_can.c:648-652 -- ping refuses outside CAN_MODE_VESC
+bool comm_can_ping(uint8_t controller_id, HW_TYPE *hw_type) {
+#if CAN_ENABLE
+	if (app_get_configuration()->can_mode != CAN_MODE_VESC) {
+		return false;
+	}
+
+### conf_general.c:436-467 -- stored mcconf is a RAW STRUCT + CRC; mismatch silently wipes to defaults
+__attribute__((section(".text2"))) void conf_general_read_mc_configuration(mc_configuration *conf, bool is_motor_2) {
+	bool is_ok = true;
+	uint8_t *conf_addr = (uint8_t*)conf;
+	uint16_t var;
+	unsigned int base = is_motor_2 ? EEPROM_BASE_MCCONF_2 : EEPROM_BASE_MCCONF;
+
+	for (unsigned int i = 0;i < (sizeof(mc_configuration) / 2);i++) {
+		if (EE_ReadVariable(base + i, &var) == 0) {
+			conf_addr[2 * i] = (var >> 8) & 0xFF;
+			conf_addr[2 * i + 1] = var & 0xFF;
+		} else {
+			is_ok = false;
+			break;
+		}
+	}
+
+	// check CRC
+#ifdef TEST_BAD_MC_CRC
+	conf->crc++;
+#endif
+	if(conf->crc != mc_interface_calc_crc(conf, is_motor_2)) {
+		is_ok = false;
+//		mc_interface_fault_stop(FAULT_CODE_FLASH_CORRUPTION_MC_CFG, is_motor_2, false);
+		fault_data f;
+		f.fault = FAULT_CODE_FLASH_CORRUPTION_MC_CFG;
+		terminal_add_fault_data(&f);
+	}
+
+	if (!is_ok) {
+		confgenerator_set_defaults_mcconf(conf);
+	}
+}
+
+### canard_driver.c:147-153 -- new-app area size ceiling
+#define FLASH_SECTORS			12
+#define BOOTLOADER_BASE			11
+#define APP_BASE				0
+#define APP_SECTORS				7
+#define NEW_APP_BASE			8
+#define NEW_APP_SECTORS			3
+#define NEW_APP_MAX_SIZE		(3 * (1 << 17))
+
+### canard_driver.c:225-234 -- the ENTIRE DroneCAN parameter table (8 params, no mcconf)
+static param_t parameters[] =
+{
+	{"can_baud_rate", 		AP_PARAM_INT8,   0,   0,   8,   CAN_BAUD_500K},
+	{"can_status_rate_1",	AP_PARAM_INT32,  0,   0, 1000,  50},
+	{"can_status_rate_2",	AP_PARAM_INT32,  0,   0, 1000,  5},
+	{"can_status_msgs_r1",	AP_PARAM_INT16,  0,   0,   255,   0},
+	{"can_status_msgs_r2",	AP_PARAM_INT16,  0,   0,   255,   0},
+	{"can_esc_index",   	AP_PARAM_INT16,  0,   0, 255,   0},
+	{"controller_id",   	AP_PARAM_INT16,  0,   0, 253,   0},
+	{"ctl_dir",         	AP_PARAM_INT8,   0,   0, 1,     0}
+
+### canard_driver.c:1418-1425 -- DroneCAN node ID == VESC controller_id
+			was_running = true;
+		}
+
+		canardSetLocalNodeID(&canard_ins, conf->controller_id);
+
+#ifdef HW_CAN2_DEV
+		canardSetLocalNodeID(&canard_ins_if2, conf->controller_id);
+#endif

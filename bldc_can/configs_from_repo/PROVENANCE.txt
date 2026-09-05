@@ -1,0 +1,5 @@
+Source: PXLABS_BLDC_VESC6_MK5 @ d513e790, branch pxlabs-6.06-rover-brake-rc
+Path:   Motor_Config_Bldc/ (renamed from Motp_Config_Bldc and pruned to the current set in da94056f)
+Synced: 2026-09-06
+These are the configs the operator states are currently loaded in the ESCs.
+Authoritative copy lives in the firmware repo, not here.

@@ -1,0 +1,3 @@
+dcc35366 Add Motp_Config_Bldc motor and app configuration XML files
+a75a0dbf Add RC brake channel via UAVCAN RawCommand spare slot
+e04bc633 Add RC brake bench test methodology

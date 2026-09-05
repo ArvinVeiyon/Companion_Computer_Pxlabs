@@ -1,0 +1,11 @@
+# Python venv - machine-specific and ~40 MB. Recreate with setup.sh.
+venv/
+__pycache__/
+*.pyc
+
+# Firmware images - large, and built off-box (no ARM toolchain on the companion).
+# Keep them in firmware/ locally; they are versioned in PXLABS_BLDC_VESC6_MK5, not here.
+firmware/*.bin
+
+# NOTE: configs_live/*.xml and backups/*.json are deliberately NOT ignored.
+# They are the config backups this folder exists to preserve - commit them.
