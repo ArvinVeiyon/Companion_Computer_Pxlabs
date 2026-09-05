@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b7052c6e-f42f-48fd-9d7e-c0dffff0ecc5
-  modified: 2026-09-05T18:59:16.734Z
+  modified: 2026-09-05T19:45:14.195Z
 ---
 
 **2026-09-05. Waveshare RS485 CAN HAT rev2.1 (12 MHz MCP2515, spi0.0 CE0=GPIO8, INT=GPIO25) fitted to the companion, wired to the VESC CAN splitter, to flash all four ESCs.**
@@ -118,10 +118,31 @@ It carries the post-reboot checklist, the service table, and the next task. `REA
 ⚠️ Clones of `PXLABS_BLDC_VESC6_MK5` / `vesc_tool` were **scratchpad-only and are gone** — re-clone
 over SSH if source is needed again. **Nothing was ever nested inside `codex-work` (verified).**
 
-**⏭ STATE AT THE 09-06 REBOOT: overlay staged but NOT yet applied ⇒ `can0` DOES NOT EXIST YET.**
-Only **REAR LEFT** is powered (other three switched off) for the one-at-a-time map; **expect node 13**.
-First commands after boot: `ip -details link show can0` → `./bringup.sh` → `candump -td can0` →
-`scan.py`. ⛔ **Do NOT test with `lsmod | grep mcp251x`** — the module loads without the device binding.
+🔴🔴 **09-06 POST-REBOOT: BLOCKED ON HARDWARE — THE MCP2515 HAS NO VDD. `can0` STILL DOES NOT EXIST.**
+`mcp251x spi0.0: MCP251x didn't enter in conf mode after reset / Probe failed, err=110`.
+⛔ **STOP TUNING THE OVERLAY — the whole SPI-config hypothesis family is ELIMINATED**, not just one
+member: overlay verified applied in the live DT (`can0_osc` 12 MHz, INT `<25 8>`, mux `function spi0`
+on gpio8/9/10/11); raw register reads silent at **modes 0 and 3 × 100 kHz–2 MHz**; silent on **CE1**
+as well as CE0; and silent when **bit-banged with `dw_spi_mmio` unbound**, which exonerates the RP1
+controller and its driver (independent ruler).
+🔑 **THE MEASUREMENT THAT SETTLED IT — MISO is not driven at all.** With the bias confirmed applied
+in `pinconf-pins`: `MOSI=0 ⇒ MISO pinned 0 against a pull-up · MOSI=1 ⇒ MISO follows either pull ·
+CS makes NO difference.` One-way tracking that ignores CS is **not** a chip and **not** a resistive
+short (a short drags MISO high against a pull-down too) — it is **ESD-diode back-feed through an
+unpowered die**. Every bit-banged byte fits `rx[i] = tx[i] OR tx[i-1]` exactly = pure MOSI bleed.
+⚠️ **TRAPS THIS COST ME:** `gpioget` on GPIO25 reads **1** and looks like a healthy idle INT — it is
+the same back-feed, **do NOT read it as "the hat is powered"** · a bias sweep with **no settle delay**
+returned a physically impossible "pull-up→0, pull-down→1" — **always sleep, and always confirm from
+`/sys/kernel/debug/pinctrl/…/pinconf-pins` that the pull you asked for actually landed.**
+⏭ **NEXT = OPERATOR + MULTIMETER:** meter 3V3/5V at the MCP2515's VDD vs header pins 1/17 and 2/4;
+look for an unmade/bent **power** pin or a power jumper (signal pins clearly do make contact); swap
+the hat if the rail dies between header and chip. **Re-run in one command:
+`sudo python3 ~/codex-work/bldc_can/diag/spi_probe.py`** (restores every binding it touches; a pass
+is `CANSTAT=0x80`). Then resume at RESUME.md Step 1 — rear left still on the bench, expect node 13.
+✅ **`config.txt` put BACK to `spimaxfrequency=10000000`** (the 1 MHz shot-in-the-dark is disproven,
+and 1 MHz SPI is too slow to service a busy 1 Mbit bus later); backup `config.txt.bak-canhat-20260906`.
 
-⚠️ **CORRECTION TO MEMORY.md: `vision_streaming` reads `enabled` (measured 09-06), NOT "disabled at
-boot".** The old "a reboot kills the video" note is suspect — verify after the reboot, don't assume.
+✅ **09-06 SERVICES AFTER THE REBOOT — all returned exactly as predicted; `vision_streaming` came
+back BY ITSELF.** ⇒ **the "`vision_streaming` is disabled at boot / a reboot kills the video" note is
+WITHDRAWN.** (`active` is still not a rate — nobody measured the stream.) `rover-ekf-bridge` and
+`tfmini` stayed down on purpose.
