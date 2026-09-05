@@ -3,8 +3,10 @@
 Flashing the four rover VESCs over a **Waveshare RS485 CAN HAT rev 2.1** (12 MHz MCP2515 on
 `spi0.0`, CE0 = GPIO8, INT = GPIO25) fitted to the companion Pi and wired to the VESC CAN splitter.
 
-**Status 2026-09-05: tooling complete and API-verified. Nothing is hardware-tested — `can0` does not
+**Status 2026-09-06: tooling complete and API-verified. Nothing is hardware-tested — `can0` does not
 exist yet, because the device-tree overlay is staged but the companion has not been rebooted.**
+
+👉 **Resuming after a reboot or a new session? Start with [`RESUME.md`](RESUME.md).**
 
 ---
 
