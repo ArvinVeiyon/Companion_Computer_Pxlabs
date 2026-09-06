@@ -35,6 +35,14 @@ the same class of artifact as the old MOSI back-feed, just a different coupling 
 `diag/int_probe.py` on the same boot, bias verified applied: `/INT` gpio25 and MISO gpio9 **both
 still FLOATING** (pull-up→1s, pull-down→0s). Nothing is driving either pin.
 
+✅ **CRYSTAL IS 12 MHz — operator-confirmed 09-06, matches `oscillator=12000000`. CLOSED, don't
+re-open the 8-vs-12 question.** (Waveshare shipped this board with both across batches.)
+⚠️ **But that only settles the NUMBER.** The overlay's `oscillator=` value is used solely for
+bit-timing once the interface is up — it can never cause a probe failure. A crystal that is not
+physically **oscillating** is a different fault, and it *would* kill SPI outright, because the
+MCP2515's SPI state machine is clocked from its own oscillator. Software cannot tell that apart
+from a missing VDD. **Still on the suspect list; needs a scope, or a hat swap.**
+
 ⛔ **The operator multimeter steps below have NOT been done yet — do them. No further software
 measurement will move this.** Three boots have now produced three different failure signatures and
 zero write/read-back passes; the signature varies because it is noise, and the noise is the finding.
