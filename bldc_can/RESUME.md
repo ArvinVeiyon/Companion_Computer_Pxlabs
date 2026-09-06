@@ -6,7 +6,86 @@ Read this first, then [`README.md`](README.md) for the why and [`MOTOR_MAP.md`](
 
 ---
 
-## 🔴 BLOCKED 2026-09-06 — THE HAT HAS NO POWER. THIS IS AN OPERATOR JOB.
+## 🔴 THIRD BOOT, 2026-09-06 18:00 — STILL BLOCKED. `err=110` → `err=19` IS NOT PROGRESS.
+
+Measured on a fresh boot (`/proc/uptime` 192 s). `can0` absent. The dmesg line changed:
+
+```
+mcp251x spi0.0: Cannot initialize MCP2515. Wrong wiring?
+mcp251x spi0.0: Probe failed, err=19          (was: "didn't enter in conf mode", err=110)
+```
+
+⚠️ **Do not read that as the chip waking up.** `err=19` (`-ENODEV`) is raised *later* in the driver
+than `err=110` — the reset check passed and the `CANCTRL` power-up-default check failed. Getting past
+the reset check only requires one `CANSTAT` read to come back with the config-mode bits set, and
+**`0x80` turns up in noise on a floating MISO**. The error code moved because the noise moved.
+
+The decisive test, new this boot — `diag/wrb_probe.py`, write a chosen value and read it back,
+7 speeds (100 kHz…10 MHz) × 5 trials × 4 patterns:
+
+```
+write/read-back: 0 of 140 passed
+```
+
+🔑 **And the read-backs are a one-transaction LAG line.** Each speed row returns, shifted by one
+slot, the values the previous row returned (`…07 1E 0B 14 00 00 02 9C…` reappearing a slot later).
+That is a floating line holding charge from the preceding transfer — **zero chip contribution**,
+the same class of artifact as the old MOSI back-feed, just a different coupling path.
+
+`diag/int_probe.py` on the same boot, bias verified applied: `/INT` gpio25 and MISO gpio9 **both
+still FLOATING** (pull-up→1s, pull-down→0s). Nothing is driving either pin.
+
+⛔ **The operator multimeter steps below have NOT been done yet — do them. No further software
+measurement will move this.** Three boots have now produced three different failure signatures and
+zero write/read-back passes; the signature varies because it is noise, and the noise is the finding.
+
+---
+
+## 🔴 STILL BLOCKED after the 2026-09-06 re-seat — and the signature CHANGED
+
+The operator re-connected the hat ("it was wrongly connected") and rebooted. Re-measured on that
+boot (`/proc/uptime` 449 s, probe failed at t=8.6 s of *this* boot, so the log is current):
+
+* `can0` still absent, same `mcp251x spi0.0: … err=110`.
+* **Register write/read-back: 0 of 35 passed** — 7 SPI speeds (100 kHz…10 MHz) × 5 trials, writing
+  `0x5A/0xA5` to CNF1 and `0x3C/0xC3` to TXB0SIDH and reading back. Nothing we choose comes back.
+  ⚠️ A single `CANSTAT=0x80` did appear at 100 kHz in one run. **It was noise, not a pass** — that is
+  exactly why the read-back test exists; never accept the pass value from a single read.
+* **The MOSI back-feed is GONE**, and nothing replaced it. With SPI *bound and idle* (so there is no
+  MOSI activity to couple), bias verified applied:
+
+  ```
+  INT  gpio25:  pull-up->1111111111   pull-down->0000000000   FLOATING
+  MISO gpio9:   pull-up->1111111111   pull-down->0000000000   FLOATING
+  ```
+
+  A powered MCP2515 drives /INT high push-pull with no interrupt pending, so it would beat the
+  pull-down. Both pins simply follow the bias ⇒ **nothing is driving either pin.**
+* The old CS×MOSI sweep is now **non-reproducible** — "PINNED LOW" on one run, "PINNED HIGH" on the
+  next, and the bit-banged bytes are random rather than `tx[i] | tx[i-1]`. That is a high-impedance
+  line holding charge from the preceding traffic, not a chip.
+
+**Reading:** before the re-seat the pins demonstrably *reached an unpowered die* (clean ESD back-feed).
+Now there is no coupling at all. So either the die is still unpowered **and** the signal pins have
+lost contact, or the hat is sitting on the wrong header rows / offset by a position. Either way it is
+still hardware, and still the operator's job.
+
+⛔ **NOTHING ON THE CAN SIDE CAN FIX THIS — DON'T KEEP RE-WORKING THE BUS.** Termination and CAN H/L
+polarity live **downstream of the transceiver**; the MCP2515 fails on the **SPI** side, before a CAN
+frame exists. (Re-checked 09-06 after the operator switched the hat's terminator on and un-swapped
+H/L: `/INT`+MISO still float, a forced re-bind still gives `err=110`.) `can0` depends **only** on
+VDD + the five wires SO/SI/SCK/CS/INT. ✅ For the record the bus side is now right: **hat 120 Ω ON +
+the one powered VESC = 60 Ω** is the correct 2-terminator bench bus; with all four ESCs on, keep
+**exactly two** terminators, one at each physical end.
+⚠️ **Re-seat with the Pi SHUT DOWN, not live** — a hot re-seat neither re-probes nor can be trusted.
+
+⏭ **Use `diag/int_probe.py` as the first check from now on** — it needs no unbinding, runs in a
+second, and answers "is anything on the other end alive?" without the back-feed ambiguity that cost a
+day. `spi_probe.py` stays the deep dive.
+
+---
+
+## 🔴 The original 09-06 diagnosis (pre-re-seat) — THE HAT HAD NO POWER.
 
 The reboot applied the overlay correctly and **`can0` still does not exist**:
 
@@ -46,21 +125,27 @@ Do not read it as "the hat is powered".** A bias sweep with no settling delay al
 returned "MOSI is driven high" on a floating pin. Always `sleep` and always confirm from
 `/sys/kernel/debug/pinctrl/.../pinconf-pins` that the pull you asked for was applied.
 
-### ⏭ NEXT ACTION (operator, with a multimeter)
+### ⏭ NEXT ACTION (operator, with a multimeter) — UPDATED after the re-seat
 
-1. Meter the hat's **3.3 V** and **5 V** rails against the MCP2515's VDD pin. Header 3.3 V is pins
-   1/17, 5 V is pins 2/4.
-2. Check the hat is fully seated — signal pins clearly make contact, so look specifically for an
-   unmade or bent **power** pin, or a power jumper/switch on the board.
-3. If the rail is present at the header but absent at the chip, the hat is faulty — swap it.
+1. **Seating/orientation first.** The hat must sit on pin 1 of the 40-pin header, not offset by a
+   pin or a row. Since the re-seat the signal pins show **no** coupling at all, which they did before.
+2. Meter the hat's **3.3 V** and **5 V** rails against the MCP2515's VDD pin. Header 3.3 V is pins
+   1/17, 5 V is pins 2/4. Look for an unmade or bent **power** pin, or a power jumper/switch.
+3. **New:** with the hat off the Pi, buzz continuity from the hat's header pads to the MCP2515 pins —
+   **21→SO, 19→SI, 23→SCK, 24→CS, 22→INT**. Contact was proven before and is not proven now.
+4. If the rail is present at the header but absent at the chip, or a signal pad does not ring
+   through, the hat is faulty — swap it.
 
-Re-run the whole diagnosis afterwards, it is one command and it restores every binding it touches:
+Re-check afterwards — cheap test first, deep dive second:
 
 ```bash
-sudo python3 ~/codex-work/bldc_can/diag/spi_probe.py
+sudo python3 ~/codex-work/bldc_can/diag/int_probe.py   # 1 s; "actively driven HIGH" = powered die
+sudo python3 ~/codex-work/bldc_can/diag/spi_probe.py   # restores every binding it touches
 ```
 
-A pass looks like `CANSTAT=0x80` in test 1. Then, and only then, continue at **Step 1** below.
+⚠️ **A pass is NOT a single `CANSTAT=0x80`** — that value turns up in noise. A pass is `/INT` driven
+high against a pull-down **and** a register write that reads back the value you wrote, repeatably.
+Then, and only then, continue at **Step 1** below.
 
 ---
 
