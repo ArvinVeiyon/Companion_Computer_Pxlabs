@@ -87,6 +87,12 @@ dtoverlay=uart4
 # does not probe. That was ALREADY true before this line - dtparam=spi=on is set at line 12.
 # VERIFY AFTER REBOOT WITH:  ip -details link show can0   (must exist)
 # NOT with "lsmod | grep mcp251x" alone - the module can load without the device binding.
-# 2026-09-06: 10000000 gave "MCP251x didn't enter in conf mode after reset", probe err=110.
-# RP1 SPI on the Pi 5 clocks differently from BCM2835; 10 MHz is the MCP2515 ceiling. Trying 1 MHz.
-dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=1000000
+# 2026-09-06: probe fails with "MCP251x didn't enter in conf mode after reset", err=110.
+# The SPI-clock hypothesis is DISPROVEN - 1 MHz behaved identically to 10 MHz, and raw register
+# reads fail at every mode/speed both through the controller AND bit-banged with it unbound.
+# MISO is not driven by anything: it is pinned low when MOSI is low and floats when MOSI is high,
+# regardless of CS. That is ESD-diode back-feed through an unpowered die => THE MCP2515 HAS NO VDD.
+# It is a HARDWARE fault on the hat; no setting on the line below can fix it.
+# Re-run the diagnosis with:  sudo python3 ~/codex-work/bldc_can/diag/spi_probe.py
+# Left at 10 MHz because 1 MHz SPI is too slow to service a busy 1 Mbit CAN bus once power is fixed.
+dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=10000000
