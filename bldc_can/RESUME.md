@@ -6,6 +6,44 @@ Read this first, then [`README.md`](README.md) for the why and [`MOTOR_MAP.md`](
 
 ---
 
+## 🅿️ 2026-09-06 — CAN HAT PARKED BY OPERATOR DECISION. GOING USB INSTEAD.
+
+**Do not resume the MCP2515 debugging below unless the hat is repaired or swapped.** It is a
+hardware fault (see the diagnosis), it is not blocking the flash, and USB is the better path anyway:
+
+* ✅ **USB was ALWAYS mandatory for `60_mk5.bin`** — the DroneCAN route bricks it (§5 of `README.md`).
+  The dead hat costs us **nothing** on the flash itself.
+* ✅ **USB gives a COMPLETE mcconf backup. CAN never could** — the DroneCAN param table exposes only
+  8 params, no motor tune. This closes the "no config backup over CAN" gap outright.
+* ✅ **USB also settles the wheel↔node map** without the one-ESC-at-a-time CAN scan: `controller_id`
+  is readable directly per ESC in VESC Tool. Expect **FR=10 · FL=11 · RR=12 · RL=13**; believe the
+  measurement over the table if they disagree.
+
+### ⛔ TRAPS FOR THE USB / VESC TOOL SESSION — read before connecting
+
+1. 🔴🔴 **DO NOT "FIX" `si_motor_poles`.** It is `14` on all four and it is a **LINKED PAIR** with
+   `erpm_to_ms = 0.003900`. Changing poles in VESC Tool **silently halves `/odom`** — and odometry
+   is a safety input. `erpm_to_ms` is CLOSED and tape-validated; do not re-open the scale.
+2. 🔴 **FLASH ONE ESC FIRST, VERIFY, THEN THE REST.** The target branch
+   `pxlabs-6.06-rover-brake-rc` is **untested by its own doc** and carries an unfixed blocker:
+   `RC3_TRIM == RC3_MIN`, so lifting the stick off the stop instantly commands ~50 % brake.
+   Flashing all four at once destroys the rollback in a single shot. Rollback tag
+   **`v6.06.0-pxlabs-rover-r1`**.
+3. ⚠️ **DO NOT change `can_mode` (it is `1` = UAVCAN on all four).** VESC Tool finding nothing on a
+   CAN scan is correct behaviour in that mode, not a fault. Switching it to VESC takes DroneCAN —
+   and the rover — down.
+4. ✅ **Config should survive the flash:** `dcc35366` → `a75a0db` differ only in `canard_driver.c`
+   plus one `.md`; `datatypes.h` / `confgenerator.*` / `conf_general.h` are byte-identical, so the
+   stored-struct CRC still passes. And even in a wipe, **CAN ID and baud survive** (`g_backup`).
+   You would lose the motor tune, not the bus.
+5. ⏭ **Export live configs BEFORE flashing** → `configs_live/live_<WHEEL>_mcconf.xml`. Confirm
+   **RL's `foc_motor_r = 0.1988`**, an outlier vs the other three (0.44–0.56) and duplicated in a
+   Left-Front file — suspect, and RL is the one on the bench.
+6. ⛔ **NEVER restore from `vesc_mcconf_Right_Front.xml`** — its `foc_motor_flux_linkage = 1.46287`
+   is ~130× the family, a failed detection.
+
+---
+
 ## 🔴 THIRD BOOT, 2026-09-06 18:00 — STILL BLOCKED. `err=110` → `err=19` IS NOT PROGRESS.
 
 Measured on a fresh boot (`/proc/uptime` 192 s). `can0` absent. The dmesg line changed:
