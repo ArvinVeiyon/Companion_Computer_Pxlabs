@@ -131,6 +131,38 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 export PATH=$HOME/.npm-global/bin:$PATH
 
+# ── Claude always runs inside tmux ────────────────────
+# Survives a PuTTY/SSH drop: detach with Ctrl-b d, reattach from anywhere
+# with `claude` (or ~/claude-tmux.sh). Defined BEFORE the auto-wake block
+# below, which calls `claude` and so goes through this wrapper too.
+claude() {
+    local session="${CLAUDE_TMUX_SESSION:-vindroz}"
+
+    # Run directly (no tmux) when: already inside tmux, not on a terminal,
+    # tmux missing, or a one-shot -p/--print query.
+    local a skip=0
+    for a in "$@"; do
+        [[ "$a" == "-p" || "$a" == "--print" ]] && skip=1
+    done
+    if [[ -n "$TMUX" ]] || [[ ! -t 1 ]] || (( skip )) \
+       || ! command -v tmux >/dev/null 2>&1; then
+        command claude "$@"
+        return $?
+    fi
+
+    if tmux has-session -t "$session" 2>/dev/null; then
+        echo "  → attaching to tmux session '$session'  (Ctrl-b d to detach)"
+        tmux attach -t "$session"
+        return $?
+    fi
+
+    local inner="command claude"
+    for a in "$@"; do inner+=" $(printf '%q' "$a")"; done
+    inner+="; exec bash"
+    echo "  → starting Claude in tmux session '$session'  (Ctrl-b d to detach)"
+    tmux new-session -s "$session" -c "$PWD" "bash -c $(printf '%q' "$inner")"
+}
+
 # ── Claude Auto-Wake ──────────────────────────────────
 # Runs on interactive SSH login only
 if [[ $- == *i* ]] && [[ -n "$SSH_TTY" ]] && [[ -z "$CLAUDE_ACTIVE" ]]; then
