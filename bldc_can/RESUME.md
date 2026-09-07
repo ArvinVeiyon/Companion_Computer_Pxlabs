@@ -25,10 +25,10 @@ hardware fault (see the diagnosis), it is not blocking the flash, and USB is the
    `erpm_to_ms = 0.003900`. Changing poles in VESC Tool **silently halves `/odom`** — and odometry
    is a safety input. `erpm_to_ms` is CLOSED and tape-validated; do not re-open the scale.
 2. 🔴 **FLASH ONE ESC FIRST, VERIFY, THEN THE REST.** The target branch
-   `pxlabs-6.06-rover-brake-rc` is **untested by its own doc** and carries an unfixed blocker:
-   `RC3_TRIM == RC3_MIN`, so lifting the stick off the stop instantly commands ~50 % brake.
-   Flashing all four at once destroys the rollback in a single shot. Rollback tag
-   **`v6.06.0-pxlabs-rover-r1`**.
+   `pxlabs-6.06-rover-brake-rc` is **untested by its own doc**. Flashing all four at once destroys
+   the rollback in a single shot. Rollback tag **`v6.06.0-pxlabs-rover-r1`**.
+   ✅ Its `RC3_TRIM == RC3_MIN` blocker is **FIXED and SAVED on the FC, 2026-09-07** — see
+   "The PX4 side of the brake" below. **The FC is now ready; the ESC firmware is the only thing left.**
 3. ⚠️ **DO NOT change `can_mode` (it is `1` = UAVCAN on all four).** VESC Tool finding nothing on a
    CAN scan is correct behaviour in that mode, not a fault. Switching it to VESC takes DroneCAN —
    and the rover — down.
@@ -41,6 +41,104 @@ hardware fault (see the diagnosis), it is not blocking the flash, and USB is the
    Left-Front file — suspect, and RL is the one on the bench.
 6. ⛔ **NEVER restore from `vesc_mcconf_Right_Front.xml`** — its `foc_motor_flux_linkage = 1.46287`
    is ~130× the family, a failed detection.
+
+---
+
+## ✅ THE PX4 SIDE OF THE BRAKE — DONE AND SAVED, 2026-09-07
+
+**All four values below were read back off the FC after `MAV_CMD_PREFLIGHT_STORAGE` (save) returned
+`MAV_RESULT_ACCEPTED`.** The FC had been rebooted immediately before, so RAM was clean and the save
+committed only these changes.
+
+| Param | Was | Now | Why |
+|---|---|---|---|
+| `RC3_TRIM` | 1001.0 | **1487.5** | the blocker — trim was equal to `RC3_MIN` |
+| `RC_MAP_AUX1` | 0 | **3** | ch3 → `manual_control_setpoint.aux1` (operator set this in QGC) |
+| `UAVCAN_EC_FUNC5` | 0 | **407** | `RC_AUX1` onto ESC slot 5 = RawCommand index 4 = the brake slot |
+| `UAVCAN_EC_MIN5` / `MAX5` | 1 / 8191 | **unchanged — deliberate** | see the trap below |
+
+### Why `RC3_TRIM == RC3_MIN` really commanded ~50 % brake
+
+Derived from source, not inferred:
+
+* `interpolateNXY` (`Functions.hpp:201`) with `x = {min, trim, max}` and `min == trim` returns
+  **−1.0 at exactly 1001** and **~0.0 at 1002** — a one-microsecond discontinuity.
+* `output_limit_calc_single` (`mixer_module.cpp:568`) maps a non-servo function −1…+1 linearly onto
+  `MIN…MAX`, so norm 0 → **4096 → `brake_rel` 50 %**.
+
+With `RC3_TRIM = 1487.5` the channel is now continuous: ch3 at its 1001 stop → **−1.0 → slot 5 = 1 →
+`brake_rel` 0.012 %**, below the firmware's 0.05 threshold ⇒ **brake off**. Mid-travel → 50 %,
+top → 100 %, which is exactly the proportional behaviour the Item C spec describes.
+
+### ⛔ Traps this exposed
+
+1. 🔴 **`rc_configuration.md` §2.1 — "`RC2_TRIM == RC2_MIN` is a QGC artefact, PX4 corrects it, do not
+   fix it" — IS THROTTLE-ONLY.** `rc_update.cpp:172` scopes that re-centring to
+   `_rc.function[FUNCTION_THROTTLE]`. **It never applied to ch3, which is why the bug was real.**
+   Do not generalise §2.1 to any other channel.
+2. 🔴 **`ros2_ws/tools/set_param.py` CANNOT WRITE INT32 PARAMS.** It always sends
+   `MAV_PARAM_TYPE_REAL32`, and `mavlink_parameters.cpp:129-131` refuses any set whose MAVLink type
+   does not match the onboard type — it logs "param types mismatch" and writes **nothing**. PX4 then
+   does `param_set(param, &set.param_value)` on the **raw 4 bytes**, so an INT32 must be sent as the
+   integer's **bit pattern** in the float field. `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5` are both INT32
+   (type 6) and needed a separate writer. **`set_param.py` is fine for floats only.**
+3. ⛔ **DO NOT copy the `110 / 8082` motor convention onto `MIN5`/`MAX5`.** That pair exists so the
+   four *motor* slots get a neutral of exactly 4096. The brake slot is unipolar: it needs its
+   minimum to mean *off*, and the defaults `1 / 8191` give 0.012 %. `110` would also pass, but the
+   defaults are correct and there is no reason to touch them.
+4. ⚠️ **Set `RC_MAP_AUX1` BEFORE `UAVCAN_EC_FUNC5`.** With slot 5 assigned while AUX1 is unmapped,
+   `aux1` reads 0 → mid-scale → **50 % brake demand on the bus**. Harmless with today's ESC firmware,
+   which ignores index 4 entirely, but do not build the habit.
+5. ⚠️ **`RC_MAP_PITCH = 3` — ch3 is the pitch channel too.** Irrelevant to the rover, and the operator
+   loads a different parameter set for the drone, so it is not a conflict here. **But re-check
+   `RC3_TRIM` after any QGC RC calibration**, which rewrites TRIM.
+
+### 🔑 The brake is REGENERATIVE — it does nothing at standstill, and that is not a fault
+
+**2026-09-07: the operator flashed REAR LEFT with `a75a0dbf`** (the other three untouched, so the
+rollback is intact) and confirmed it works — raise ch3 and **only** rear left stops while the other
+three keep running. Two further observations, both expected:
+
+* **"The brake applies immediately whatever the throttle is doing."** Correct — `canard_driver.c:746`
+  tests brake first, so brake wins over throttle.
+* **"I can still turn the motor easily by hand, and full stick feels no different from low stick."**
+  **Also correct, and it is not a defect.** `mc_interface_set_brake_current_rel` →
+  `mcpwm_foc_set_brake_current` → **`CONTROL_MODE_CURRENT_BRAKE`** (`mcpwm_foc.c:832`). That brake
+  makes its torque by opposing rotation, so it scales with back-EMF — **at hand-turn speed 100 % and
+  10 % both come out as ≈ nothing.**
+
+⛔ **A HAND TEST CANNOT MEASURE THIS BRAKE. Test it against a spinning wheel or it tells you nothing.**
+
+⏭ **If a HOLDING brake is wanted, the firmware already has one:** `mc_interface_set_handbrake_rel` →
+`CONTROL_MODE_HANDBRAKE`, *"open loop current vector to brake motor"* (`mc_interface.c:757`), **same
+`val × |lo_current_min|` scaling**, and it holds at zero speed. One-line swap at
+`canard_driver.c:747`. The better answer is probably a **hybrid** — handbrake below some ERPM, regen
+above — since regen is the right thing for cutting the collision-reflex coast while moving.
+
+### How much brake current you actually get
+
+`brake_rel × |lo_current_min|`, where **`lo_current_min` is the runtime-scaled `l_current_min`** —
+so **authority fades silently as the motor heats or the pack nears full**. From the repo configs:
+`l_current_min` **−25 A** (LF −25.8) · `l_in_current_min` **−5 A** · `l_abs_current_max` 35 ·
+`cc_min_current` 0.05 (the engage floor). 🔴 **The −5 A battery regen cap is probably what really
+binds, not the 25 A.** ⚠️ These are the repo XMLs — **never verified against the live ESCs.**
+
+⛔ **Do not tune `l_max_erpm_fbrake` (300) or `l_max_erpm_fbrake_cc` (1500) chasing this** — every use
+is in `mcpwm.c`, the **BLDC** path, and `motor_type = 2` = **FOC**. They are dead params here.
+
+🔑 **A SECOND, UNRELATED BRAKE IS ALREADY RUNNING ON ALL FOUR: `timeout_brake_current = 2 A` at
+`timeout_msec = 300`** (`timeout.c:225-233`) — a flat, absolute 2 A applied when no CAN command
+arrives for 300 ms, or the kill switch trips. **It is not a weak version of the RC brake; it is a
+different mechanism.** So "coast only" was never quite true. ⚠️ All four repo appconfs have
+`uavcan_raw_mode = 0` (`CURRENT`) — lower stick is **reverse**, not brake. If lower-stick braking is
+ever seen, that param has been changed live.
+
+### ⏭ Not yet verified
+
+**Nothing has moved.** The chain is correct by construction and by readback, but `aux1` has never
+been observed changing — ch3 is static at 1001 because **no physical control is assigned to it on the
+TX yet**. Assign a switch or knob, then confirm on `/fmu/out/manual_control_setpoint` that `aux1`
+sweeps −1 → +1. And it stays inert on the bus until an ESC runs `a75a0dbf`.
 
 ---
 
@@ -261,7 +359,9 @@ Then repeat per wheel as each ESC is switched on: FR→10, FL→11, RR→12.
       CAN exposes only 8 params — USB is the only complete backup. RL's `foc_motor_r = 0.1988`
       is an outlier and RL is on the bench now, so it is worth confirming.
 - [ ] Correct `Testing_Bin/README.md` upstream — it currently recommends the DroneCAN path.
-- [ ] Fix `RC3_TRIM == RC3_MIN` before the RC brake feature means anything.
+- [x] ~~Fix `RC3_TRIM == RC3_MIN`~~ — done 2026-09-07, with `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5`;
+      saved to flash. **The whole PX4 side is complete.** See "The PX4 side of the brake" above.
+- [ ] Assign a physical switch/knob to ch3 on the TX, then watch `aux1` sweep −1 → +1.
 - [ ] Flash one ESC over USB, verify, then the rest. Rollback tag `v6.06.0-pxlabs-rover-r1`.
 
 ---

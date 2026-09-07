@@ -290,7 +290,8 @@ of the transfer. Never flash with the FC armed.
 - [ ] **Export live configs over USB** into `configs_live/`, per wheel.
 - [ ] Map wheel → node ID empirically, one ESC at a time — **rear left is on the bench now, expect
       node 13**. Record in `MOTOR_MAP.md`.
-- [ ] Fix `RC3_TRIM` before the brake feature is meaningful.
+- [x] ~~Fix `RC3_TRIM`~~ — done 2026-09-07. `RC3_TRIM 1487.5`, `RC_MAP_AUX1 3`, `UAVCAN_EC_FUNC5 407`,
+      saved to flash. **The PX4 side of the brake is complete**; details and traps in `RESUME.md`.
 
 ## 10. Related
 

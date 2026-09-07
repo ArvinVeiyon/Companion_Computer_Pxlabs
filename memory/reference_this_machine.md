@@ -72,3 +72,17 @@ ignored on a Pi 5; that is why it was twice recorded as done while the radio was
 `roz@Vind-Roz.local`. ⚠️ **address exists ONLY with carrier**; empty `ip -br addr show eth0` with
 no cable in is CORRECT, not a fault. Judge it by `networkctl status eth0` → `routable`.
 ⚠️ **Cable-untested as of 09-03.** → setup_manual §E5b
+
+## `claude` IS A SHELL FUNCTION, NOT THE BINARY (added 2026-09-07)
+🔑 **`~/.bashrc` defines a `claude()` wrapper that launches Claude inside tmux session `vindroz`**
+(attach if it exists, create if not), so an SSH/PuTTY drop no longer kills the session. Detach
+`Ctrl-b d`; reattach with `claude` or `~/claude-tmux.sh`. Defined ABOVE the pre-existing
+"Claude Auto-Wake" block so that block's bare `claude` call goes through it too.
+⚠️ **`which claude` still prints the nvm binary — use `type claude` to see the wrapper.**
+✅ **Bypasses tmux automatically** when already in tmux (`$TMUX`), on a non-tty (so pipes and
+scripts are unaffected), when `-p`/`--print` is passed, or if tmux is missing. **`command claude`
+forces the raw binary.**
+⚠️ **tmux does NOT survive a companion reboot** — rerun the wrapper afterwards; the conversation
+itself persists in `~/.claude/projects/-home-roz/<session-uuid>.jsonl` and resumes with
+`claude --resume <uuid>`. ⛔ **Never run two `claude` processes against the same `.jsonl`.**
+⚠️ Backup of the pre-wrapper file: `~/.bashrc.bak-tmuxwrap-20260907_222109`.

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b7052c6e-f42f-48fd-9d7e-c0dffff0ecc5
-  modified: 2026-09-05T19:45:14.195Z
+  modified: 2026-09-07T18:24:28.826Z
 ---
 
 **2026-09-05. Waveshare RS485 CAN HAT rev2.1 (12 MHz MCP2515, spi0.0 CE0=GPIO8, INT=GPIO25) fitted to the companion, wired to the VESC CAN splitter, to flash all four ESCs.**
@@ -142,7 +142,125 @@ is `CANSTAT=0x80`). Then resume at RESUME.md Step 1 — rear left still on the b
 ✅ **`config.txt` put BACK to `spimaxfrequency=10000000`** (the 1 MHz shot-in-the-dark is disproven,
 and 1 MHz SPI is too slow to service a busy 1 Mbit bus later); backup `config.txt.bak-canhat-20260906`.
 
+🔴🔴 **09-06 SECOND ATTEMPT — OPERATOR RE-SEATED THE HAT, REBOOTED: STILL NO `can0`, SAME err=110.**
+🔑 **THE SIGNATURE CHANGED AND IT IS NOT BETTER: the MOSI back-feed is GONE and NOTHING replaced it.**
+With SPI **bound and idle** (no MOSI to couple) and the bias verified: **`/INT` gpio25 AND MISO gpio9
+BOTH FLOAT** (`pull-up→1s, pull-down→0s`). A powered MCP2515 drives `/INT` **high push-pull** and
+would beat the pull-down ⇒ **nothing is on the other end.** ⇒ before the re-seat the pins provably
+reached an *unpowered die*; now there is **no coupling at all** ⇒ **suspect SEATING/OFFSET as well as
+power.** ⏭ operator: seating first, then rails, then **buzz continuity header→chip: 21→SO 19→SI
+23→SCK 24→CS 22→INT.**
+⛔ **NEVER ACCEPT `CANSTAT=0x80` AS THE PASS — IT TURNS UP IN NOISE** (it did, once, at 100 kHz).
+✅ **THE RULER THAT SETTLES IT: WRITE A REGISTER AND READ IT BACK** (CNF1 `0x5A/0xA5`, TXB0SIDH
+`0x3C/0xC3`) — a short, a float or bleed cannot return a value *we chose* at an address *we chose*.
+**Scored 0/35** across 7 speeds × 5 trials. Also: the old CS×MOSI sweep is **non-reproducible now**
+(PINNED LOW one run, PINNED HIGH the next) = a charge-holding hi-Z line, not a chip.
+🔧 **NEW TOOL `codex-work/bldc_can/diag/int_probe.py` — RUN IT FIRST** (1 s, no unbinding, no
+back-feed ambiguity); `spi_probe.py` is now the deep dive. Both documented in `RESUME.md`.
+
+🔴🔴 **09-06 THIRD BOOT — STILL BLOCKED, AND THE OPERATOR/METER STEPS ARE STILL UNDONE.**
+⛔⛔ **THE TRAP THAT WILL BITE AGAIN: `err=110` → `err=19` IS NOT PROGRESS.** dmesg now reads
+`Cannot initialize MCP2515. Wrong wiring? / Probe failed, err=19` (`-ENODEV`). That is raised
+**later** in the driver than err=110 — reset passed, the `CANCTRL` power-up-default check failed.
+But passing reset only needs **one** `CANSTAT` read to come back with the config-mode bits, and
+**`0x80` turns up in noise on a floating MISO.** ⇒ **the error code moved because the noise moved.**
+🔑 **Three boots, three different signatures, zero passes — the VARYING signature IS the finding.**
+✅ **`wrb_probe.py`: 0 of 140 PAIRED** (SPI modes 0 **and** 3 × 7 speeds 100 kHz–10 MHz × 5 trials)
+and `int_probe.py` on the same boot still says **`/INT` + MISO BOTH FLOAT**, bias verified applied.
+⛔⛔ **REFINES THE PASS CRITERION BELOW — "A VALUE WE CHOSE CAME BACK" IS *NOT* ENOUGH.** The hi-Z
+line holds charge from the **previous** transfer, so a single-register write/read-back scores a FALSE
+PASS whenever the held value happens to equal the value just written. **It did: v1 scored 10/280 on
+provably dead hardware.** Visible as stuck-at runs in the raw rows (`C3C3`, `1E1E`, `8787`, `7878`).
+✅ **THE SOUND CRITERION IS A *PAIR*: write two DIFFERENT values to two DIFFERENT registers
+(CNF1 0x2A + TXB0SIDH 0x31), read BOTH, both must match.** A held line can only hold one value.
+🔑 **CNF1 is config-mode-only (where RESET leaves us); TXB0SIDH is writable in ANY mode once TXREQ is
+clear — keeping both means a chip that is alive but NOT in config mode still registers.**
+✅ **CRYSTAL IS 12 MHz, operator-confirmed 09-06 — matches `oscillator=12000000`. 8-vs-12 CLOSED.**
+⚠️ **That settles the NUMBER only.** `oscillator=` only sets bit-timing and can NEVER cause a probe
+failure; a crystal that is not physically **OSCILLATING** is a different fault that WOULD kill SPI
+outright (the MCP2515's SPI state machine is clocked from its own crystal) and is **indistinguishable
+from missing VDD in software**. Still a suspect — scope, or swap the hat.
+✅ **CHIP/WIRING RE-VERIFIED AGAINST THE LIVE DT + DATASHEET:** `compatible microchip,mcp2515`,
+`reg 0` (CE0=GPIO8), `interrupts <25 8>`, `spi-max-frequency` 10 MHz (= the datasheet SPI ceiling),
+`can0_osc` 12 MHz. Opcodes `RESET 0xC0 / READ 0x03 / WRITE 0x02`, regs `CANSTAT 0x0E CANCTRL 0x0F
+CNF1 0x2A TXB0SIDH 0x31` all correct. 🔑 **`mcp251x` is the Linux DRIVER FAMILY name (2510/2515/
+25625), not a different part — don't chase it.** ⚠️ **waveshare.com 403s automated fetches; verify
+from the live DT, not the vendor page.**
+🔑 **NEW SIGNATURE — A ONE-TRANSACTION LAG LINE:** each speed row returns, shifted by one slot, the
+values the **previous** row returned (`…07 1E 0B 14 00 00 02 9C…` reappearing a slot later) = a hi-Z
+line holding charge from the preceding transfer, **zero chip contribution**. Same class as the old
+MOSI back-feed, different coupling path. ⇒ **still hardware, still upstream of anything software
+reaches.** ⛔ **Do not run another software measurement until the meter has been on the board.**
+🔧 **NEW TOOL `diag/wrb_probe.py`** — the documented pass criterion in one command (binds spidev,
+restores `mcp251x` after). Order from now on: **`int_probe.py` → `wrb_probe.py` → `spi_probe.py`.**
+Committed `codex-work@b8fddac` (NOT pushed).
+
 ✅ **09-06 SERVICES AFTER THE REBOOT — all returned exactly as predicted; `vision_streaming` came
 back BY ITSELF.** ⇒ **the "`vision_streaming` is disabled at boot / a reboot kills the video" note is
 WITHDRAWN.** (`active` is still not a rate — nobody measured the stream.) `rover-ekf-bridge` and
 `tfmini` stayed down on purpose.
+
+---
+
+## 🔴 2026-09-07 — THE RC BRAKE IS LIVE ON ONE WHEEL. PX4 SIDE DONE AND SAVED.
+
+✅ **OPERATOR FLASHED REAR LEFT with `a75a0dbf`** (the other three are untouched ⇒ **the rollback is
+intact**). **Confirmed working by the operator:** raise ch3 and **only** the rear-left motor stops
+while the other three keep running — which is also the cleanest possible proof that the flash took
+and that the other three ignore RawCommand index 4.
+
+✅ **PX4 SIDE COMPLETE — written, saved with `MAV_CMD_PREFLIGHT_STORAGE`, and VERIFIED to survive an
+FC reboot** (the operator rebooted; all four read back unchanged):
+`RC3_TRIM` **1001 → 1487.5** · `RC_MAP_AUX1` **3** (operator set it in QGC) · `UAVCAN_EC_FUNC5`
+**407** = RC_AUX1 → RawCommand index 4 · `UAVCAN_EC_MIN5/MAX5` **left at 1 / 8191, deliberately**.
+⛔ **DO NOT copy the motors' `110/8082` onto slot 5** — that pair exists to give the four *motor*
+slots a 4096 neutral. The brake is unipolar and needs its minimum to mean OFF; 1/8191 gives 0.012 %.
+⚠️ **Set `RC_MAP_AUX1` BEFORE `UAVCAN_EC_FUNC5`** — slot 5 assigned while AUX1 is unmapped makes
+`aux1` read 0 = mid-scale = **50 % brake demand on the bus**.
+
+🔑 **WHY `RC3_TRIM == RC3_MIN` REALLY MEANT 50 % BRAKE** (from source, not inferred):
+`interpolateNXY` (`Functions.hpp:201`) with `min == trim` returns **−1.0 at exactly 1001 but ~0.0 at
+1002** — a 1 µs discontinuity — and `output_limit_calc_single` (`mixer_module.cpp:568`) maps a
+non-servo function −1…+1 onto MIN…MAX, so norm 0 → 4096 → 50 %.
+🔴🔴 **THE TRAP: `rc_configuration.md` §2.1 — "TRIM==MIN is a QGC artefact, PX4 corrects it, DON'T FIX
+IT" — IS THROTTLE-ONLY.** `rc_update.cpp:172` scopes that re-centring to `FUNCTION_THROTTLE`.
+**Never generalise §2.1 to another channel.** ⚠️ `RC_MAP_PITCH = 3` too, but the operator loads a
+**different param set for the drone**, so ch3 is free for the rover. ⚠️ **Re-check `RC3_TRIM` after
+any QGC RC calibration** — calibration rewrites TRIM.
+
+🔴🔴 **`ros2_ws/tools/set_param.py` CANNOT WRITE INT32 PARAMS — IT ALWAYS SENDS `MAV_PARAM_TYPE_REAL32`
+AND PX4 REFUSES THE WRITE.** `mavlink_parameters.cpp:129-131` requires (INT32,INT32) or
+(FLOAT,REAL32) and otherwise logs "param types mismatch" and **writes nothing** — it fails safe, but
+it fails. PX4 then does `param_set(param, &set.param_value)` on the **raw 4 bytes**, so an INT32 must
+be sent as the integer's **BIT PATTERN** in the float field, typed `MAV_PARAM_TYPE_INT32`.
+**`set_param.py` is float-only; it also has no save.** ⏭ worth folding both into the real tool.
+🔑 **`param save` without `mavlink_shell`:** `MAV_CMD_PREFLIGHT_STORAGE` param1=1, check the
+`COMMAND_ACK`. **Reboot the FC first** so RAM==flash and the save commits only what you meant.
+🔑 **FC reboot over DDS:** publish `VehicleCommand` 246 param1=1 to `/fmu/in/vehicle_command` (pattern
+in `tools/dds_setmode.py`). ⚠️ **CHECK CH10 FIRST** (1011=down=safe).
+
+🔴🔴 **THE BRAKE IS REGENERATIVE — IT DOES NOTHING AT STANDSTILL, AND THAT IS NOT A FAULT.**
+`mc_interface_set_brake_current_rel` → `mcpwm_foc_set_brake_current` → **`CONTROL_MODE_CURRENT_BRAKE`**
+(`mcpwm_foc.c:832`): torque comes from opposing rotation, so it scales with back-EMF ⇒ **at hand-turn
+speed 100 % and 10 % both produce ≈ nothing.** ⛔ **A HAND TEST CANNOT MEASURE THIS BRAKE — the
+operator's "I can still turn it easily at full stick" is EXPECTED, not a defect. Test at speed.**
+⏭ **A HOLDING brake is a different call the firmware already has:** `mc_interface_set_handbrake_rel`
+→ `CONTROL_MODE_HANDBRAKE`, *"open loop current vector"* (`mc_interface.c:757`), **same
+`val × |lo_current_min|` scaling**, holds at zero speed. One-line swap at `canard_driver.c:747`; the
+right answer is probably a **hybrid** (handbrake below some ERPM, regen above).
+🔑 **BRAKE CURRENT COMES FROM THE mcconf:** `brake_rel × |lo_current_min|`, and `lo_current_min` is
+the **runtime-scaled** `l_current_min` ⇒ **authority FADES silently when hot or near max pack
+voltage.** Repo set: `l_current_min` **−25 A** (LF −25.8) · `l_in_current_min` **−5 A** ·
+`l_abs_current_max` 35 · `cc_min_current` 0.05 (the engage floor). 🔴 **the −5 A BATTERY REGEN cap is
+probably what actually binds, not the 25 A.** ⚠️ these are the REPO XMLs, **never verified live**.
+⛔ **DON'T TUNE `l_max_erpm_fbrake` (300) / `_cc` (1500) — every use is in `mcpwm.c` = the BLDC path,
+and `motor_type=2` = FOC.** Dead params here.
+🔑 **THE OTHER BRAKE, ALREADY RUNNING ON ALL FOUR: `timeout_brake_current = 2 A` @ `timeout_msec`
+300** (`timeout.c:225-233`) — a **flat, absolute** 2 A applied when no CAN command arrives for 300 ms
+or the kill switch trips. **Not a weak version of the RC brake — a different mechanism.** ⚠️ so
+"COAST ONLY" is not strictly true: there is always 2 A on command loss (negligible, but it is there).
+⚠️ **`uavcan_raw_mode = 0` (=CURRENT, lower stick = REVERSE, not brake) in all four repo appconfs** —
+if lower-stick braking is ever observed, that param has been changed live.
+
+⏭⏭ **NEXT: the operator is testing the brake AT SPEED** (the hand test proved nothing). Then decide
+regen vs handbrake vs hybrid, and only then flash the other three.
