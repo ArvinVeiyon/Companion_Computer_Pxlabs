@@ -499,7 +499,7 @@ ROVER AUTONAV block above).
 **Open items:** P1 `RO_MAX_THR_SPEED` 0.60 — its §A7 basis (0.58-0.60 m/s) is CONTRADICTED by the
 ~0.9 m/s measured 08-12; needs an **OPEN-LOOP throttle sweep** (closed-loop data cannot identify a
 plant gain) · P4 `RO_SPEED_TH` −1 would kill the 0.14 floor but is **GATED ON THE ESC-DROPOUT FIX** ·
-P5 `RC_MAP_KILL_SW`=12 vs docs "ch8" — **fix the DOCS, not the param** · P6 read `si_motor_poles` ×4
+~~P5 `RC_MAP_KILL_SW`=12 vs docs "ch8"~~ ✅ **DONE 2026-09-12 — docs/tools fixed (`ros2_ws` `6506bdb`).** 🔴 **It had already cost an armed run before anyone actioned it: the operator was told to hit ch8, moved ch5 (ARM) instead, and S1 came back inconclusive.** · P6 read `si_motor_poles` ×4
 in VESC Tool · P8 outdoor/M4 params · P9 not audited: `EKF2_*` (SHARED WITH DRONE), sensor/RC cal,
 per-ESC output index.
 

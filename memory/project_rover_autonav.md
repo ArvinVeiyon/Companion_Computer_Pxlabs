@@ -41,8 +41,19 @@ param2 magic 21196 as force after 2 s) — that worked: `arming_state=1`, all ES
 and below `RO_SPEED_TH` the firmware zeroes its OWN feedback so the loop re-accelerates. **0.69 m/s²
 of brake vs a coast that left 104 rpm after two zero commands.** → [[reference_esc_telemetry]]
 
-### ⬜ S1 ITSELF IS **INCONCLUSIVE — NOT FAILED**. ch8 WAS NEVER PRESSED.
-`input_rc` ch8 read **1011 before AND after** the run — unchanged. **ch5 moved 1988 → 1011 instead.**
+### ⬜ S1 IS **INCONCLUSIVE — NOT FAILED**, AND THE ROOT CAUSE IS A WRONG CHANNEL IN THE DOCS
+⛔⛔ **THE KILL SWITCH IS `ch12`. `RC_MAP_KILL_SW` = 12, read live off the FC 2026-09-12** and confirmed
+against a fake-name control. Supporting map: `RC_KILLSWITCH_TH` **0.75** · `RC_MAP_ARM_SW` **5** ·
+`RC_MAP_FLTMODE` **6**. **NOTHING is mapped to ch8.**
+🔴 **Every tool and doc said "ch8", so the operator was told to press a channel that does nothing.**
+He moved **ch5 — the ARM switch** — which is why `input_rc` ch8 read 1011 before AND after.
+⚠️ **This was ALREADY KNOWN: `todos.md` P5 says "`RC_MAP_KILL_SW`=12 vs docs ch8 — fix the DOCS, not the
+param". It was never actioned.** The tools detect the kill via `arming_state`, not by reading a channel,
+so the CODE was always correct and only the printed instruction was stale — that is why it survived.
+✅ **Corrected 2026-09-12 in `s1_kill_test`, `speed_command_test`, `collision_standoff_test`,
+`s2_sensor_loss_test`, `t2_straight_goal_test`, `l2_test`** (`ros2_ws` `6506bdb`).
+🔑 **Historical July records of "ch8 worked" are NOT wrong — the mapping almost certainly moved when the
+RC was reconfigured for the brake on ch3/AUX1. Do not rewrite them.**
 ⛔ **Do NOT record this run as an S1 failure.** S1 remains due, and the next attempt must confirm the
 ch8 channel index on the transmitter FIRST.
 ⚠️ `s1_kill_test.py` has **NO `/scan` clearance backstop** (no `LaserScan` subscription at all) — it is
