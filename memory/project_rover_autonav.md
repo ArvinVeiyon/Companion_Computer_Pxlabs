@@ -10,6 +10,45 @@ metadata:
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
 
+## 🔴🔴 2026-09-12 — **G2 ATTEMPT: S1 INCONCLUSIVE, BUT "ZERO SETPOINT DOES NOT STOP THE ROVER" PROVEN ON THE FLOOR**
+
+### ⛔⛔ THE ARMING/REGISTRATION ORDER — THIS BLOCKED THE WHOLE EVENING, IT IS NOT IN ANY MANUAL
+🔑 **PX4 REFUSES TO REGISTER AN EXTERNAL MODE WHILE THE VEHICLE IS ARMED.** Measured twice armed:
+`register_ext_component_reply` **`success=False, mode_id=0`**, arming-check handshake **0 in / 0 out**,
+`DO_SET_MODE(4,11)` → **TEMPORARILY_REJECTED**. Disarmed, the identical restart gives
+**`success=True, mode_id=23`**, handshake ~23 req / 26 reply per 8 s, `can_arm_and_run=True`, mode ACCEPTED.
+⇒ **ORDER IS: DISARM → restart `rover-autonav-mode` → CONFIRM registration → ARM → switch mode.**
+🔴 **AN FC REBOOT WIPES THE REGISTRATION AND `autonav_mode` DOES NOT NOTICE — it keeps running
+unregistered.** After ANY FC reboot you MUST restart `rover-autonav-mode` (while disarmed).
+🔑 **PROOF OF LIFE = the arming-check handshake, not `is-active`**: count `/fmu/out/arming_check_request_v1`
+and `/fmu/in/arming_check_reply_v1`; **zero on both = unregistered**, whatever systemd says.
+⚠️ `autonav_chain_check.py` only sees registration if the node starts AFTER it, and **stops at STAGE 2**
+otherwise — it cannot report current state. Measure the handshake directly instead.
+
+### ⚠️ `COM_DISARM_PRFLT` = 10 s — PX4 AUTO-DISARMS 10 s AFTER ARMING IF NOTHING MOVES
+This produced repeated "you armed but it reads disarmed" confusion. For a supervised test raise it in
+**RAM only** (`set_param.py`, not saved) and **restore it after** — done and restored 09-12.
+
+### 🔴🔴 THE REAL RESULT: COMMANDING 0.0 m/s DID NOT STOP THE ROVER
+Run: `s1_kill_test.py --speed 0.10 --bound 5.0`, armed, AutoNav held (`nav_state=23`), floor, hall.
+**The tool DID command zero** — its exit path is `drive(0.0)` → spin 0.5 s → `drive(0.0)`.
+**`final rpm 104` was read AFTER those zero commands.** The wheels were still turning.
+📏 **TRAVEL MEASURED BY `/scan`: bumper clearance 4.498 m → 1.808 m = 2.69 m travelled** on a command
+that should have produced ~0.5 m — **~5× over**, consistent with the recorded 0.05→0.14 / 0.25→~0.9.
+It consumed **65% of a 4.15 m runway.** Stopped by a **DDS disarm** (`VEHICLE_CMD_COMPONENT_ARM_DISARM`,
+param2 magic 21196 as force after 2 s) — that worked: `arming_state=1`, all ESCs 0 rpm.
+⇒ 🔑 **THIS IS THE EVIDENCE FOR WIRING THE BRAKE INTO THE REFLEX.** Zero setpoint = free-flow coast,
+and below `RO_SPEED_TH` the firmware zeroes its OWN feedback so the loop re-accelerates. **0.69 m/s²
+of brake vs a coast that left 104 rpm after two zero commands.** → [[reference_esc_telemetry]]
+
+### ⬜ S1 ITSELF IS **INCONCLUSIVE — NOT FAILED**. ch8 WAS NEVER PRESSED.
+`input_rc` ch8 read **1011 before AND after** the run — unchanged. **ch5 moved 1988 → 1011 instead.**
+⛔ **Do NOT record this run as an S1 failure.** S1 remains due, and the next attempt must confirm the
+ch8 channel index on the transmitter FIRST.
+⚠️ `s1_kill_test.py` has **NO `/scan` clearance backstop** (no `LaserScan` subscription at all) — it is
+the only moving test without one, and this run shows why that matters: nothing but the operator bounds it.
+
+
 ## ✅✅ 2026-09-11 — **G0 CLOSED. `/scan` GEOMETRY VERIFIED LIVE AT A WALL after the pitch/roll fix.**
 
 **WHY IT MATTERED:** `depth_to_scan.launch.py` got the measured mount angles 09-10 (`cam_pitch`
