@@ -537,7 +537,38 @@ localization-time features are built under DIFFERENT PARAMETERS.**
    (307-5331 mm, median 416). Bottom 35% is 5.5% valid — that is the rover's own top plate, which is
    exactly what `Kp/RoiRatios "0 0 0 0.35"` masks. Working as designed.
 
-## ⏭ NEXT LEAD (untested): DB-inherited parameters
+## ❌❌ 2026-09-12 — **THE DB-INHERITED-PARAMETER LEAD IS DEAD. MEASURED, NOT ARGUED.**
+Settled with `rtabmap-info` on the map plus a real `rtabmap_slam/rtabmap` start on a **COPY** of
+`house_map_v4.db` using `rtabmap_localization.yaml` (`ROS_DOMAIN_ID=42`). Log confirmed
+**"Localization mode (Mem/IncrementalMemory=false)"** and the right DB (165 MB).
+
+**Only ELEVEN parameters in the map differ from RTAB-Map 0.22.1 defaults:**
+`Grid/DepthRoiRatios` · `Grid/MaxGroundHeight` 0.10 · `Grid/MaxObstacleHeight` 1.5 ·
+`Grid/RangeMax` 4.0 · `Grid/RayTracing` true · `Kp/RoiRatios` · `Vis/RoiRatios` ·
+`Vis/MinInliers` 12 · `Rtabmap/DetectionRate` 2.0 · `RGBD/CreateOccupancyGrid` true ·
+**`Reg/Force3DoF` true**.
+
+⛔ **`Kp/DetectorStrategy` / the descriptor ARE NOT MODIFIED — the map was built on the DEFAULT
+detector.** So the "detector/descriptor mismatch" suspect **cannot exist**. Do not re-propose it.
+
+✅ **The node LOGS what it inherits** (`Update RTAB-Map parameter "X" from database`). Measured:
+**`Reg/Force3DoF`, `Grid/DepthRoiRatios`, `Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`,
+`Grid/RangeMax`, `Grid/RayTracing` ALL inherit from the DB.** The remaining four are set
+IDENTICALLY by the YAML. The only divergence is `RGBD/CreateOccupancyGrid` (DB true / YAML false),
+deliberate, documented, and irrelevant to feature matching.
+⇒ **LOCALIZATION RUNS WITH THE SAME PARAMETERS THAT BUILT THE MAP. The parameter hypothesis is
+ELIMINATED — the 0-inlier geometric failure is something else.**
+
+### 🔑🔑 NEW FACT FOUND WHILE DOING IT — **611 OF THE 740 NODES ARE INTERMEDIATE**
+`SELECT count(*) FROM Node WHERE weight<0` = **611**. 740 − 611 = **129**, which is EXACTLY the
+`Working Memory = 129` the node reported on load. **Intermediate nodes (`weight = -1`) are kept for
+graph continuity and are NOT indexed for place recognition.**
+⇒ 🔑 **The effective map is 129 keyframes, not 740** — restate any coverage/size argument on 129.
+⇒ 🔑 **Those 611 carry image+depth payload (part of the 81 MB) while being unusable for matching** —
+that is the first place to look for map compression, ahead of stripping binaries wholesale.
+⏭ **Not yet established whether this contributes to the 0-inlier failure.** Do not assume it does.
+
+## 🗄 SUPERSEDED LEAD (kept for the reasoning): DB-inherited parameters
 **RTAB-Map inherits parameters from the database**, and `rtabmap_localization.yaml` already documents
 one case where that bit (`Grid/DepthRoiRatios` at 640x360 leaves 234 rows, not divisible by
 `Grid/DepthDecimation=4`). Compare what `house_map_v4.db` baked in against the localization YAML —
