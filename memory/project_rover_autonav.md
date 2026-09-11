@@ -10,6 +10,46 @@ metadata:
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
 
+## 🔴🔴🔴 2026-09-12 — **WHY ARMED AUTONAV IS REFUSED: `eph` 307 m vs `COM_POS_FS_EPH` 5 m. SOLVED.**
+> This closes the "armed → refused, disarmed → accepted" mystery that has recurred since August.
+> ⛔ **It is NOT the registration, NOT the bridge, NOT the mode. It is POSITION UNCERTAINTY.**
+
+**THE CHAIN, MEASURED END TO END:**
+1. `autonav_mode` uses **`RoverSpeedRateSetpointType`**, which declares (`speed_rate.cpp:50-54`)
+   `velocity_enabled=true`, **`position_enabled=FALSE`** — the mode does NOT ask for position.
+2. ⛔ **BUT `FailsafeFlags` HAS NO `mode_req_local_velocity` FIELD.** The only fields are
+   `mode_req_local_position` / `_relaxed` / `_local_alt` / `_angular_velocity` / … ⇒ **PX4 expresses a
+   velocity requirement AS the LOCAL_POSITION requirement.** Measured for AutoNav (**bit 23**):
+   `mode_req_local_position` **=1** · `mode_req_local_alt` **=1** · `mode_req_angular_velocity` **=1** ·
+   `mode_req_local_position_relaxed` **=0**.
+3. `local_position_invalid` is judged on **ACCURACY, not existence**: `vehicle_local_position` reads
+   **`xy_valid: true`** while `failsafe_flags` reads **`local_position_invalid: true`** — not a
+   contradiction, a stricter test.
+4. 🔑🔑 **THE NUMBER: `eph` = 306.78 m against `COM_POS_FS_EPH` = 5.0 m.** Velocity-only fusion
+   DEAD-RECKONS, so eph grows without bound. (Velocity itself is fine: `evh` 0.060 vs
+   `COM_VEL_FS_EVH` 1.0 ⇒ `local_velocity_invalid: false`. Altitude fine: `epv` 0.19.)
+5. PX4 **relaxes** mode requirements while DISARMED and **enforces** them ARMED ⇒ disarmed accepts,
+   armed refuses. **That is the entire pattern.**
+
+### 🔑 WHY IT WORKED IN JULY/AUGUST — nothing regressed, the procedure was always time-limited
+**`eph` starts small after an FC reboot and GROWS while dead-reckoning.** The July/August runs started
+the bridge and engaged AutoNav **promptly**, inside the window where `eph` < 5 m. Tonight the FC had
+been up for a long time, so we were ~60× past the threshold. ⇒ ⛔ **STOP recording S1/AutoNav as
+"works" or "broken" without the `eph` at that moment — it is the hidden variable.**
+
+### ⏭ TWO WAYS FORWARD — operator's call
+- **(a) RACE IT (works today, fragile):** reboot the FC → start `rover-ekf-bridge` → arm and engage
+  AutoNav **before `eph` passes 5 m**. ⚠️ **The window has never been measured — measure `eph` vs time
+  first**, it is the whole basis of the procedure.
+- **(b) FIX IT PROPERLY:** give PX4 a bounded position. That is `EKF2_EV_CTRL` **bit0** fed from
+  RTAB-Map `map→odom` via the **Navigation Interface `position_xy` channel we already do not use**
+  → [[reference_px4_vio_collision]] §4. ⇒ **LOCALIZATION IS NOT ONLY AN M3 ITEM — it is what makes
+  ARMED AUTONAV ROBUST.** This contradicts the plan's "M2 needs no localization" only in ROBUSTNESS,
+  not in principle: M2 still needs no MAP, but it needs `eph` under 5 m.
+- ⚠️ **Raising `COM_POS_FS_EPH` is the third option and is NOT recommended without discussion** — it
+  disables a real failsafe. Arguable for this vehicle (AutoNav is speed+rate and uses position for
+  NOTHING), but it is a safety threshold, so it is the operator's decision, not mine.
+
 ## 🔴🔴 2026-09-12 — **G2 ATTEMPT: S1 INCONCLUSIVE, BUT "ZERO SETPOINT DOES NOT STOP THE ROVER" PROVEN ON THE FLOOR**
 
 ### ⛔⛔ THE ARMING/REGISTRATION ORDER — THIS BLOCKED THE WHOLE EVENING, IT IS NOT IN ANY MANUAL
