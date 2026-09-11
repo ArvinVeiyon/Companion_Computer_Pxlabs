@@ -111,3 +111,16 @@ baseline goes stale again exactly as before. Also add `Nice=19` + `IOSchedulingC
 `dailyaidecheck.service` so it can never compete with the autonomy stack.
 Accepted tradeoff of the promotion: today's filesystem is now the known-good baseline, so anything
 altered between Feb and Jul is baked in — acceptable given nothing was being caught anyway.
+
+
+## Settled service state — moved out of `MEMORY.md` 2026-09-11
+- **AIDE timer DISABLED** — it was costing ~3.5 h/day of a core.
+- **`tfmini` DISABLED** — ⚠️ **must `systemctl enable --now tfmini` for the DRONE.**
+- **`rover-ekf-bridge` DISABLED on purpose** — the wheels-up limit-cycle hazard. Start it for
+  an AutoNav run (FLOOR only) and stop it after.
+- ✅ **2026-09-06: `vision_streaming` IS enabled and returns on its own across a reboot.** The
+  old "disabled at boot / a reboot kills the video" claim is **WITHDRAWN**.
+- ✅ **2026-09-04: the unit IS `mavlink.router.service`** and it is active. `setup_manual` C8 was
+  right; the earlier "no such unit" was a bad search, not a missing unit.
+- 🔴🔴 **`active` PROVES NOTHING.** 2026-09-04: all six units read `active` while depth, colour
+  and `/scan` were all at **0.0 Hz**. **Measure rates, never `is-active`.**
