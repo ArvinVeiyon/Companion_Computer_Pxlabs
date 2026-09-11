@@ -119,7 +119,20 @@ blocking AutoNav:
 
 ⚠️ `MEMORY.md` is **19.8 kB against its own 17 kB cap** — needs a compression pass.
 
-## ⏭⏭ START HERE — 2026-09-10. AUTONAV.
+## ⏭⏭ START HERE — 2026-09-12 (02:00). **RESUME G2.**
+✅ **Blocker SOLVED: armed AutoNav engaged (nav_state=23).** Cause was `eph` 307 m vs `COM_POS_FS_EPH`
+5 m, not the mode/bridge/registration. Full chain → `project_rover_autonav` 09-12.
+**TOMORROW, IN ORDER:**
+1. **Reboot the FC** → restart `rover-ekf-bridge` + `rover-autonav-mode` **together, DISARMED** →
+   verify 3 gates (`local_position_invalid` false · handshake non-zero both ways · runway).
+   ⚠️ `COM_DISARM_PRFLT` resets to 10 s — **ASK before changing it.** ~35 min of eph budget, no rush.
+2. **Decide what S1 means first** — PX4 kill ≠ disarm. Then run it and **actually press ch12**.
+3. **Then the G2 sweep — `speed_command_test.py`, NEVER RUN YET.** Needs ≥2.0 m corridor; the hall
+   gives 4.17 m from the start position. ⛔ Reposition the rover back first — each 3 s run eats ~1.7 m.
+4. ⏭ Wire the brake into the reflex (R5.4) — **two runs now show zeroing the setpoint leaves 100+ rpm.**
+⛔ **G2 IS NOT DONE. The sweep has not been run once.**
+
+## 🗄 (previous) START HERE — 2026-09-10. AUTONAV.
 
 **MEASURED THIS SESSION, not assumed:** `/scan` **25.8 Hz** · `/odom` **89 Hz** · `camera_info`
 **27.2 Hz, fx 304.05 @ 640×360** (the real value — 409.85 @ 848×480 is stale everywhere it appears)

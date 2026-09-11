@@ -10,6 +10,49 @@ metadata:
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
 
+## ✅✅ 2026-09-12 (02:00) — **ARMED AUTONAV ENGAGED FOR THE FIRST TIME. THE eph PROCEDURE WORKS.**
+`AutoNav holding (nav_state=23)` **while ARMED** — the first time all evening, and the direct
+confirmation of the eph diagnosis below. **Nothing about the mode, the bridge or the registration was
+ever broken; the blocker was position uncertainty and it is now a solved, repeatable procedure.**
+
+### 🔑🔑 THE PROCEDURE THAT WORKS — run it in THIS order, it got all three gates green
+1. **Reboot the FC** (disarmed) — `codex-work/bldc_can/diag/fc_reboot.py`. This is what resets `eph`.
+2. FC was back in **3 s**. Then **restart `rover-ekf-bridge` AND `rover-autonav-mode` together**
+   (`systemctl restart rover-ekf-bridge rover-autonav-mode`) — the reboot wipes the mode registration,
+   and the node must re-register **while DISARMED**.
+3. ⚠️ **`COM_DISARM_PRFLT` resets to 10 s on every FC reboot.** ⛔ **ASK BEFORE CHANGING IT** →
+   [[feedback_ask_before_param_change]]. Restored to **10** at end of session 09-12.
+4. **Verify all three gates before arming — do not assume:**
+   `failsafe_flags.local_position_invalid` **false** · handshake counts **non-zero both ways**
+   (`can_arm_and_run=True`) · `preflight_scan_check` runway.
+5. Operator arms on **ch5**; engage AutoNav; kill is **ch12**.
+
+### 📏 `eph` GROWTH — MEASURED, and the first estimate was WRONG
+| t after FC reboot | `eph` |
+|---|---|
+| ~6 s | **0.16 m** |
+| ~5 min | **0.78 m** |
+🔑 **Sustained growth ≈ 0.002 m/s ⇒ roughly 35 MINUTES of budget under the 5.0 m
+`COM_POS_FS_EPH` threshold — NOT the ~5 min I first quoted.** ⛔ **That first "0.01 m/s / 330 s left"
+figure was NOISE ON AN 8-SECOND SAMPLE — do not quote it.** It is a comfortable window, not a race.
+⚠️ Growth was measured **STATIONARY**. It will be faster while driving; re-measure before relying on it.
+
+### 🔴 OVERSPEED — NOW CONFIRMED TWICE ON THE FLOOR, SAME RATIO
+| run | commanded | bound | expected | **`/scan` MEASURED travel** | ratio |
+|---|---|---|---|---|---|
+| 1 | 0.10 m/s | 5.0 s | ~0.5 m | **2.69 m** | ~5.4× |
+| 2 | 0.10 m/s | 3.0 s | ~0.3 m | **1.66 m** (4.524 → 2.861 m) | ~5.5× |
+🔑 **Two independent runs, the same ~5.5× ratio.** This is the R4 defect with a repeatable number.
+⛔ **Both runs ended with the rover STILL MOVING after the tool commanded zero** (rpm 104, then 118);
+both were stopped by a **DDS force-disarm** (`VehicleCommand` 400, `param1=0`, `param2=21196`).
+
+### ⬜ S1 STILL INCONCLUSIVE — operator confirmed he did NOT press ch12
+⛔ **Do NOT log S1 as failed. It has never been exercised on the correct channel.**
+⚠️ **AND THE PASS CRITERION ITSELF IS SUSPECT:** in PX4 the **kill switch and disarm are DIFFERENT
+actions** — `RC_MAP_KILL_SW` triggers a manual kill that stops motors, and the vehicle can remain
+ARMED in that killed state. `s1_kill_test.py` requires "wheels stop **AND** disarms". **Decide what S1
+actually means before the next run**, or a real pass could be recorded as a failure.
+
 ## 🔴🔴🔴 2026-09-12 — **WHY ARMED AUTONAV IS REFUSED: `eph` 307 m vs `COM_POS_FS_EPH` 5 m. SOLVED.**
 > This closes the "armed → refused, disarmed → accepted" mystery that has recurred since August.
 > ⛔ **It is NOT the registration, NOT the bridge, NOT the mode. It is POSITION UNCERTAINTY.**
