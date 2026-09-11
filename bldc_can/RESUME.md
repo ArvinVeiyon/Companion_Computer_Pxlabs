@@ -1,52 +1,107 @@
-# RESUME — pick this work up after the reboot
+# RESUME — RC brake on the rover VESCs
 
-Written 2026-09-06 before the reboot that was meant to create `can0`; updated the same night
-after the reboot, which did **not**.
-Read this first, then [`README.md`](README.md) for the why and [`MOTOR_MAP.md`](MOTOR_MAP.md) for the map.
+Last updated 2026-09-09. Read this first, then [`README.md`](README.md) for the why and
+[`MOTOR_MAP.md`](MOTOR_MAP.md) for the map.
 
----
-
-## 🅿️ 2026-09-06 — CAN HAT PARKED BY OPERATOR DECISION. GOING USB INSTEAD.
-
-**Do not resume the MCP2515 debugging below unless the hat is repaired or swapped.** It is a
-hardware fault (see the diagnosis), it is not blocking the flash, and USB is the better path anyway:
-
-* ✅ **USB was ALWAYS mandatory for `60_mk5.bin`** — the DroneCAN route bricks it (§5 of `README.md`).
-  The dead hat costs us **nothing** on the flash itself.
-* ✅ **USB gives a COMPLETE mcconf backup. CAN never could** — the DroneCAN param table exposes only
-  8 params, no motor tune. This closes the "no config backup over CAN" gap outright.
-* ✅ **USB also settles the wheel↔node map** without the one-ESC-at-a-time CAN scan: `controller_id`
-  is readable directly per ESC in VESC Tool. Expect **FR=10 · FL=11 · RR=12 · RL=13**; believe the
-  measurement over the table if they disagree.
-
-### ⛔ TRAPS FOR THE USB / VESC TOOL SESSION — read before connecting
-
-1. 🔴🔴 **DO NOT "FIX" `si_motor_poles`.** It is `14` on all four and it is a **LINKED PAIR** with
-   `erpm_to_ms = 0.003900`. Changing poles in VESC Tool **silently halves `/odom`** — and odometry
-   is a safety input. `erpm_to_ms` is CLOSED and tape-validated; do not re-open the scale.
-2. 🔴 **FLASH ONE ESC FIRST, VERIFY, THEN THE REST.** The target branch
-   `pxlabs-6.06-rover-brake-rc` is **untested by its own doc**. Flashing all four at once destroys
-   the rollback in a single shot. Rollback tag **`v6.06.0-pxlabs-rover-r1`**.
-   ✅ Its `RC3_TRIM == RC3_MIN` blocker is **FIXED and SAVED on the FC, 2026-09-07** — see
-   "The PX4 side of the brake" below. **The FC is now ready; the ESC firmware is the only thing left.**
-3. ⚠️ **DO NOT change `can_mode` (it is `1` = UAVCAN on all four).** VESC Tool finding nothing on a
-   CAN scan is correct behaviour in that mode, not a fault. Switching it to VESC takes DroneCAN —
-   and the rover — down.
-4. ✅ **Config should survive the flash:** `dcc35366` → `a75a0db` differ only in `canard_driver.c`
-   plus one `.md`; `datatypes.h` / `confgenerator.*` / `conf_general.h` are byte-identical, so the
-   stored-struct CRC still passes. And even in a wipe, **CAN ID and baud survive** (`g_backup`).
-   You would lose the motor tune, not the bus.
-5. ⏭ **Export live configs BEFORE flashing** → `configs_live/live_<WHEEL>_mcconf.xml`. Confirm
-   **RL's `foc_motor_r = 0.1988`**, an outlier vs the other three (0.44–0.56) and duplicated in a
-   Left-Front file — suspect, and RL is the one on the bench.
-6. ⛔ **NEVER restore from `vesc_mcconf_Right_Front.xml`** — its `foc_motor_flux_linkage = 1.46287`
-   is ~130× the family, a failed detection.
+> 🅿️ **The companion CAN-HAT integration is DROPPED (time concern) and every trace of its debugging
+> has been deleted from this file.** What was changed on the companion at driver level, why it was
+> abandoned, and how to finish reverting it now live in **one** place:
+> [`../companion_can_driver_status.md`](../companion_can_driver_status.md).
+> ⛔ **Do not reopen the MCP2515 work and do not reconstruct the diagnosis.** It was hardware, it
+> never blocked the flash, and USB was always the mandatory path anyway.
 
 ---
 
-## ✅ THE PX4 SIDE OF THE BRAKE — DONE AND SAVED, 2026-09-07
+## Where things stand
 
-**All four values below were read back off the FC after `MAV_CMD_PREFLIGHT_STORAGE` (save) returned
+| | |
+|---|---|
+| ESC firmware | ✅ **All four wheels on `a75a0dbf`** (branch `pxlabs-6.06-rover-brake-rc`), **brake-tested and MEASURED loaded on the floor, 2026-09-09** |
+| PX4 side | ✅ **Complete and saved to flash 2026-09-07**, every value read back after the save |
+| Node ↔ wheel | FR = 10 (inverted) · FL = 11 · RR = 12 · RL = 13 |
+| Flash path | **USB only** — see the hard stop below |
+| Rollback | tag **`v6.06.0-pxlabs-rover-r1`**, over USB, per ESC |
+| Tested on the floor? | ✅ **YES — driven, loaded, 2026-09-09. Stops in 0.30–0.50 m from ~0.8 m/s.** |
+
+## ⛔ The one thing you must not forget
+
+**`Testing_Bin/60_mk5.bin` (524,280 B) MUST NOT be flashed over DroneCAN.** The app region is 512 KB
+but the DroneCAN staging area is only 384 KB, and `flash_helper.c:181` has no bounds check, so the
+transfer programs 131,070 bytes into sector 11 — the bootloader, which is never erased. **Result:
+brick, recoverable only by SWD/ST-Link.** Flash over **USB**. `flash.py` refuses the image; do not
+work around that guard. Full derivation in `README.md` §5.
+
+⚠️ `Testing_Bin/README.md` upstream still recommends the DroneCAN path and is **wrong**.
+
+---
+
+## ✅ 2026-09-09 — all four flashed and brake-tested (operator report)
+
+RL was the 09-07 pilot; FR, FL and RR have since been flashed with `a75a0dbf` and exercised.
+
+**What this changes:**
+
+* ⛔ **THE SINGLE-ESC ROLLBACK IS GONE.** With all four on branch firmware there is no known-good ESC
+  left to compare against. Rollback is now the tag, over USB, per ESC — nothing falls back on its own.
+* ✅ The chain (ch3 → `aux1` → `UAVCAN_EC_FUNC5` slot 5 → RawCommand index 4) is live on every wheel,
+  so the old "inert on the bus until an ESC runs `a75a0dbf`" caveat is **withdrawn**.
+
+**What it does not change — do not assume these, ask:**
+
+* ⚠️ Whether live mcconf backups were exported into `configs_live/` **before** each flash. That window
+  has now closed for three of the four.
+* ⚠️ What commit VESC Tool reported after each flash. No readback hash was recorded for any wheel.
+
+## ✅ 2026-09-09 — TWO RECORDED RUNS, BOTH LOADED ON THE FLOOR
+
+**Run 1** (303 s, ~30,000 `esc_status` msgs) — motor-side: proportionality, `RC3_*` geometry,
+errorcount, per-wheel rpm/s. 📄 [`evidence/brake_bench_test_20260909.md`](evidence/brake_bench_test_20260909.md)
+· CSV `~/brake_test_20260909.csv` · `diag/brake_test_record.py` + `diag/brake_test_analyse.py`
+
+**Run 2** (115.8 s, six topics) — **vehicle-side: deceleration in m/s² and stopping distance.**
+📄 [`evidence/brake_floor_test_20260909.md`](evidence/brake_floor_test_20260909.md)
+· CSV `~/brake_run_20260909_floor2.csv` · `diag/brake_run_record.py` + `diag/brake_run_analyse.py`
+
+🔴 **BOTH RUNS WERE ON THE FLOOR, LOADED.** Run 1 was recorded and written up as a bench/stands test
+— **that was my assumption, never observed, and wrong.** Run 2 measured the conditions directly:
+`esc_current` −12 … +8 A while moving against ±1 A of noise at rest, with body motion witnessed by
+`/odom` and the IMU. ⛔ **The full history of that error is kept in the run-1 evidence file on
+purpose — read it before trusting any conditions label.**
+
+| Measured, run 2 (loaded) | |
+|---|---|
+| **Braked deceleration** | **0.69 m/s² median**, 0.94 peak (n=9) |
+| **Stopping distance** | **0.30–0.50 m from ~0.8 m/s** |
+| Coasting | 0.20 m/s² ⚠️ **n=2, neither ran to a stop — PROVISIONAL** |
+| Brake vs coast | ≈3.4×; from 0.9 m/s saves ~1.4 m ⚠️ inherits the coast weakness |
+| `esc_errorcount` | 0 = NONE on all four, under load |
+
+| Measured, run 1 (motor-side) | |
+|---|---|
+| Proportionality | ✅ **Observed for the first time.** Steady hold at ch3 1212 µs → `aux1` −0.5657 measured vs −0.5663 predicted |
+| `RC3_TRIM` | ✅ **Still 1487.5** (solved two ways, median 1487.0 over 118 samples) — **the QGC recalibration hazard has not fired** |
+| `RC3_MAX` / `REV` | ≈ **1973 µs**, saturates from 1969 µs; **not reversed** — ⚠️ *solved from data, not read* |
+| Braking, all four | ✅ 411–432 rpm/s median. ~340 rpm → 0 in ≈1.0 s fwd; −413 → −126 rpm in ≈0.6 s rev |
+| vs coasting | **≈5× free-spin drag** (RR 429 vs 78 · RL 411 vs 85) |
+
+⛔ **Do not quote the FR/FL coast figures** — FL's rpm telemetry throws single-sample spikes
+(375 → 1028 → 562 in 0.4 s while the others read 235 → 346 → 347). RR and RL are the clean pair.
+🔑 **Scored naively on per-sample pairs the same data says the brake is 1.1× coast — an artifact.**
+You must gate on throttle-neutral and score **sustained runs**. If a reproduction gets ~1×, that is why.
+
+⚠️ **MAVLink was DOWN for both runs** (`mavlink-routerd` up, no heartbeat on `tcp:5760`, before and
+after an FC reboot) ⇒ **no PX4 param could be read or written.** Everything above is DDS or solved
+from the data — which is also why `RC3_MAX`/`REV` are marked solved rather than read.
+
+⚠️ **`/odom` DRIFTS AT STANDSTILL** — ~0.38 m of phantom travel in a minute with all four wheels at
+0 rpm (the camera-gyro dead-reckoning term). Use it for **change during a run**, corroborated by the
+IMU. **It is not a ruler.**
+
+---
+
+## ✅ The PX4 side of the brake — done and saved, 2026-09-07
+
+**All four values were read back off the FC after `MAV_CMD_PREFLIGHT_STORAGE` (save) returned
 `MAV_RESULT_ACCEPTED`.** The FC had been rebooted immediately before, so RAM was clean and the save
 committed only these changes.
 
@@ -55,7 +110,30 @@ committed only these changes.
 | `RC3_TRIM` | 1001.0 | **1487.5** | the blocker — trim was equal to `RC3_MIN` |
 | `RC_MAP_AUX1` | 0 | **3** | ch3 → `manual_control_setpoint.aux1` (operator set this in QGC) |
 | `UAVCAN_EC_FUNC5` | 0 | **407** | `RC_AUX1` onto ESC slot 5 = RawCommand index 4 = the brake slot |
-| `UAVCAN_EC_MIN5` / `MAX5` | 1 / 8191 | **unchanged — deliberate** | see the trap below |
+| `UAVCAN_EC_MIN5` / `MAX5` | 1 / 8191 | **unchanged — deliberate** | see the traps |
+
+✅ **ALL READ OFF THE FC 2026-09-10, once MAVLink came back** (it was down 09-09 across an FC reboot,
+then returned on its own; cause never identified, so expect it to recur):
+
+| Param | Reads |
+|---|---|
+| `RC3_MIN` / `RC3_TRIM` / `RC3_MAX` / `RC3_REV` | 1001.0 · **1487.5** · **1974.0** · 1.0 (not reversed) |
+| `RC_MAP_AUX1` · `UAVCAN_EC_FUNC5` | 3 · 407 |
+| `UAVCAN_EC_MIN5` / `MAX5` / **`FAIL5`** | 1 · 8191 · **0** |
+
+🔑 **The solved values were right.** From logged `input_rc` + `manual_control_setpoint` alone I had
+solved `RC3_TRIM` = 1487.0 median (1487.5 from a steady hold) and `RC3_MAX` ≈ 1973 — the FC says
+**1487.5 and 1974.0**, one microsecond out. **Solving PX4's piecewise map is a sound fallback when
+the link is down.**
+
+⛔ **`RC3_DZ` and `RC2_DZ` DO NOT EXIST on this firmware** — settled 2026-09-10 with a control: a
+deliberately fake name returns the identical `<no reply>` while a known-good param reads instantly on
+the same link. **`set_param.py`'s "wrong name, or the link is busy" cannot tell those apart — run the
+fake-name control rather than recording "unknown".**
+
+**The step-by-step procedure for configuring PX4 RC from scratch on this vehicle** —
+calibration, channel map, the brake channel, save, and verification — is
+[`../rc_configuration.md`](../rc_configuration.md) **§6**. Use it rather than re-deriving.
 
 ### Why `RC3_TRIM == RC3_MIN` really commanded ~50 % brake
 
@@ -66,7 +144,7 @@ Derived from source, not inferred:
 * `output_limit_calc_single` (`mixer_module.cpp:568`) maps a non-servo function −1…+1 linearly onto
   `MIN…MAX`, so norm 0 → **4096 → `brake_rel` 50 %**.
 
-With `RC3_TRIM = 1487.5` the channel is now continuous: ch3 at its 1001 stop → **−1.0 → slot 5 = 1 →
+With `RC3_TRIM = 1487.5` the channel is continuous: ch3 at its 1001 stop → **−1.0 → slot 5 = 1 →
 `brake_rel` 0.012 %**, below the firmware's 0.05 threshold ⇒ **brake off**. Mid-travel → 50 %,
 top → 100 %, which is exactly the proportional behaviour the Item C spec describes.
 
@@ -76,33 +154,37 @@ top → 100 %, which is exactly the proportional behaviour the Item C spec descr
    fix it" — IS THROTTLE-ONLY.** `rc_update.cpp:172` scopes that re-centring to
    `_rc.function[FUNCTION_THROTTLE]`. **It never applied to ch3, which is why the bug was real.**
    Do not generalise §2.1 to any other channel.
-2. 🔴 **`ros2_ws/tools/set_param.py` CANNOT WRITE INT32 PARAMS.** It always sends
+2. 🔴 **A QGC RC calibration REWRITES TRIM.** If ch3 is ever recalibrated, `RC3_TRIM` can land back on
+   1001 and **the 50 % brake bug returns**. Re-read `RC3_TRIM` after any calibration, every time.
+3. 🔴 **`ros2_ws/tools/set_param.py` CANNOT WRITE INT32 PARAMS.** It always sends
    `MAV_PARAM_TYPE_REAL32`, and `mavlink_parameters.cpp:129-131` refuses any set whose MAVLink type
    does not match the onboard type — it logs "param types mismatch" and writes **nothing**. PX4 then
    does `param_set(param, &set.param_value)` on the **raw 4 bytes**, so an INT32 must be sent as the
    integer's **bit pattern** in the float field. `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5` are both INT32
-   (type 6) and needed a separate writer. **`set_param.py` is fine for floats only.**
-3. ⛔ **DO NOT copy the `110 / 8082` motor convention onto `MIN5`/`MAX5`.** That pair exists so the
-   four *motor* slots get a neutral of exactly 4096. The brake slot is unipolar: it needs its
-   minimum to mean *off*, and the defaults `1 / 8191` give 0.012 %. `110` would also pass, but the
-   defaults are correct and there is no reason to touch them.
-4. ⚠️ **Set `RC_MAP_AUX1` BEFORE `UAVCAN_EC_FUNC5`.** With slot 5 assigned while AUX1 is unmapped,
-   `aux1` reads 0 → mid-scale → **50 % brake demand on the bus**. Harmless with today's ESC firmware,
-   which ignores index 4 entirely, but do not build the habit.
-5. ⚠️ **`RC_MAP_PITCH = 3` — ch3 is the pitch channel too.** Irrelevant to the rover, and the operator
-   loads a different parameter set for the drone, so it is not a conflict here. **But re-check
-   `RC3_TRIM` after any QGC RC calibration**, which rewrites TRIM.
+   and needed a separate writer — **`diag/set_param_int.py`**. `set_param.py` is fine for floats only.
+4. ⛔ **DO NOT copy the `110 / 8082` motor convention onto `MIN5`/`MAX5`.** That pair exists so the
+   four *motor* slots get a neutral of exactly 4096 and dodge the VESC's `raw < 100` disarm guard. The
+   brake slot is unipolar: its minimum must mean *off*, and the defaults `1 / 8191` give 0.012 %.
+5. ⚠️ **Set `RC_MAP_AUX1` BEFORE `UAVCAN_EC_FUNC5`.** With slot 5 assigned while AUX1 is unmapped,
+   `aux1` reads 0 → mid-scale → **50 % brake demand on the bus**.
+6. 🔴 **DO NOT "fix" `si_motor_poles`.** It is `14` on all four and is a **LINKED PAIR** with
+   `erpm_to_ms = 0.003900`. Changing poles in VESC Tool **silently halves `/odom`** — and odometry is
+   a safety input. The scale is CLOSED and tape-validated.
+7. ⚠️ **DO NOT change `can_mode`** (it is `1` = UAVCAN on all four). VESC Tool finding nothing on a CAN
+   scan is correct behaviour in that mode. Switching it to VESC takes DroneCAN — and the rover — down.
+8. ⛔ **NEVER restore from `vesc_mcconf_Right_Front.xml`** — its `foc_motor_flux_linkage = 1.46287` is
+   ~130× the family, a failed detection.
 
-### 🔑 The brake is REGENERATIVE — it does nothing at standstill, and that is not a fault
+---
 
-**2026-09-07: the operator flashed REAR LEFT with `a75a0dbf`** (the other three untouched, so the
-rollback is intact) and confirmed it works — raise ch3 and **only** rear left stops while the other
-three keep running. Two further observations, both expected:
+## 🔑 The brake is REGENERATIVE — it does nothing at standstill, and that is not a fault
+
+Two operator observations from the 09-07 RL test, **both expected**:
 
 * **"The brake applies immediately whatever the throttle is doing."** Correct — `canard_driver.c:746`
   tests brake first, so brake wins over throttle.
 * **"I can still turn the motor easily by hand, and full stick feels no different from low stick."**
-  **Also correct, and it is not a defect.** `mc_interface_set_brake_current_rel` →
+  **Also correct, and not a defect.** `mc_interface_set_brake_current_rel` →
   `mcpwm_foc_set_brake_current` → **`CONTROL_MODE_CURRENT_BRAKE`** (`mcpwm_foc.c:832`). That brake
   makes its torque by opposing rotation, so it scales with back-EMF — **at hand-turn speed 100 % and
   10 % both come out as ≈ nothing.**
@@ -130,280 +212,63 @@ is in `mcpwm.c`, the **BLDC** path, and `motor_type = 2` = **FOC**. They are dea
 `timeout_msec = 300`** (`timeout.c:225-233`) — a flat, absolute 2 A applied when no CAN command
 arrives for 300 ms, or the kill switch trips. **It is not a weak version of the RC brake; it is a
 different mechanism.** So "coast only" was never quite true. ⚠️ All four repo appconfs have
-`uavcan_raw_mode = 0` (`CURRENT`) — lower stick is **reverse**, not brake. If lower-stick braking is
-ever seen, that param has been changed live.
+`uavcan_raw_mode = 0` (`CURRENT`) — lower stick is **reverse**, not brake — but that has **never been
+read back off a flashed unit.** If lower-stick braking is ever seen, the param has been changed live.
 
-### ⏭ Not yet verified
+### Failsafe — correct by construction, NOT tested
 
-**Nothing has moved.** The chain is correct by construction and by readback, but `aux1` has never
-been observed changing — ch3 is static at 1001 because **no physical control is assigned to it on the
-TX yet**. Assign a switch or knob, then confirm on `/fmu/out/manual_control_setpoint` that `aux1`
-sweeps −1 → +1. And it stays inert on the bus until an ESC runs `a75a0dbf`.
-
----
-
-## 🔴 THIRD BOOT, 2026-09-06 18:00 — STILL BLOCKED. `err=110` → `err=19` IS NOT PROGRESS.
-
-Measured on a fresh boot (`/proc/uptime` 192 s). `can0` absent. The dmesg line changed:
-
-```
-mcp251x spi0.0: Cannot initialize MCP2515. Wrong wiring?
-mcp251x spi0.0: Probe failed, err=19          (was: "didn't enter in conf mode", err=110)
-```
-
-⚠️ **Do not read that as the chip waking up.** `err=19` (`-ENODEV`) is raised *later* in the driver
-than `err=110` — the reset check passed and the `CANCTRL` power-up-default check failed. Getting past
-the reset check only requires one `CANSTAT` read to come back with the config-mode bits set, and
-**`0x80` turns up in noise on a floating MISO**. The error code moved because the noise moved.
-
-The decisive test, new this boot — `diag/wrb_probe.py`, write a chosen value and read it back,
-7 speeds (100 kHz…10 MHz) × 5 trials × 4 patterns:
-
-```
-write/read-back: 0 of 140 passed
-```
-
-🔑 **And the read-backs are a one-transaction LAG line.** Each speed row returns, shifted by one
-slot, the values the previous row returned (`…07 1E 0B 14 00 00 02 9C…` reappearing a slot later).
-That is a floating line holding charge from the preceding transfer — **zero chip contribution**,
-the same class of artifact as the old MOSI back-feed, just a different coupling path.
-
-`diag/int_probe.py` on the same boot, bias verified applied: `/INT` gpio25 and MISO gpio9 **both
-still FLOATING** (pull-up→1s, pull-down→0s). Nothing is driving either pin.
-
-✅ **CRYSTAL IS 12 MHz — operator-confirmed 09-06, matches `oscillator=12000000`. CLOSED, don't
-re-open the 8-vs-12 question.** (Waveshare shipped this board with both across batches.)
-⚠️ **But that only settles the NUMBER.** The overlay's `oscillator=` value is used solely for
-bit-timing once the interface is up — it can never cause a probe failure. A crystal that is not
-physically **oscillating** is a different fault, and it *would* kill SPI outright, because the
-MCP2515's SPI state machine is clocked from its own oscillator. Software cannot tell that apart
-from a missing VDD. **Still on the suspect list; needs a scope, or a hat swap.**
-
-⛔ **The operator multimeter steps below have NOT been done yet — do them. No further software
-measurement will move this.** Three boots have now produced three different failure signatures and
-zero write/read-back passes; the signature varies because it is noise, and the noise is the finding.
+Brake-off on disarm and on RC loss follows from: PX4 has no disarmed parameter, so `_disarmed_value`
+stays **0** and is sent on every slot when disarmed, which on the brake slot is under the 0.05
+threshold ⇒ off; and `NAV_RCL_ACT = 6` disarms on RC loss. **Nobody has exercised either. Do not
+record it as verified.**
 
 ---
 
-## 🔴 STILL BLOCKED after the 2026-09-06 re-seat — and the signature CHANGED
+## ⏭ Open items
 
-The operator re-connected the hat ("it was wrongly connected") and rebooted. Re-measured on that
-boot (`/proc/uptime` 449 s, probe failed at t=8.6 s of *this* boot, so the log is current):
-
-* `can0` still absent, same `mcp251x spi0.0: … err=110`.
-* **Register write/read-back: 0 of 35 passed** — 7 SPI speeds (100 kHz…10 MHz) × 5 trials, writing
-  `0x5A/0xA5` to CNF1 and `0x3C/0xC3` to TXB0SIDH and reading back. Nothing we choose comes back.
-  ⚠️ A single `CANSTAT=0x80` did appear at 100 kHz in one run. **It was noise, not a pass** — that is
-  exactly why the read-back test exists; never accept the pass value from a single read.
-* **The MOSI back-feed is GONE**, and nothing replaced it. With SPI *bound and idle* (so there is no
-  MOSI activity to couple), bias verified applied:
-
-  ```
-  INT  gpio25:  pull-up->1111111111   pull-down->0000000000   FLOATING
-  MISO gpio9:   pull-up->1111111111   pull-down->0000000000   FLOATING
-  ```
-
-  A powered MCP2515 drives /INT high push-pull with no interrupt pending, so it would beat the
-  pull-down. Both pins simply follow the bias ⇒ **nothing is driving either pin.**
-* The old CS×MOSI sweep is now **non-reproducible** — "PINNED LOW" on one run, "PINNED HIGH" on the
-  next, and the bit-banged bytes are random rather than `tx[i] | tx[i-1]`. That is a high-impedance
-  line holding charge from the preceding traffic, not a chip.
-
-**Reading:** before the re-seat the pins demonstrably *reached an unpowered die* (clean ESD back-feed).
-Now there is no coupling at all. So either the die is still unpowered **and** the signal pins have
-lost contact, or the hat is sitting on the wrong header rows / offset by a position. Either way it is
-still hardware, and still the operator's job.
-
-⛔ **NOTHING ON THE CAN SIDE CAN FIX THIS — DON'T KEEP RE-WORKING THE BUS.** Termination and CAN H/L
-polarity live **downstream of the transceiver**; the MCP2515 fails on the **SPI** side, before a CAN
-frame exists. (Re-checked 09-06 after the operator switched the hat's terminator on and un-swapped
-H/L: `/INT`+MISO still float, a forced re-bind still gives `err=110`.) `can0` depends **only** on
-VDD + the five wires SO/SI/SCK/CS/INT. ✅ For the record the bus side is now right: **hat 120 Ω ON +
-the one powered VESC = 60 Ω** is the correct 2-terminator bench bus; with all four ESCs on, keep
-**exactly two** terminators, one at each physical end.
-⚠️ **Re-seat with the Pi SHUT DOWN, not live** — a hot re-seat neither re-probes nor can be trusted.
-
-⏭ **Use `diag/int_probe.py` as the first check from now on** — it needs no unbinding, runs in a
-second, and answers "is anything on the other end alive?" without the back-feed ambiguity that cost a
-day. `spi_probe.py` stays the deep dive.
+- [x] ~~Proportionality~~ — **observed 2026-09-09**, `aux1` continuous across the travel.
+- [x] ~~`esc_status.esc_errorcount` during braking~~ — **sampled 2026-09-09, clean on all four.**
+- [x] ~~Fix MAVLink~~ — **back up 2026-09-10, on its own.** ⚠️ Cause never found; may recur.
+- [x] ~~`UAVCAN_EC_FAIL5`~~ — **read 2026-09-10: 0.**
+- [ ] **`uavcan_raw_mode` — still never read off live hardware.** Needs USB + VESC Tool; the CAN path
+      is gone. Repo appconfs say 0 (`CURRENT`) on all four, unverified.
+- [x] ~~Measure the brake at speed on the floor~~ — **done 2026-09-09: 0.69 m/s², stops in
+      0.30–0.50 m from ~0.8 m/s.** The room was never the blocker it was recorded as.
+- [ ] 🔴 **ONE CLEAN COAST-TO-STOP.** The cheapest open item and the weakest link in every ratio
+      quoted above: coast is n=2, both segments 0.4 s, neither ran to a stop. Spin up, release
+      throttle to neutral with ch3 at the bottom stop, let it roll out completely, touch nothing.
+- [ ] ⚠️ **Reconcile the −12.06 A regen peak against the repo `l_in_current_min` of −5 A.** Either
+      the live mcconf differs from the repo XMLs or the cap is per-motor, not pack-side. Needs USB.
+- [ ] **The collision reflex still only ZEROES THE SETPOINT — it does not command the brake.** Wiring
+      it up is a separate, unmade change, and it is the reason this work exists.
+- [ ] Decide regen vs handbrake vs hybrid at `canard_driver.c:747`.
+- [ ] Export live configs over USB into `configs_live/`, per wheel. CAN exposed only 8 params and no
+      motor tune, so USB is the only complete backup. RL's `foc_motor_r = 0.1988` is an outlier vs
+      0.44–0.56 on the other three and is worth confirming.
+- [ ] Correct `Testing_Bin/README.md` upstream — it still recommends the DroneCAN path.
+- [x] ~~Fix `RC3_TRIM == RC3_MIN`~~ — done 2026-09-07 with `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5`, saved.
+- [x] ~~Flash one ESC over USB, verify, then the rest~~ — all four, 2026-09-09.
 
 ---
 
-## 🔴 The original 09-06 diagnosis (pre-re-seat) — THE HAT HAD NO POWER.
+## Diagnosing the ESCs without VESC Tool
 
-The reboot applied the overlay correctly and **`can0` still does not exist**:
+✅ **On DDS:** `/fmu/out/input_rc` · `/fmu/out/manual_control_setpoint` · `/fmu/out/esc_status`
+❌ **Not on DDS:** `rc_channels` · `actuator_outputs` · `actuator_motors` · `vehicle_status`
 
-```
-mcp251x spi0.0: MCP251x didn't enter in conf mode after reset
-mcp251x spi0.0: Probe failed, err=110
-```
+`esc_status.esc_errorcount` carries the **live VESC fault code** (the VESC fills it from
+`mc_interface_get_fault()`): `0`=NONE `1`=OVER_VOLTAGE `2`=UNDER_VOLTAGE `3`=DRV `4`=ABS_OVER_CURRENT
+`5`=OVER_TEMP_FET `6`=OVER_TEMP_MOTOR `7`=GATE_DRV_OV `8`=GATE_DRV_UV `9`=MCU_UV `10`=WATCHDOG_RESET.
 
-Diagnosed to the pin. **Nothing in `config.txt` can fix it — do not tune the overlay again.**
+⛔ **Avoid `mavlink_shell.py`** — one session per FC boot, and it killed the GCS MAVLink link on 08-16.
+⛔ **Never read a quiet topic as evidence.** Prove a non-zero baseline first.
 
-| Checked | Result |
+## Tooling on the companion
+
+| Script | Use |
 |---|---|
-| Overlay applied | ✅ live DT: `spi-max-frequency`, `can0_osc` 12 MHz, INT `<25 8>` |
-| Pin mux | ✅ gpio8/9/10/11 all `function spi0` |
-| SPI clock rate | ❌ **not the cause** — 1 MHz behaves *identically* to 10 MHz |
-| Raw register read via kernel spidev | ❌ silent at modes 0 & 3, 100 kHz–2 MHz |
-| Raw register read **bit-banged**, dw_spi unbound | ❌ silent — the RP1 controller is exonerated |
-| Chip select CE1 as well as CE0 | ❌ silent |
-| Is MISO driven? | ❌ **no** |
-
-**The finding.** With MISO biased and the bias verified in debugfs:
-
-```
-CS=1 MOSI=0:  pull-up->00000000  pull-down->00000000   PINNED LOW
-CS=1 MOSI=1:  pull-up->11111111  pull-down->00000000   floating
-CS=0 MOSI=0:  pull-up->00000000  pull-down->00000000   PINNED LOW
-CS=0 MOSI=1:  pull-up->11111111  pull-down->00000000   floating
-```
-
-MISO tracks MOSI **one way only** and **ignores CS entirely**. That is not a chip talking, and it
-is not a resistive short (a short would drag MISO high against the pull-down too). It is the ESD
-diodes of an **unpowered die** being back-fed from the driven pins. Every byte the bit-bang read
-back fits `rx_bit[i] = tx_bit[i] OR tx_bit[i-1]` exactly — pure MOSI bleed, zero chip contribution.
-
-⚠️ **`gpioget` on GPIO25 reads `1`, which looks like a healthy idle INT. It is the same back-feed.
-Do not read it as "the hat is powered".** A bias sweep with no settling delay also lies — it
-returned "MOSI is driven high" on a floating pin. Always `sleep` and always confirm from
-`/sys/kernel/debug/pinctrl/.../pinconf-pins` that the pull you asked for was applied.
-
-### ⏭ NEXT ACTION (operator, with a multimeter) — UPDATED after the re-seat
-
-1. **Seating/orientation first.** The hat must sit on pin 1 of the 40-pin header, not offset by a
-   pin or a row. Since the re-seat the signal pins show **no** coupling at all, which they did before.
-2. Meter the hat's **3.3 V** and **5 V** rails against the MCP2515's VDD pin. Header 3.3 V is pins
-   1/17, 5 V is pins 2/4. Look for an unmade or bent **power** pin, or a power jumper/switch.
-3. **New:** with the hat off the Pi, buzz continuity from the hat's header pads to the MCP2515 pins —
-   **21→SO, 19→SI, 23→SCK, 24→CS, 22→INT**. Contact was proven before and is not proven now.
-4. If the rail is present at the header but absent at the chip, or a signal pad does not ring
-   through, the hat is faulty — swap it.
-
-Re-check afterwards — cheap test first, deep dive second:
-
-```bash
-sudo python3 ~/codex-work/bldc_can/diag/int_probe.py   # 1 s; "actively driven HIGH" = powered die
-sudo python3 ~/codex-work/bldc_can/diag/spi_probe.py   # restores every binding it touches
-```
-
-⚠️ **A pass is NOT a single `CANSTAT=0x80`** — that value turns up in noise. A pass is `/INT` driven
-high against a pull-down **and** a register write that reads back the value you wrote, repeatably.
-Then, and only then, continue at **Step 1** below.
-
----
-
-## Where things stand
-
-| | |
-|---|---|
-| Hardware | Waveshare RS485 CAN HAT rev 2.1 (12 MHz MCP2515) on `spi0.0`, INT GPIO25, wired to the VESC CAN splitter |
-| Bench state | **Only REAR LEFT is powered.** The other three ESCs are switched off, on purpose, to map node IDs one at a time |
-| Overlay | ✅ applied and correct as of the 09-06 reboot — but the chip is dead on the bus, see above |
-| Tooling | complete, API-verified, **never run against hardware** |
-| Firmware to flash | `Testing_Bin/60_mk5.bin` — **USB only, see the hard stop below** |
-
-## The one thing you must not forget
-
-⛔ **`Testing_Bin/60_mk5.bin` (524,280 B) MUST NOT be flashed over DroneCAN.** The app region is
-512 KB but the DroneCAN staging area is only 384 KB, and `flash_helper.c:181` has no bounds check, so
-the transfer programs 131,070 bytes into sector 11 — the bootloader — which is never erased.
-**Result: brick, recoverable only by SWD/ST-Link.** Flash it over **USB**. `flash.py` refuses the
-image; do not work around that guard. Full derivation in `README.md` §5.
-
-## Step 1 — verify the reboot actually gave you can0
-
-> ⚠️ 2026-09-06: this step **failed**, and the cause is the power fault at the top of this file.
-> Everything from here on is still the right plan; it just cannot start yet.
-
-```bash
-ip -details link show can0          # THE check. Must exist.
-dmesg | grep -i mcp251x             # if can0 is missing, look here
-```
-
-⚠️ **Do not** use `lsmod | grep mcp251x` as the test — the module can load without the device binding.
-⚠️ **Boot-clock trap:** this box's journal restamps early boot. Check `/proc/uptime` before reading
-any duration off a timestamp.
-
-If `can0` is missing, the usual cause is the INT pin (GPIO25) or SPI wiring, **not** the crystal —
-a wrong crystal binds fine and fails on the bus instead.
-
-Rollback if needed: `/boot/firmware/config.txt.bak-canhat-20260905`.
-
-## Step 2 — bring the bus up and prove it is real
-
-```bash
-cd ~/codex-work/bldc_can
-./bringup.sh                        # can0 @ 1 Mbit, restart-ms 100
-candump -td can0 | head -20         # the FC is a live DroneCAN node - you should see traffic
-```
-
-**Never read a quiet topic as evidence.** If `candump` is silent, the fault is wiring / termination /
-bitrate — do not proceed to the python tools and conclude anything from their silence.
-
-## Step 3 — map rear left (the actual next task)
-
-```bash
-./venv/bin/python scan.py                              # expect exactly ONE VESC node
-./venv/bin/python backup_params.py --label "rear left"
-```
-
-**Expected: node 13.** Record the result in `MOTOR_MAP.md` (Measured column + the log table) and
-commit. If a different ID appears, **believe the measurement** and correct the table.
-
-Then repeat per wheel as each ESC is switched on: FR→10, FL→11, RR→12.
-
-## Step 4 — still outstanding
-
-- [ ] Export live configs over USB into `configs_live/`, per wheel (`live_RL_mcconf.xml`, …).
-      CAN exposes only 8 params — USB is the only complete backup. RL's `foc_motor_r = 0.1988`
-      is an outlier and RL is on the bench now, so it is worth confirming.
-- [ ] Correct `Testing_Bin/README.md` upstream — it currently recommends the DroneCAN path.
-- [x] ~~Fix `RC3_TRIM == RC3_MIN`~~ — done 2026-09-07, with `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5`;
-      saved to flash. **The whole PX4 side is complete.** See "The PX4 side of the brake" above.
-- [ ] Assign a physical switch/knob to ch3 on the TX, then watch `aux1` sweep −1 → +1.
-- [ ] Flash one ESC over USB, verify, then the rest. Rollback tag `v6.06.0-pxlabs-rover-r1`.
-
----
-
-## What the reboot will change on this box
-
-State captured immediately before rebooting (uptime was 1.2 h, `get_throttled=0x0`):
-
-| Unit | Was | Enabled at boot? | Action after reboot |
-|---|---|---|---|
-| `vision_streaming` | active | **enabled** | should return by itself — **verify, don't assume** |
-| `microxrce-agent` | active | enabled | returns |
-| `mavlink.router` | active | enabled | returns |
-| `rover-scan` / `-scan-3d` / `-odometry` | active | enabled | return |
-| `rover-ekf-bridge` | inactive | disabled | **stays down on purpose** (wheels-up limit cycle). Start only for an AutoNav run, on the floor |
-| `tfmini` | inactive | disabled | stays down; must be enabled for the drone |
-
-> `vision_streaming` reads `enabled` here, which **contradicts the older note that it is disabled at
-> boot and that a reboot kills the video.** Trust the measurement after the reboot, not the note.
-
-✅ **Measured after the reboot (2026-09-06): every unit came back exactly as predicted above —
-`vision_streaming` returned by itself.** The old "`vision_streaming` is disabled at boot / a reboot
-kills the video" note is **withdrawn**. (`active` is still not a rate — nobody has measured the
-stream itself.)
-
-⚠️ **`active` proves nothing — measure rates.** On 09-04 all six units read `active` while depth,
-colour and `/scan` were all 0.0 Hz. If `/scan` or the cloud is dead, restart the **camera** first,
-then `rover-scan` / `-scan-3d` / `-odometry` — they stay at 0 Hz forever otherwise.
-
-⚠️ **Clock is wrong until NTP steps it.**
-
-⚠️ **RC CH10 drives companion power:** `2014` = reboot, `1514` (middle) = shutdown, `1011` (down) =
-safe. At capture time the **TX was off** (all 18 channels `0`, `link_quality: -1`), so nothing will
-fire during this reboot — **but when you switch the TX back on, make sure CH10 is down first**, or
-the companion will shut down and it will look like a fault.
-
-ℹ️ `/dev/ttyAMA3` (STL-19 lidar) does not exist and will not come back: SPI0 claims GPIO8/9, so
-`dtoverlay=uart3-pi5` loses the pins. **This was already true before the CAN HAT** — `dtparam=spi=on`
-was set long before. Not caused by this work, and accepted while the hat is fitted.
-
-## Reboot
-
-```bash
-printf '1987\n' | sudo -S reboot
-```
+| `~/ros2_ws/tools/set_param.py NAME [value]` | read/write **FLOAT** PX4 params over MAVLink `tcp:5760`. **RAM only.** |
+| `diag/set_param_int.py NAME [value]` | the **INT32** writer, with readback. `set_param.py` cannot do this. |
+| `diag/param_save.py` | `MAV_CMD_PREFLIGHT_STORAGE` p1=1 — the save step. Saves **everything in RAM**, so run it only when RAM is known-clean. |
+| `diag/fc_reboot.py` | FC reboot over **DDS** (`VehicleCommand` 246); refuses if ARMED. |
+| `flash.py` | carries the guard that **refuses `60_mk5.bin`**. Do not work around it. |
