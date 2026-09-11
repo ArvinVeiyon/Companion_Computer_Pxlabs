@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ed82ad73-5296-4ccf-a23b-4d17a56b063d
-  modified: 2026-09-03T18:56:04.653Z
+  modified: 2026-09-07T18:38:47.243Z
 ---
 
 # Working on this machine — what the manuals do not cover
@@ -86,3 +86,15 @@ forces the raw binary.**
 itself persists in `~/.claude/projects/-home-roz/<session-uuid>.jsonl` and resumes with
 `claude --resume <uuid>`. ⛔ **Never run two `claude` processes against the same `.jsonl`.**
 ⚠️ Backup of the pre-wrapper file: `~/.bashrc.bak-tmuxwrap-20260907_222109`.
+
+## READING RC CHANNELS — MAVLink IS THE RELIABLE RULER (2026-09-07)
+🔑 **`ros2 topic echo /fmu/out/input_rc` returned NOTHING three times on a topic that was provably
+live**, `--no-daemon` included. **MAVLink `RC_CHANNELS` via pymavlink on `tcp:5760` answered instantly**
+and gave all 18 channels. ⇒ **when the ros2 CLI goes quiet, reach for MAVLink rather than concluding
+anything** — and never read the silence as "the TX is off". (Another instance of the ros2-CLI-as-
+unreliable-ruler trap above; [[independent_rulers]].)
+⚠️ **The status topic is `/fmu/out/vehicle_status_v1`, NOT `/fmu/out/vehicle_status`** — the old name
+resolves to nothing and `ros2 topic echo` reports it as "not published yet", which reads like a dead
+FC. ⚠️ **The bridged `/fmu/` set is THIN and appears lazily** — after an FC reboot only ~12 topics
+existed; `manual_control_setpoint`, `actuator_outputs` and `esc_status` were **absent**, so do not
+plan a measurement around them without checking `ros2 topic list` first.

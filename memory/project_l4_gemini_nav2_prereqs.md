@@ -51,9 +51,10 @@ see [[project-rover-autonav]].
 ## CAMERA MOUNT TF — MEASURED 2026-07-21 evening, no longer a placeholder (L5 UNBLOCKED)
 
 > ⚠️ **STALE SECTION — the camera was REMOUNTED 2026-07-26 on a printed bracket.**
-> **Current truth = `depth_to_scan.launch.py` defaults (ros2_ws `f210102`, 07-27):**
-> **cam_x 0.00 · cam_y 0.00 · cam_z 0.305 · cam_pitch 0.0406 (2.33° nose down) ·
-> cam_roll 0.0100 · range_max 5.0.** The camera now sits ON the rotation centre, and pitch/roll
+> ⚠️ **PITCH/ROLL BELOW ARE SUPERSEDED — see 2026-09-10/11.** Current truth =
+> **cam_x 0.00 · cam_y 0.00 · cam_z 0.305 · cam_pitch 0.0251 · cam_roll −0.0078 ·
+> range_max 5.0**, verified at a wall 2026-09-11 (`project_rover_autonav`). The 07-27 figures
+> `cam_pitch` 0.0406 / `cam_roll` 0.0100 are STALE. The camera now sits ON the rotation centre, and pitch/roll
 > are no longer zero. Everything below is the 07-21 pre-remount derivation — **kept only for the
 > measurement METHOD** (IMU-based pitch/roll, wheelbase cross-check), not for its numbers.
 > The comparison table further down already carries the new figures.
@@ -158,8 +159,9 @@ voxel layer**, which consumes the full cloud, or Nav2 marks a permanent obstacle
 3. `systemctl restart rover-scan`
 4. Tape-measure one `/scan` return — still outstanding from the 07-24 checklist.
 
-## Camera mount TF — AS-BUILT, measured 2026-07-27 (`ros2_ws f210102`)
+## Camera mount TF — AS-BUILT (⚠️ pitch/roll SUPERSEDED 2026-09-10, verified 09-11)
 Truth = the defaults in `depth_to_scan.launch.py`: **cam_x 0.00, cam_y 0.00, cam_z 0.305,
-pitch 0.0406, roll 0.0100, range_max 5.0**. Pitch/roll were measured from `/camera/accel/sample`,
+range_max 5.0**, with **pitch 0.0251 / roll −0.0078** — ⛔ the 07-27 **pitch 0.0406 / roll 0.0100
+are STALE**, re-measured 09-09 and verified at a wall 09-11 (`project_rover_autonav`). Pitch/roll were measured from `/camera/accel/sample`,
 not estimated. **Supersedes the 2026-07-21 figures** (x −0.125 / z 0.420 / zero rpy) — those were
 wrong. This unblocked L5.

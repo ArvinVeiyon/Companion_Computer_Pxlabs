@@ -10,6 +10,77 @@ metadata:
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
 
+## ✅✅ 2026-09-11 — **G0 CLOSED. `/scan` GEOMETRY VERIFIED LIVE AT A WALL after the pitch/roll fix.**
+
+**WHY IT MATTERED:** `depth_to_scan.launch.py` got the measured mount angles 09-10 (`cam_pitch`
+0.0406→**0.0251**, `cam_roll` 0.0100→**−0.0078**). The box **rebooted 22:44:56 on 09-11**, so
+`rover-scan` picked them up — the geometry went **LIVE AND UNVERIFIED**, the exact state the old
+warning forbade, because the collision reflex acts on `/scan`. 0.0155 rad = **0.89°** ≈ ⅓ of the
+scan band's ±2.79° half-width ⇒ ~23 mm vertical shift at 1.5 m, ~47 mm at 3 m. Down ⇒ floor enters
+the scan and reads as a permanent obstacle; up ⇒ low objects get cleared (**the unsafe direction**).
+
+**THE REAL RISK, AND IT CAME THROUGH INTACT:** `/scan` scale **0.9845** and `front_overhang`
+**0.337** were tape-fitted 08-12/13 **with the OLD 0.0406 pitch baked in**. They are a fit, not a
+law. `preflight_scan_check.py` hardcodes 0.337 in source; the standoff pass rests on both.
+
+### THE LADDER THAT SETTLED IT — 5 parkings, one wall, nothing ever moved under power
+| parking | `/scan` perp | bearing | fit RMS | inliers | coverage |
+|---|---|---|---|---|---|
+| 1 | 1.3827 m | −3.90° sd 0.04 | 3.4 mm | 1.00 | 0.80 |
+| 2 (operator re-squared) | 0.3449 m | −3.49° sd 0.02 | 0.4 mm | 1.00 | 0.80 |
+| 3 (**rover** corrected) | 0.3848 m | **−0.25°** sd 0.01 | 0.4 mm | 1.00 | 0.80 |
+| 4 (never explained) | 0.3404 m | −0.40° sd 0.00 | 0.3 mm | 1.00 | 0.80 |
+| **5 — THE DECISIVE ONE** | **1.4390 m** | **+0.30°** sd 0.03 | 2.1 mm | 1.00 | 0.80 |
+
+✅ **PASS, ON OPERATOR TAPE AT PARKING 5:** taped bumper→wall **face** 1.12 m. Model predicts
+`0.9845 × (1.12 + 0.337)` = **1.4344 m**; `/scan` read **1.4390 m** ⇒ **4.6 mm on 1.46 m (0.32%)**.
+Inverted: `1.4390/0.9845 − 0.337` = **1.1247 m** vs taped 1.12 ⇒ **4.7 mm**, inside tape resolution.
+⇒ **BOTH CONSTANTS SURVIVE THE TRANSFORM CHANGE. ⛔ DO NOT RE-DERIVE THEM.**
+🔑 The mm-level agreement also **proves the tape reference point was the bumper** — any other
+reference would have missed by cm, not mm.
+
+🔑🔑 **THE FLOOR-IN-SCAN TEST IS `inlier fraction`, NOT RMS ALONE.** RANSAC returned **1.00 at every
+range including 1.44 m** = ONE clean plane filling the whole ±20° sector. Floor in the band would
+fit two surfaces at different ranges and blow RMS to cm.
+
+### 🔑🔑 `cam_yaw` — CONFIRMED 0.0, AND `wall_probe` IS THE ONLY INSTRUMENT THAT CAN SEE IT
+`cam_yaw` **exists** as a launch arg (`depth_to_scan.launch.py:98`, wired to `--yaw`) and has always
+been **0.0**. ⛔ **`cam_mount_probe.py` CANNOT CHECK IT — its own line 30: "Yaw is unobservable from
+gravity."** The −3.90°/−3.49° bearings at parkings 1–2 looked like a real mount yaw (two ranges
+1.04 m apart agreeing within **0.41°**, both fits immaculate) — **it was the PARKING.**
+✅ **DISCRIMINATOR: the operator re-squared THE ROVER — he explicitly did NOT touch the camera — and
+the bearing collapsed to −0.25°.** (Third time he has been right about the mount. See the standing
+⛔⛔ rule.)
+🔑 **A bearing that persists across parkings at DIFFERENT ranges is NOT proof of camera yaw.** Square
+the rover first. The camera-independent check is **equal tape gaps at both front corners**: a 0.56 m
+front edge yawed 3.5° gives a **34 mm** left-vs-right difference (0.73 m ⇒ 45 mm), and near-contact
+parking (~8 mm) is the easiest place to read it.
+
+### FREE VALIDATIONS PICKED UP ALONG THE WAY
+✅ **The reflex behaves correctly under the NEW geometry:** BLOCKED at 0.008 m ("AutoNav will refuse
+to drive forward from this spot"), CLEAR at 1.039 m with 0.69 m of usable runway. Coverage **0.80
+against `min_valid_fraction` 0.35** at every parking, **0 empty-sector scans**, jitter ≤4 mm.
+✅ **Chain baselined NON-ZERO BEFORE measuring** (never read a quiet topic as evidence): `/scan`
+**26.7 Hz**, `/odom` **89.3 Hz**, **556/640 valid rays**, `camera_info` **fx 304.05 @ 640×360**.
+⚠️ `ros2 topic hz` again returned **nothing** on a healthy `/scan`, and `--no-daemon` **is not a flag
+on `topic hz`** — a direct rclpy subscriber is the reliable ruler here.
+
+### ⚠️ LIMITS OF THIS RESULT — state them, do not overclaim
+- **ONE tape point.** At 1.12 m the accepted model and the rival fit refuted in §5 (scale 0.9573 /
+  overhang 0.377) differ by only **~1 mm**. This run **confirms the accepted constants survived the
+  transform change**; it does **NOT** independently re-refute the rival. §5's 1.973 m point still
+  does that job and does not need repeating.
+- **Parking 4 (0.3404 m) read CLOSER after "moved it back" and was never explained.** Superseded by
+  parking 5. A frozen-frame check was started and interrupted — but the stream tracked the rover
+  across 5 parkings and the bearing responded to a deliberate re-square, which is **stronger**
+  evidence of liveness than that script would have produced.
+- **All 5 parkings were the same wall.** A second wall at a different heading was never tried.
+
+⏭ **NEXT = G2.** On the FC tonight: `RO_MAX_THR_SPEED` **0.6**, `RO_SPEED_TH` **0.10** — ⚠️ memory
+records the ESC dropout floor as ~0.14, **unreconciled, belongs to G2.** **G3 venue call still OPEN
+and still blocks T2.**
+
+
 ## 🏁🏁 2026-08-02 — **#20 EXPLAINED. IT IS A FRICTION DEADBAND + INTEGRAL WINDUP, NOT A BROKEN LOOP.**
 **MEASURED yaw response curve** (MANUAL, armed, stick held ≥0.8 s, gyro averaged over the settled half):
 | steer out | 0.055 | 0.230 | 0.268 | 0.281 | 0.348 | 0.425 | **0.484** | **0.573** | **0.935** |
@@ -1151,6 +1222,8 @@ independently corroborates §5's +0.72 °/s.
   `count_publishers()` found publishers on all of them — the CLI-is-an-unreliable-ruler trap again.
   ⚠️ `/proc/<pid>/io` is ALSO a weak ruler here: DDS shared-memory writes do not move `wchar`.
 
-⏭ **RESUME HERE:** park square → `wall_probe.py` → correct the roll in TF → restart
-`rover-odometry` → re-verify `front_overhang` + `/scan` scale → then localization
-(`camera_info` vs the calibration baked into `house_map_v4.db`). ⛔ No moving test before that.
+✅ **THAT RESUME-HERE IS DONE — CLOSED 2026-09-11** (park square → `wall_probe.py` → roll corrected
+in the launch TF → `front_overhang` + `/scan` scale re-verified on tape to 4.6 mm). See the
+**2026-09-11 G0 CLOSED** block at the top of this file. ⏭ **Next is G2 (motion truth), NOT
+localization** — `autonomy_plan.md` §5: M2 needs no map and no localization, so G1 gates only M3.
+⛔ **The "no moving test before geometry is verified" bar is now MET.**

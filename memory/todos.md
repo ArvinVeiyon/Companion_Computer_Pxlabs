@@ -1,5 +1,10 @@
 # TODO List
-> Tasks to perform AFTER full OS backup of both drone and relay station.
+> ⛔ **The old "do these AFTER a full OS backup" framing is GONE** — it had not applied for months and
+> was gating nothing. **Read the REQUIREMENTS REALIGNMENT below; that is the plan.** Everything under
+> the older headings is detail, not the agenda.
+> 🧹 **Pruned 2026-09-10: 793 → ~540 lines.** Removed were completed items, deleted items, two
+> session logs and the withdrawn "camera was rotated" claim. **Every ⛔ "do not reopen / do not
+> re-propose" warning was kept** — those are what stop work being redone.
 
 ---
 
@@ -31,13 +36,15 @@ layer-for-layer (L0 ✅ · L1 🔧 · L2-L5 ❌). Nothing to resolve, nothing to
 | **R4** control bridge | ✅ built · 🔴 **speed commands not honoured** (0.05→0.140, 0.25→~0.9) | open-loop `RO_MAX_THR_SPEED` sweep → **G2** |
 | **R5** safety | ✅ 1,2,3 proven · ❌ **R5.4 stopping buffer unverified** · ❌ **R5.5 companion-crash disarm NEVER TESTED** | **G2** / **G6** |
 | **R6** compute ≤2.0 cores | ❌ **never measured as a total** — and RTAB-Map + voxel go on top | **G4** gate |
-| **R7** frames | 🔴 broken — **camera physically rotated, roll uncorrected** | `wall_probe.py` → **G0** |
+| **R7** frames | ⚠️ **the MOUNT IS FINE — the LAUNCH FILE is stale** | update `cam_pitch`/`cam_roll` → **G0** |
 
 🔑 **R1's stated acceptance ("<0.3 m over a 20 m loop") CANNOT BE RUN HERE** — same room constraint
 that blocks T2. It needs a corridor or a re-scope; that is an operator decision, see **G3**.
-🔴 **R1 doc conflict, unfixed in the source:** `rover_autonav_requirements.md` R1 still names
-**`slam_toolbox`**; `autonomy_plan.md` §2.2 superseded it with **RTAB-Map** and that is what is
-actually configured (`rtabmap_localization.yaml`). The requirements doc is the stale one.
+✅ **R1 doc conflict — CLOSED 2026-09-10, it was already fixed and this note was the stale one.**
+`rover_autonav_requirements.md` carries the `slam_toolbox` line **struck through** with
+*"🔴 SUPERSEDED 2026-08-01 — the map/localization source is RTAB-Map, not slam_toolbox"*. Nothing to
+do. ⚠️ Remaining `slam_toolbox` mentions there are in the **retired** L0-L7 ladder and in install
+inventories, which are factual.
 
 ## 2. 🔴 REQUIREMENTS THAT WERE TRACKED **NOWHERE** UNTIL NOW
 Not late — **never filed.** These are the actual product, and none of them is a hardware problem:
@@ -59,10 +66,17 @@ Not late — **never filed.** These are the actual product, and none of them is 
   RTAB-Map or the voxel layer. ⚠️ **budget for `claude` itself: 55-86% of a core.**
 
 ## 3. THE REALIGNED ORDER — gates, not a wish list. Each one unblocks the next.
-**G0 — GEOMETRY TRUTH.** ⛔ *Nothing may move until this closes.* Operator parks the rover square +
-close to a flat wall → `wall_probe.py --scans 40 --overhang` → correct roll in TF **while the camera
-is off its mount** → restart `rover-odometry` (re-locks the gyro TF) → re-verify `front_overhang`
-0.337 and `/scan` scale 0.9845. **Fixes R7; un-suspects every camera-referenced constant.**
+**G0 — GEOMETRY TRUTH.** ⛔⛔ **THE CAMERA IS NOT ROTATED AND NEVER WAS. THE OPERATOR HAS SAID SO
+REPEATEDLY AND HE IS RIGHT — STOP RAISING IT.** The 08-10 "camera physically rotated" claim was
+WITHDRAWN 09-04 and re-measured 09-09: **pitch 1.436°, roll −0.447°, |g| 9.7769, sd 0.006, 12,145
+samples** (`tools/cam_mount_probe.py`). That is a normal, level mount.
+🔑 **What was wrong was the LAUNCH FILE, not the hardware** — it carried the 07-27 `cam_pitch`
+0.0406 / `cam_roll` 0.0100 from before the camera came off and went back on the top plate.
+✅✅ **G0 IS CLOSED — corrected 09-10 to `cam_pitch` 0.0251 / `cam_roll` −0.0078, and VERIFIED AT A
+WALL 09-11:** 5 parkings, fit RMS 0.3-3.4 mm, **inlier fraction 1.00 at every range ⇒ no floor in
+the scan**, coverage 0.80 vs the 0.35 threshold, and on operator tape at 1.12 m `/scan` read
+**1.4390 vs 1.4344 predicted (4.6 mm)** ⇒ **`front_overhang` 0.337 and scale 0.9845 BOTH STAND.**
+Full method, numbers and limits → `project_rover_autonav` 2026-09-11.
 **G1 — LOCALIZATION ALIVE (R1).** Live `camera_info` vs `house_map_v4.db`'s calibration. 🔑 **Adjudicate
 on the ACCEPTED-FIX COUNT — a changing `map→odom` with 0 accepted is drift, not health.** ⛔ Do not
 re-map the house first.
@@ -87,40 +101,62 @@ kill-switch doc) · #7 aide.db · #17 delete `camera_sw_node_obsolute.py` · #14
 
 ---
 
-## ⏭⏭ NEXT SESSION (2026-09-04) — AUTONAV. START HERE. **= G0 then G1 above.**
-**Stack is UP and verified as of 09-04 00:10** (`/scan` 25.9 · `/scan_3d` 28.8 · `/odom` 49.9 Hz,
-heading source CAMERA GYRO). ⚠️ **It was ALL DEAD when this session started while every unit read
-`active` — re-verify rates before assuming, and remember the camera restart alone does NOT revive
-`/scan` or `/odom`.** → [[project_rover_autonav]] 09-04
-1. 🔑 **OPERATOR ACTION FIRST: park the rover SQUARE and CLOSE to a flat, featureless wall.**
-   Nothing else can proceed. Then `python3 ~/ros2_ws/tools/wall_probe.py --scans 40 --overhang`
-   (✅ the tool now exists — it never did before 09-04).
-2. Correct the camera roll in TF while the camera is off its mount, restart `rover-odometry` to
-   re-lock the gyro TF, then re-verify `front_overhang` (0.337) and the `/scan` scale (0.9845).
-3. Only then: localization — live `camera_info` vs the calibration inside `house_map_v4.db`.
-⛔ **No moving test until 1–2 are done.**
+## ⏸ PARKED 2026-09-09 BY THE OPERATOR — brake work, resume AFTER AutoNav
 
-## (previous) NEXT SESSION (2026-09-03) — AGREED WITH THE OPERATOR 09-02.
+The RC brake is DONE and measured (0.69 m/s², stops in 0.30–0.50 m from ~0.8 m/s, loaded, on the
+floor). → `codex-work/bldc_can/evidence/brake_floor_test_20260909.md`. Three loose ends, none
+blocking AutoNav:
 
-### 1. ⛔ HARDFAULT PURGE — **DROPPED BY THE OPERATOR 2026-09-03. Do not raise it again.**
-The handoff doc was deleted and pushed (`codex-work` `489c126`); the rest of the RESUME-HERE list in
-[[fc_hardfaults]] stays undone **on purpose**. Leftovers are disk clutter, not risk — the one real
-hazard is noted there (`~/fc_firmware` holds the **PRE-FIX** build; never reflash from it).
-🔑 **Focus from 09-03 is AUTONAV** — see the NEXT list below, starting with (b) gate safety on `/scan`.
+1. **`codex-work` IS UNCOMMITTED** — 5 modified + 11 new files (both evidence docs,
+   `companion_can_driver_status.md`, `rc_configuration.md` §6, four `diag/` tools, three memory
+   files). **The PXLABS firmware session cannot pull any of it.** Commit + push when convenient.
+2. ✅ **MAVLINK IS BACK — 2026-09-10, came back on its own.** All params read; `UAVCAN_EC_FAIL5`
+   = 0, `RC3_MAX` = 1974.0, `RC3_REV` = 1.0, `RC3_TRIM` = 1487.5 (unchanged), `RO_MAX_THR_SPEED`
+   = 0.6. **G2 is no longer blocked.** ⚠️ Cause never identified — it may recur.
+3. **One clean coast-to-stop** — the coast baseline is n=2, neither segment ran to a stop, so the
+   "3.4× better than coasting" and "saves 1.4 m" figures are PROVISIONAL. The braked figures are not.
+   Two minutes: spin up, throttle to neutral with ch3 at the bottom stop, roll out untouched.
 
-### 2. ✅ COMPACT `MEMORY.md` — **DONE 2026-09-02. 21 542 → 17 375 B (cap 17 408), 79 lines.**
-**No entries were dropped** — every one was grep-verified present after the edit. Method used, if it
-has to be repeated: shorten lines, and only delete a fact from the index **after** confirming it is
-already in its topic file/manual (`relay2_relaystn`, `fc_hardfaults`, `px4_param_audit.md`,
-`autonav_reference` §5/§10/§13, `vision_streaming.md`, `indoor_mapping_slam`) — all were checked
-before removal. New convention introduced: **a bare `§N` in `MEMORY.md` means `autonav_reference`.**
-⚠️ **Only ~33 B of headroom left** — the next real addition needs a trim somewhere else first.
-🔴 **Found while compacting, unresolved:** `setup_manual` §C8 lists a `mavlink.router` unit on the
-COMPANION, but I could find no such systemd unit here (only `mavlink-routerd` holding `:5760`).
-One of the two is wrong — settle it and fix the manual.
-⚠️ **Mirror re-sync still owed:** `cp -p .../memory/*.md ~/codex-work/memory/` + push. **Never `rsync --delete`.**
+⚠️ `MEMORY.md` is **19.8 kB against its own 17 kB cap** — needs a compression pass.
 
----
+## ⏭⏭ START HERE — 2026-09-10. AUTONAV.
+
+**MEASURED THIS SESSION, not assumed:** `/scan` **25.8 Hz** · `/odom` **89 Hz** · `camera_info`
+**27.2 Hz, fx 304.05 @ 640×360** (the real value — 409.85 @ 848×480 is stale everywhere it appears)
+· 🔴 **`/scan_3d` 0.00 Hz while `rover-scan-3d` reads `active`** — the documented trap; the camera is
+fine, the node is not. Needed for G4, not for G0–G3. · `rover-ekf-bridge` correctly **inactive**.
+✅ **MAVLink came back on its own 2026-09-10** after being dead through 09-09; cause never found, so
+expect it to recur. **G2 is no longer blocked.**
+
+### 🔑 RUN THE GATES IN DEPENDENCY ORDER, NOT NUMERIC ORDER: **G0 → G2 → G3**, and let **G1 wait**.
+`autonomy_plan.md` §5 is explicit that **M2 needs NO map and NO localization**, and warns in its own
+words that *"anything that defers M2 behind mapping work is deferring the only autonomy currently
+within reach."* G1 (localization) is the deadest item on the board — **0 accepted fixes out of 20** —
+and it gates **only M3**. Nothing in M2 touches it. ⇒ **Do not put localization in front of M2.**
+
+1. ✅✅ **G0 camera geometry — CLOSED 2026-09-11. Nothing left to do here.** The mount is correct
+   (measured; see the WITHDRAWN section below), `depth_to_scan.launch.py` carries the measured
+   `cam_pitch` **0.0251** / `cam_roll` **−0.0078**, the 09-11 boot made them live, and they were
+   **verified at a wall the same night** — fit RMS 0.3-3.4 mm, **inlier fraction 1.00 at every range
+   (the real floor-in-scan test)**, coverage 0.80 vs 0.35, bearing +0.30° when squared, and on
+   operator tape at **1.12 m** `/scan` read **1.4390 against 1.4344 predicted — 4.6 mm**, so
+   `front_overhang` **0.337** and scale **0.9845** both survived the transform change.
+   🔑 **`cam_yaw` 0.0 is now CONFIRMED rather than assumed** — gravity cannot observe yaw, so
+   `cam_mount_probe.py` structurally cannot check it and only `wall_probe` can.
+   ⚠️ Limits, and the one unexplained reading, are recorded in `project_rover_autonav` 2026-09-11.
+2. **G2 motion truth.** Open-loop `RO_MAX_THR_SPEED` sweep (reads **0.6** today) · ESC zero-dropout ·
+   **(b) gate safety on `/scan` clearance, not `/odom`** — the operator's standing next item.
+   ⛔ **Gate every moving test on MEASURED speed, never the command.**
+   🔑 **The brake work feeds straight in:** the standoff pass is **speed-bound by the coast**, and at
+   ~0.9 m/s the rover contacted the wall with 0.020 m left. The brake now measures **0.69 m/s²,
+   stopping in 0.30–0.50 m from ~0.8 m/s**. **Wiring the reflex to command the brake instead of only
+   zeroing the setpoint is what lifts that speed bound** — and it now has a number behind it.
+3. **G3 venue decision — OPERATOR CALL, open since 09-04.** T2 needs ~3.05 m of clearance against
+   ~2 m² of open floor. **Corridor (recommended) · re-scope T2 to 0.8 m · or drop this room as the
+   M3 target.** Nothing in M2 can be proven until this is answered.
+
+⛔ **Before any armed autonomous campaign: re-confirm S1 (kill switch)** — inviolable rule 4, and it
+is due anyway after the ESC firmware change. **Start `rover-ekf-bridge` first, FLOOR ONLY, stop after.**
 
 ## 🔴🔴 [WFB-NG — HIGH PRIORITY] — added 2026-07-30, WORK THIS BLOCK FIRST
 > Measured, not theorised. Raw numbers: [[reference_wfb_ng]]. **Read W0 before touching anything.**
@@ -167,15 +203,6 @@ How to check in 5 s: TCP-connect `127.0.0.1:8102`, read newline-delimited JSON, 
 `video tx . packets.incoming[0]`. If it is 0/s, the radio is fine and the camera is dead.
 (Counters are `[per_second, cumulative]`. Do NOT use the `wfb-cli` TUI for this.)
 
-### W1 + W2. ❌ DELETED 2026-08-01 — the whole "GS is the bottleneck" theory was WRONG.
-Everything that hung off it is gone: the EAGAIN/socket-overflow hypothesis, the `rx_ring_size`
-raise, the MAVLink-rate trim as a *fix*, and the fix-order list. All disproved by the 07-31 run
-(see the resolution box at the top). **Do not reconstruct them.** One-line guards only:
-- **Never raise `rx_ring_size`** — nothing overflows (4 blocks lost of 341k, PID stable, 0 EAGAIN).
-- **Never trim MAVLink rates to "fix" a link problem** — downlink already delivers 99.86-99.99%.
-  It only ever buys *airtime* (~13% of a link at ~34% use), and it cannot touch the uplink loss
-  (uplink is ~1.4 pkt/s) or CPU (mavlink-router isn't even in the top 8 processes).
-
 ### W3. 🔴🔴 RX antenna imbalance — **ROOT CAUSE, and it is ONE chain on ONE card** (rev. 07-31)
 20 min / 224 samples, steady throughout ⇒ **not a fade**:
 
@@ -192,13 +219,6 @@ side** — which is exactly the direction losing packets (13.57% uplink MAVLink 
 downlink). 20 dB ≈ 10× range. **Action: reseat u.FL on NIC-A ant0, check pigtail + antenna, then
 re-measure on 8102.** This is the whole remaining WFB job.
 
-### W4. ✅ DONE 2026-07-31 — GS-side evidence gathered (except the journal)
-GS `rx` stats pulled from API **8103** and paired against the drone's 8102: **W1 killed, downlink
-proved healthy, root cause localised to the drone antenna.** See the resolution box above.
-❌ **Journal still unread**: `vind-admin` is in group `sudo` but **sudo requires a password**, so
-journald returns "No entries" + an insufficient-permissions warning. Needs the password (or the
-user runs `journalctl` by hand). Low value now that W1 is dead — only worth it if EAGAIN returns.
-
 ### W5. MTU margin is thin (hardening, no live fault)
 `radio_mtu = 1445`; ffmpeg RTP averages 1354 B and `truncated=0` over 117k packets. But ffmpeg's RTP
 default `pkt_size` is **1472 (> 1445)** with no guaranteed margin. Pin `-pkt_size 1400` when the
@@ -212,92 +232,17 @@ software x264 already needs ~80-95% of a core, see `~/ros2_ws/docs/vision_stream
 
 ---
 
-## [WFB-NG FIXES] — do after OS backup
+## [WFB-NG FIXES] — ⏸ PARKED (the "after OS backup" gate no longer applies)
 
 ### 1. Fix GS clock / NTP for real (Relay station vind-rly) — RECURRED 2026-07-11
 2026-03-15 fix (`timedatectl set-ntp true` + restart timesyncd) did NOT hold: relay has no RTC and no internet uplink, so `systemd-timesyncd` can never reach `ntp.ubuntu.com` (DNS/network unreachable) and clock drifts to boot-default every power cycle.
 Real fix needs a **local NTP server** the relay can actually reach — companion (10.5.5.87) is reachable from relay (10.5.5.77) over the WFB tunnel and has real internet+correct time. Plan: install `chrony` on companion in server mode, allow 10.5.5.0/24, then point relay's `systemd-timesyncd` `NTP=` at 10.5.5.87.
 Attempted 2026-07-11, aborted mid-install — see `project_relay_ntp_setup.md` and `project_companion_network_degraded.md`.
 
-### 2. ✅✅ DONE — VERIFIED 2026-08-01 — Disable drone onboard Wi-Fi (Drone)
-**Third time was right.** Reboot happened 08-01; verified by the correct check:
-**`lsmod | grep brcmfmac` returns EMPTY**, and `ip -br link` shows **NO `wlan*` interface at all** —
-only `eth0` (DOWN), the two WFB NICs `wlx782288d98f91` / `wlx782288d993c0`, the uplink
-`wlx90de80d824d6`, and the `drone-wfb` tunnel. `config.txt:76 dtoverlay=disable-wifi-pi5` is live.
-🔴 **THERE IS NO ONBOARD WI-FI FALLBACK ANY MORE.** Remote recovery is WFB → relay:2222.
-✅ **09-03: "ONLY" NO LONGER HOLDS — `eth0` is now a WIRED fallback:** plug a cable →
-`ssh roz@10.10.10.10` (laptop `10.10.10.20/24`) or `roz@Vind-Roz.local`. Boot never waits on it
-(`optional` + `RequiredForOnline=no`), DHCP metric 300 can't outrank the uplink's 50.
-⚠️ **CABLE-UNTESTED.** ⚠️ the uplink named on line 129 is stale — it is `wlx8c86dd5beed9`.
-→ setup_manual §E5b
-⚠️ Boot-clock trap recurred at this reboot: `uptime -s` said 10:23, `who -b` said 07-25, and
-`vision_streaming`'s 9h12m duration implies a third value. **Don't correlate journals across it.**
-
-<details><summary>Historical — why this failed twice (kept for the overlay lesson)</summary>
-
-**Twice marked done, twice wrong.** Reboot check finally ran (boot 07-30 22:41:45): `brcmfmac` +
-`brcmfmac_wcc` **still loaded**, bound via sdio, radio live as **`wlan1`** on wiphy0 at
-**ch34 / 5170 MHz**. DOWN (netplan doesn't configure it) so not beaconing, but initialized.
-**Root cause: wrong overlay name for this board.** `/boot/firmware/overlays/` contains BOTH
-`disable-wifi.dtbo` and **`disable-wifi-pi5.dtbo`** — the Pi 5 needs the **`-pi5`** variant.
-The 07-26 inline-comment fix was correct and is intact; the directive itself is just wrong.
-**FIX (not applied, needs a reboot to verify):** `dtoverlay=disable-wifi-pi5`, or blacklist
-`brcmfmac` at driver level (cannot be silently ignored by firmware). `rfkill` not installed.
-⚠️ **Verify with `lsmod | grep brcmfmac` returning EMPTY — not `ip link show wlan0`.** The interface
-renamed to `wlan1`, so a wlan0-keyed check falsely passes. Detail: project_external_wifi_uplink.md.
-Uplink meanwhile = external USB RTL8821CU `wlx90de80d824d6` @ static 192.168.1.240, working.
-</details>
-
-### 3. ❌ DELETED — "increase WFB ring buffer on GS". Disproved 07-31, do not do this.
-Nothing overflows: 4 video blocks lost of 341 057, `wfb-server` PID stable, `NRestarts=0`, zero
-EAGAIN, under the exact video+telemetry load the theory predicted. **Leave `rx_ring_size` at 2 MB.**
-(July's 19 restarts were real but are not recurring; if `EAGAIN` ever returns, get the relay journal
-— still needs the sudo password.)
-
 ### 5. Fix channel reference in PXLABS_qgroundcontrol docs (local edit + push)
 ARCHITECTURE.md and DEVELOPMENT.md both say `ch157` — correct value is **ch161**.
 Clone repo, search `ch157` / `channel 157`, replace with `ch161` in both files, then push.
 Repo: https://github.com/ArvinVeiyon/PXLABS_qgroundcontrol (branch: master)
-
-### 4. Check GS adapter TX power — ❌ CLOSED 2026-07-31. IT IS ALREADY AT MAXIMUM.
-`wifi_txpower = 3000` in `/etc/wifibroadcast.cfg`; `iw dev wlx00c0cab6db3b info` reports
-**30.00 dBm**; regdom **BO** permits 30 dBm across 5735-5835 MHz. **There is no power to add.**
-The downlink half of this item is also dead — it delivers ~100%, not 15% (that was a measurement
-artifact, see the resolution box at the top). The uplink half is real but its cause is the **drone's
-NIC-A ant0 antenna**, not GS power. → [[reference_wfb_ng]], [[project_gcs_link_degraded]]
-
-<details><summary>original 07-20 record (superseded)</summary>
-Uplink is not merely lossy, it is **dead for commands**: 8 MAVLink commands injected at the relay
-reached the drone **0 times** (a sniffer on the companion router confirmed zero arrivals), while the
-identical test on the companion locally succeeded 6/6. Downlink also delivers only **~15%** of offered
-telemetry (176 kbit/s offered → 26 kbit/s at the relay, uniform thinning across every message type).
-This is the real cause of QGC showing "Unknown <number>" instead of mode names, and it blocks all
-QGC-side arming/mode/param work. Full detail + next diagnostic steps: `project_gcs_link_degraded.md`.
-Asymmetry may still indicate GS TX power too low.
-```bash
-iw dev wlx00c0cab6db3b info
-```
-**⛔ UPDATE 2026-07-30 — TX power is probably NOT the answer; deprioritise it.** First real link
-measurement (WFB JSON API on 8102) at **−28 dBm, 29 dB SNR on a bench link**: `mavlink rx` lost
-**109 / 4884** blocks and FEC recovered only **27**. MAVLink runs **k=1/n=3 — three full copies of
-every block** — so losing all three at point-blank range means **burst loss (interference or a
-starved GS transmitter), NOT link budget.** More power does not fix burst loss.
-**Check these first instead:** (a) the hardcoded GS peer `10.5.6.50:5600/:14550` in
-`/etc/wifibroadcast.cfg` — wrong-IP looks exactly like "WFB broken"; (b) the onboard brcmfmac radio
-still live at ch34 (todo #2); (c) the RX antenna imbalance below. → `reference_wfb_ng.md`
-</details>
-
-### 6. vision_streaming node: no ffmpeg watchdog — ✅ DONE 2026-07-19
-Watchdog implemented + verified live (ros2_ws a561e93, multicam upgrade phase B):
-child reaped, ERROR logged, restart with 2s→30s backoff. Stream death is never silent now.
-
-### 7. Bring up Orbbec Gemini 336L autonomy pipeline — ✅ WRAPPER + /scan DONE 2026-07-21
-OrbbecSDK_ROS2 built (@ec6bc22, Release) and verified live: SDK 2.9.3 over USB3.2, depth 848x480@30,
-`/camera/depth/{image_raw,points}`, and **/scan @ 20-21 Hz** via `~/ros2_ws/launch/depth_to_scan.launch.py`.
-Bring-up: `ros2 launch orbbec_camera gemini_330_series.launch.py`. Wrapper publishes its own TF tree
-from `camera_link` — never re-publish those frames. See `project_l4_gemini_nav2_prereqs.md`.
-STILL OPEN here: feeding obstacle_distance to PX4 (the original phase-3 goal) — /scan exists but is
-not yet wired to PX4 or Nav2. Orbbec stays autonomy-exclusive; FPV = LG cam (see MEMORY [SENSORS]).
 
 ### 8. Camera preset/RC migration — QGC half ✅ DONE, companion half = multicam Phase D
 QGC presets: DONE 2026-07-19 (phase C — hardcoded video0-3 picker + front/bottom buttons
@@ -353,46 +298,6 @@ From `~/ros2_ws/docs/vision_streaming.md`; all three were agreed/designed but ne
 
 ## [ROVER AUTONAV] — added 2026-07-20 (see project_rover_autonav.md)
 
-### 9. Set RO_SPEED_LIM — ✅ DONE 2026-07-21 (0.01 → **0.70**, saved + readback-verified)
-Was THE forward-drive blocker: `DifferentialSpeedControl.cpp:119` clamped every speed setpoint to
-±0.01 m/s, so 0.2 and 0.4 m/s produced identical wheel speeds. 0.70 deliberately sits *below*
-`autonav_mode`'s own 0.8 m/s clamp → the FC is the binding cap; also above the ~0.58-0.60 m/s the
-drivetrain actually reaches. Floor re-test is now item 18.
-
-### 10. Restart mavlink.router — ✅ RESOLVED 2026-07-21 (companion reboot healed it)
-FC heartbeat is back on `tcp:127.0.0.1:5760` (sys 1 comp 1, autopilot=12, type=10); QGC connects again.
-**Lesson kept**: read params with pymavlink `PARAM_REQUEST_READ` — it does NOT re-wedge the link, unlike
-`mavlink_shell.py`, which is what wedged it originally.
-
-### 11. autonav_mode under systemd with Restart=always — ✅ DONE 2026-07-21
-`rover-autonav-mode.service`, plus rover-camera / rover-scan / rover-odometry. See `reference_services.md`.
-
-### 12. Map an RC mode channel — ✅ ALREADY DONE (verified 2026-07-21, earlier note was stale)
-FC actually reads `RC_MAP_FLTMODE=6`, `RC_MAP_ARM_SW=5`, `RC_MAP_KILL_SW=8`, `NAV_RCL_ACT=6` (disarm on
-RC loss). The old "RC_MAP_FLTMODE=0 / nothing mapped" record was wrong — user was right all along.
-Kill/arm/disarm physically tested and working. Stick map: ch2=throttle, ch4=steer, ch3 unused.
-
-### 13. L4/L5 installs — Orbbec SDK + Nav2 + slam_toolbox — ✅ DONE 2026-07-21
-All installed: Nav2 **1.3.12** + nav2-bringup, slam_toolbox **2.8.5**, all 7 build deps, Orbbec udev
-rule. Disk pressure also resolved: **85% → 49%, 29G free** after reclaiming 20.4 GB (17.85 GB of
-pre-2025 `~/.ros/log` debris + 1.7 GB journal + 569 MB apt cache). SD card is fully partitioned; the
-64GB-vs-58G gap is GB-vs-GiB + ext4 overhead, not lost space.
-
-### 15. Measure the camera mount TF — ✅ DONE, **RE-MEASURED AS-BUILT 2026-07-27** (ros2_ws `f210102`)
-⚠️ The 07-21 figures (`0bd5bf6`: x −0.125, y 0, z 0.420, zero rpy) are **SUPERSEDED** — the camera
-was physically remounted 07-26 on a printed bracket. Current truth = the `depth_to_scan.launch.py`
-defaults: **cam_x 0.00** (camera now sits ON the rotation centre), **cam_y 0.00**, **cam_z 0.305**
-(0.235 plate + 0.070 bracket), **cam_pitch 0.0406** (2.33° nose down), **cam_roll 0.0100**,
-range_max 5.0. Pitch/roll **measured from the camera's own IMU** (`/camera/accel/sample`) on flat
-floor, not assumed. Baked in as launch defaults.
-STILL OPEN from L4 acceptance: the **tape-measure range check** ("ranges correct vs tape measure" —
-only rate and plausibility confirmed so far). Camera is level, so `scan_height: 40` needs no revisit.
-
-### 16. Pin OrbbecSDK_ROS2 in git — ✅ DONE 2026-07-21 (gitignored + documented, ros2_ws b5a9408)
-201 MB clone, so not vendored. Repo + exact commit `ec6bc22` + build steps recorded in
-`ros2_ws/docs/third_party.md`; `src/OrbbecSDK_ROS2/` added to `.gitignore`. Promote to a real git
-submodule when convenient (nice-to-have, no longer blocking a fresh workspace rebuild).
-
 ### 17. Delete camera_sw_node_obsolute.py (added 2026-07-21)
 `src/rc_control/camera_sw_node_obsolute.py` (node `camera_node_sw`) logged all 18 RC channels at INFO
 on every ~50 Hz callback — ~950 lines/s, which is where the 18 GB of `~/.ros/log` came from. It is not
@@ -400,17 +305,10 @@ running (live `rc_control_node` is clean) but should be removed so it cannot be 
 Local edits from the April STL-19 work were saved to `~/codex-work/ldlidar_stl_local_edits_20260417.patch`
 when the unused `ldlidar_stl_ros2` clone was removed the same day.
 
-### 18. L2 forward test ON THE FLOOR — ✅ DONE 2026-07-22 (armed, L2 RESULT: PASS)
-First-ever armed floor run. All 4 wheels respond to forward+yaw, watchdog zeroes motors, auto-disarm+Hold.
-Wheel-0 "reverse" was a FALSE ALARM (mirrored ESC sign; all 4 physically forward — old sign check removed).
-ARM WORKFLOW LEARNED: AutoNav can't arm via RC (external mode) → arm in Manual, then software
-DO_SET_MODE→AutoNav (holds). `l2_test.py --live` does this, tolerates already-armed-in-Manual start.
-Full detail in [[project-l2-floortest-wheel0-reversed]]. Committed+pushed ros2_ws b38e413.
-
-### 19. Test the kill switch INSIDE AutoNav — ✅ DONE 2026-07-22 (confirmed working armed in AutoNav)
-User killed the rover mid-AutoNav (first floor attempt) before a wall — kill (ch8) latched, motors stopped.
-
-### 20. Revisit RO_YAW_RATE_P / RO_YAW_RATE_I after the floor test — ← NEXT ACTION (added 2026-07-21)
+### 20. Revisit RO_YAW_RATE_P / RO_YAW_RATE_I after a real floor run (added 2026-07-21)
+⚠️ **The "← NEXT ACTION" marker on this item was stale and has been removed** — it dated from
+2026-07-21 and the plan has moved to the G-gates. S3 (yaw open/closed loop) is already solved.
+This is a tuning refinement, not the next thing to do.
 **FIELD CHECKLIST tracked at `~/ros2_ws/docs/yaw_tuning_session.md` (ros2_ws main @ 8f84bf1)** — preconditions,
 bring-up, baseline-then-tune, opportunistic gyro-yaw + /scan checks, safety, teardown, results-log table.
 CONFIRMED NEEDED by the L2 run: armed yaw drove wheels MUCH harder (~700-850 rpm) than forward (~156 rpm).
@@ -418,29 +316,6 @@ Those gains were tuned while `RD_WHEEL_TRACK` was 0.43 — a ~39% oversized trac
 commanded wheel differential (Δv = ω × track). The allocation they were implicitly compensating for
 has changed now that it is 0.31. The gyro-closed rate loop hides much of this in steady state, so
 expect the difference mainly in feedforward/transient response. Re-check after a real floor run.
-
-### 22. Reflex collision-stop in AutoNav executor — ✅ DONE 2026-07-22/23 (ros2_ws b38e413, pushed)
-Built INSIDE `autonav_mode` (single funnel to motors, can't be bypassed): ±20° front `/scan` cone, block
-<0.60m / clear >0.75m hysteresis, stale-scan fail-safe, `collision.*` params, always-on edge-triggered
-diagnostic. Validated passively on stands AND fired armed end-to-end (stopped ~0.59m from a real wall).
-Doc: `ros2_ws/docs/rover_autonav_collision_stop.md`. This is the safety FLOOR only — real avoidance/
-routing/rerouting is L5 (Nav2+slam_toolbox), still to do. Follow-up: widen cone / add side sectors with
-Nav2 costmaps; armed wall-stop already proven so no separate proof run needed.
-
-### 21a. Gyro yaw odometry — ✅ IMPLEMENTED 2026-07-21 (ros2_ws 3fdf2fc, pushed)
-`rover_odometry` now takes heading from `/fmu/out/vehicle_attitude` (~92 Hz) instead of
-`(v_right − v_left)/track`. New params `yaw_source` (default `gyro`, set `wheels` for A/B) and
-`attitude_timeout` (0.5 s → auto-fallback to wheels, logged). Integrates yaw **deltas** not absolute
-yaw (keeps /odom's own origin, sidesteps NED-vs-ENU); one sign flip since PX4 yaw is +CW from above
-and ROS is +CCW; `quat_reset_counter` changes are EKF resets and those deltas are DROPPED, never
-integrated; yaw baseline advances even on skipped steps so a bad dt can't become false rotation;
-yaw covariance now source-dependent (0.002 gyro vs 0.02 wheels) so Nav2/SLAM weight it honestly.
-**Note `/fmu/out/vehicle_angular_velocity` is NOT in this FC's dds_topics.yaml** — attitude is the
-only gyro-derived source exposed.
-Verified at rest: /odom 98.8 Hz, yaw drift **0.044° over 12 s**, angular.z −0.0004 rad/s.
-**STILL TO VALIDATE (needs driving)**: turn the rover a known angle (e.g. 90° or 360° by floor marks)
-and compare `/odom` yaw against reality; also A/B against `yaw_source:=wheels` to quantify how bad
-the slip error actually was. Do this during the item-18 floor session.
 
 ### 21. Use the camera IMU alongside the FC IMUs (user idea, 2026-07-21) — assess before building
 The Gemini 336L has its own IMU (`/camera/accel/sample`, `/camera/gyro/sample`; enable with
@@ -508,29 +383,13 @@ Terrain handling, dynamic obstacles, and **GPS-loss failsafe → wheel/gyro dead
 never an uncontrolled state**. Caveat to design around: STL-19 is a **2D** lidar (fixed-height plane) — on
 uneven terrain it can miss low obstacles or read a slope as a wall; the forward 3D 336L covers that gap.
 
-## [2026-07-26 SESSION — OPENED / CLOSED]
-
-### Closed today
-- ✅ **Companion doc staleness audit.** All 13 non-memory docs checked against live state; 5 had stale
-  facts. Fixed + pushed: `codex-work` 3b4b41d + 880787c, `ros2_ws` 1f9ee48 + 03b8634. Biggest ones:
-  PX4 firmware still recorded as v1.16.0-rc1/c5b8445 in `system_companion.md` §3 *and* the pinned-commit
-  table *and* README (real: pxlabs-v1.17.0-2.0.0 @ a52c38b07d); camera identity still documented as
-  `/dev/v4l/by-id` in 3 places (v2.1 replaced it with `usbcam-*` sysfs ids because by-id is not
-  boot-stable); README/§18 release tables listed *content* commits instead of the commits the tags
-  point at (v1.0.8 a60791f→96816fc, v1.0.9 →9e172fb, v1.1.0/v1.2.0 missing from README).
-- ✅ **tfmini disabled** (drone-only sensor; was the real cause of camera degradation — 38% CPU,
-  214 log lines/sec, SD thrash). `/scan` 15-19 Hz → **29 Hz**, jitter down 9×.
-- ✅ **AIDE daily timer disabled**, fresh db promoted. Was `COPYNEWDB=no` ⇒ Feb-22 baseline ⇒
-  304k-line diff per run, ~3.5 h/day of a core.
-- ✅ **Journal vacuumed** 3.6 G → 469 M (disk 58% → 53%).
-- ✅ **USB/power cleared of blame**: Orbbec at full 5000 Mbps USB3, no resets, no over-current,
-  `throttled=0x0`, EXT5V 5.09 V, SoC 63 °C. The XL4015 fix is holding.
-- ✅ **Camera mount geometry decided + committed** (cam_x 0 / cam_z 0.305 / range_max 5.0).
+## OPEN ITEMS RAISED 2026-07-26 (the "closed today" log has been removed)
 
 ### Opened today
-1. **Verify `dtoverlay=disable-wifi` after the next reboot** — fix applied 2026-07-26 (inline `#`
-   comment was swallowing the overlay name) but NOT yet rebooted. Check `ip link show wlan0` (should
-   not exist) + `lsmod | grep brcmfmac` (empty). **TODO #2 stays open until this passes.**
+1. ✅ **CLOSED 2026-09-10 — `dtoverlay=disable-wifi` verified.** `wlan0` does not exist and
+   `brcmfmac` is not loaded, on a boot many reboots after the 2026-07-26 fix. Nothing further.
+   *(This was the check the old "TODO #2" was waiting on; that item was itself verified 2026-08-01
+   and has been removed.)*
 2. **Establish what NIC RELAY-STN actually has.** `wlx90de80d824d6` is on the companion now, so the
    relay's documented uplink is gone and `.221` does not answer. See [[project_relay2_relaystn]].
    🔴 **09-03: `wlx90de80d824d6` IS NOT ON THE COMPANION EITHER — `0bda:c811` is absent from
@@ -546,9 +405,13 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
 5. **Profile `wheel_odometry_node`** — 26.9% CPU for 100 Hz arithmetic is high, and it is in the
    autonomy path where L5 will need the headroom. Suspect the same unthrottled per-message logging
    pattern as tfmini / ros2_ws todo #17.
-6. **Watch whether the VESCs doze off mid-session.** At rest only ESC 13 stays awake
-   (`esc_online_flags 8`); a nudge brings all four (→15). If they can sleep again *while armed*,
-   `/odom` would drop out under the EKF bridge. Unknown — check on the first long run.
+6. ✅ **CONFIRMED 2026-09-09/10 — the VESCs DO doze off, and it is reproducible.** Measured
+   `esc_count 5, esc_online_flags 8` (bit 3 only = addr 13 rear-left) at rest, **before and after an
+   FC reboot**; the other three were absent from the bus until the operator powered them for the
+   brake test, after which all four reported. ⚠️ **Still UNKNOWN and still the thing that matters:
+   can they sleep again WHILE ARMED?** If so `/odom` drops out under the EKF bridge, in the safety
+   path. 🔑 **`esc_online_flags` is the cheap check — read it before trusting per-wheel ESC data,
+   and never read a missing ESC as a silent one.**
 7. **Delete `/var/lib/aide/aide.db.feb22.bak`** (117 MB) once the Feb baseline is definitely not wanted.
 8. **Fix `system_files_sync`'s armed-skip** — it skips entirely when the FC reports armed, so it is
    an unreliable backstop during work sessions (this is how the WFB_NICS mitigation was lost on 07-25).
@@ -564,22 +427,11 @@ radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) 
 
 ---
 
-## [2026-07-30 SESSION] — WFB-ng + vision node deep analysis
-> Full detail: `~/ros2_ws/docs/vision_streaming.md` (vision) and [[reference_wfb_ng]] (radio).
+## OPEN ITEMS RAISED 2026-07-30 (the "closed/killed today" log has been removed)
 
-### Closed / killed today
-- ❌ **8b item 3 (USB port-reset escalation) — KILLED, not viable.** See item 8b above.
-- ✅ **07-26 opened-item 1 ("verify `dtoverlay=disable-wifi` after next reboot") — VERIFIED, and it
-  FAILED.** Wrong overlay name for Pi 5. Folded back into **todo #2, which is REOPENED**.
-- ✅ **"Is it ffmpeg / the node / WFB?" — ANSWERED, definitively NO to all three.** The LG camera was
-  the fault. ffmpeg, libx264, GStreamer, uvcvideo, USB enumeration, isoc bandwidth, the vision node
-  and WFB are all excluded by direct measurement. Stop re-litigating this.
-- ✅ **Encoder-swap question (ffmpeg vs GStreamer) — SETTLED: stay with ffmpeg.** Pi 5 has **no
-  hardware H.264 encoder** (`v4l2h264enc` missing; `rpivid` is decode-only), so both are software
-  x264 at identical cost. ffmpeg's `-progress` is what makes the stall watchdog possible.
-- ❌ **"See3CAM only does ~16 fps on the 480M bus" — RETRACTED, it was wrong.** It does a real
-  **60 fps** at 720p MJPG over USB 2.0. The 16 fps was auto-exposure in a dark room. **You do NOT
-  need a blue USB3 port for full frame rate.** Fix the note in MEMORY [SENSORS] if it resurfaces.
+⚠️ **One retraction worth keeping:** *"See3CAM only does ~16 fps on the 480M bus"* was **WRONG**. It
+does a real **60 fps** at 720p MJPG over USB 2.0 — the 16 fps was auto-exposure in a dark room.
+**You do NOT need a blue USB3 port for full frame rate.** Correct this if it resurfaces anywhere.
 
 ### Opened today
 1. **Camera swap — PARTIAL SOAK PASSED, finish it after the mount is made.** See3CAM_CU135 fitted
@@ -633,24 +485,11 @@ radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) 
 
 ---
 
-## ✅ COMPLETED / CLOSED — moved out of MEMORY.md 2026-08-13 during compaction
-> These records lived ONLY in MEMORY.md's one-liner. Kept here so the index can stay small.
-> ⚠️ Do not delete: a grep of this file on 08-13 found none of them, which is why they were not
-> moved sooner. Full evidence for each is in `autonav_reference.md` §12/§13.
+## ✅ Historical completed/closed list — REMOVED 2026-09-10
 
-**Validated on the vehicle:** A1 (collision sensing) · S1 (kill switch in AutoNav, 07-22, re-confirmed
-08-10) · S2 stands · S2 floor (wheels stop on sensor loss) · standoff n=3, tape-confirmed 0.345 m ·
-map scale vs tape (`house_map_v4`) · `/scan` range calibration (0.9845, `front_overhang` 0.337 —
-re-confirmed at a third range to 1 mm on 08-13).
-
-**Issues closed:** #20 yaw · #23 watchdog · #25 rc_control camera retry storm · #26 depth glitch ·
-#26b · #28 camera 30 fps. **#21 gyro-yaw remains OPEN.**
-
-**Closed 2026-08-13:** integral-windup and dead-EKF-feedback explanations for the speed-command fault
-(controller exonerated) · the 5-ERPM deadband as the cause of the crawl under-read (costs 0.37%).
-⛔ None of these three should be re-proposed — see `project_rover_autonav.md`.
-
----
+The 2026-08-13 dump of finished items has been deleted; it was a record of work already done and was
+not being read. **The one thing that was still live in it: `#21 gyro-yaw` remains OPEN** (see the
+ROVER AUTONAV block above).
 
 ## 🔧 PX4 PARAMETER AUDIT — 2026-08-14
 > 📄 **FULL AUDIT + CHANGE LOG: `~/ros2_ws/docs/px4_param_audit.md`** (every value as read, the
@@ -683,54 +522,20 @@ re-enabled. **Gate on MEASURED speed, never the command.**
 
 ---
 
-## ✅ FC HARDFAULTS — CLOSED 2026-08-29. **DO NOT SWAP THE FC. DO NOT REOPEN THIS.**
-**CAUSE:** the i.MX RT1176 **boot ROM does not CENTRE the FlexSPI DLL read strobe** ⇒ marginal XIP
-instruction fetch at 200 MHz octal DDR. **FIX:** PX4 **PR #28141**, flying build **`860013bab7`**
-(`v1.17.0-2.1.0`). **PROVED:** 8.01 h single-boot soak, 0 reboots, 0 fault logs (08-29).
-⛔ **`flight_sw_version` cannot tell you if the fix is in — verify by GIT HASH.**
-🗑 **09-02: ALL local evidence, docs and tools DELETED at the operator's instruction. The ONLY record
-is `HARDFAULT.md` at the root of `PXLABS_PX4-Autopilot` @ `pxlabs-v1.17.0-2.1.0`.** The 08-16
-stack-overflow / uavcan-stall / ESC-node-10 / firmware-provenance investigation once recorded here
-was WRONG — **do not resurrect it from git history.** ⚠️ Two never-closed side items (`g_dll_cal`
-never read · uXRCE-DDS null-deref) are now **un-evidenced by choice** → [[fc_hardfaults]].
+## ✅ FC HARDFAULTS — CLOSED 2026-08-29. ⛔ DO NOT SWAP THE FC. DO NOT REOPEN THIS.
 
----
+🔴 **The only live hazard, and it is a real one:** the firmware running is **OUR OWN BUILD** with the
+NXP fix (PR #28141) cherry-picked. **Any reflash from upstream, or from `~/fc_firmware`, brings the
+hardfaults back.** ⇒ **verify by GIT HASH, never by `flight_sw_version`.** Detail: `HARDFAULT.md`,
+[[project_fc_hardfaults]].
+⚠️ **3 fault logs are still on the SD card, so QGC re-announces them every boot.** That is cosmetic.
 
-## 🗺️ 2026-08-16 — THE 2D GRID CHECK (autonav_reference §13's "NOT ESTABLISHED" item) — CLOSED
-> Tool written: **`tools/grid_review.py`** — assembles and inspects the 2D occupancy grid inside an
-> RTAB-Map `.db`. Repeatable against any candidate map. Artefacts in `~/gridtest_v4/`
-> (`in.db` = untouched copy, `normseg_off.db`, `ground028.db`, + `_grid.png` for each).
-> ⚠️ **`~/house_map_v4.db` was NOT modified** — `rtabmap_localization.yaml:41` points at it.
+## 🗺️ 2D OCCUPANCY GRID — CHECKED 2026-08-16, CLOSED
 
-🔑 **HOW THE GRID IS STORED** (undocumented, cost time to work out): `Data.{ground,obstacle,empty}_cells`
-are **zlib-compressed float32, FOUR floats per point (x,y,z,pad)**, node-local frame, **NO header**.
-`Node.pose` is 12 float32 = row-major 3x4 [R|t]. `rtabmap-export` CANNOT export the 2D grid (cloud/
-mesh/poses only). `Grid/*` params are readable with `rtabmap-info <db>`.
-
-### ✅✅ VERDICT: THE v4 GRID IS ROUGHLY CORRECT. ⛔ MY "UNUSABLE" CALL WAS WRONG.
-| | free area | vs reality |
-|---|---|---|
-| **operator ground truth** | **~2 m² open floor** | the room is SMALL AND CLUTTERED |
-| `house_map_v4` as built (`MaxGroundHeight` 0.10) | **3.11 m²** | ✅ slightly generous, right ballpark |
-| `ground028` (`MaxGroundHeight` 0.28) | 6.73 m² | 🔴 **3× the truth — DANGEROUSLY OPTIMISTIC** |
-
-⛔ **DO NOT ADOPT `MaxGroundHeight` 0.28.** It "gains" free space by declaring everything under
-28 cm to be floor — which in a cluttered room is exactly where the clutter is. Optimistic is the
-UNSAFE direction for a planner. **Keep 0.10.**
-⛔ **DO NOT set `Grid/NormalsSegmentation false` either** — it reproduced the ray-tracing spikes that
-got the v5 reprocess rejected (visible as long white spurs radiating out of the room in the PNGs).
-✅ **Rover-plate contamination in the GRID is 0.06–0.13% — the grid is CLEAN.** The 11.8% plate
-problem was a CLOUD-only defect. Don't carry it forward as a grid concern.
-
-🔑 **ROI/DECIMATION BUG CONFIRMED LIVE** (was previously only inferred): reprocessing prints, per
-frame — `util3d.cpp:1251 Cannot apply ROI ratios [0,0,0,0.35] because resulting dimension
-(depth=640x234) cannot be divided exactly by decimation parameter (4). Ignoring ROI ratios...`
-**234 ÷ 4 = 58.5**, so the crop is silently DROPPED on every frame. **234 ÷ 2 = 117** — which is
-exactly why the recorded fix is `Grid/DepthDecimation: "2"`. ⇒ In v4 the bottom crop was **never
-applied**, so it was NOT starving the floor (an idea I chased and disproved).
-⚠️ **Still open, still real:** `ground Z` spans **−0.107 … +0.324 m (43 cm)** for a flat floor.
-`4 m × sin(1.54°) = 0.107 m` matches the uncorrected camera roll. Worth fixing — but it was NOT
-the cause of the grid's appearance.
+✅ **The `house_map_v4` grid is roughly correct. ⛔ My earlier "unusable" call was WRONG.**
+Method: `tools/grid_review.py`. ⛔ **Do NOT "fix" it:** `MaxGroundHeight` 0.28 is 3× the truth —
+**keep 0.10**; and `NormalsSegmentation false` is what produced the ray-tracing spikes that got the
+v5 reprocess rejected. **Changing either makes the grid worse, not better.**
 
 ### 🔴🔴 THE REAL CONSTRAINT IS THE ROOM, NOT THE MAP
 **Rover footprint 0.73 × 0.56 m ≈ 0.41 m² vs ~2 m² of open floor** (≈ a 1.4 × 1.4 m clear patch).
@@ -747,21 +552,24 @@ odom goal.
 keeps the ladder comparable · (2) re-scope T2 shorter (`--distance 0.8`), proves less · (3) reconsider
 whether this room is the M3 target at all — mapped *patrol* in 2 m² is a very small mission.
 
-## ⚠️ 2026-08-16 — THE CAMERA WAS PHYSICALLY ROTATED (to reach the FC)
-🔴 **EVERY CAMERA-REFERENCED CALIBRATION IS NOW SUSPECT** until the mount is verified:
-`front_overhang` 0.337 · `/scan` scale 0.9845 · the tape-confirmed **0.345 m reflex standoff** ·
-`CORRIDOR_HALF`/`SECTOR_HALF` geometry · the **camera-gyro heading TF** (`rover-odometry` locks
-`base_link <- camera_gyro_optical_frame` **at node start** — the current lock is from 09:28 and
-describes the OLD mount) · localization against `house_map_v4` (built on the old pose) ·
-the **1.54° roll figure is now meaningless**, it described the old mount.
-⏭ **BEFORE ANY MOVING TEST:** measure the new geometry with `tools/wall_probe.py` (park square to a
-flat wall, RANSAC `/scan` — ±1 mm, ±0.26°, wheel-independent), correct the roll in TF while the
-camera is off its mount (closes a long-open item), **restart `rover-odometry`** to re-lock the gyro
-TF, then re-verify `front_overhang` and `/scan` scale.
+## ⛔⛔ WITHDRAWN — "THE CAMERA WAS PHYSICALLY ROTATED" (claimed 2026-08-16)
 
-### 📌 08-16 handover — the FC-reboot part is DEAD (hardfault closed 08-29, see line ~558)
-The 08-16 "node 10 removal" experiment and its reboot ledger are deleted: the reboots were the
-FlexSPI-DLL fetch fault, not that ESC, and node 10 is back on the bus (`esc_count 4`, flags 15, 08-21).
-⚠️ **What SURVIVES from it:** the operator called the removed node "right rear" but the address that
-left the bus was **10**, which MEMORY.md maps to right-**FRONT** — **the address↔wheel mapping has
-never been re-verified against a turning wheel.** Do that before trusting per-wheel ESC data.
+**IT WAS NOT ROTATED. THE MOUNT IS AND WAS CORRECT. THE OPERATOR SAID SO REPEATEDLY AND HE WAS
+RIGHT — DO NOT RAISE THIS AGAIN.** Withdrawn 2026-09-04, **re-measured 2026-09-10: pitch 1.436°,
+roll −0.447°, |g| 9.7769, sd 0.006, 12,145 samples** (`tools/cam_mount_probe.py`). A normal level
+mount. Every camera-referenced constant it declared "suspect" — `front_overhang` 0.337, `/scan`
+scale 0.9845, the 0.345 m standoff, the gyro heading TF — **stands.**
+
+🔑 **The only real defect was a STALE CONFIG, now fixed:** `depth_to_scan.launch.py` still carried
+the 07-27 values (`cam_pitch` 0.0406, `cam_roll` 0.0100) from before the camera came off and went
+back on the top plate. The remount landed ~1° different in each axis — ordinary variation. Updated
+2026-09-10 to the measured values, **made live by the 2026-09-11 boot, and VERIFIED against a flat
+wall that night — both constants held to 4.6 mm on tape.** ✅ **This sub-item is now CLOSED.**
+
+### 📌 Surviving fact from the deleted 08-16 ESC experiment
+⚠️ **The ESC address ↔ WHEEL-CORNER mapping has never been verified against one turning wheel.**
+The operator called the removed node "right rear"; the address that left the bus was **10**, which
+the docs map to right-**FRONT**. ✅ 2026-09-09 confirmed all four addresses (10/11/12/13) are live
+and independently controllable, **but that does not establish which address is bolted to which
+corner.** Spin exactly one wheel before trusting per-corner ESC data.
+
