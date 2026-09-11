@@ -263,7 +263,8 @@ state.** **`ros2 bag record` fails SILENTLY-ish** — the loss line appears only
 `lost`, BEFORE trusting a bag.** → [[feedback-check-docs-before-measuring]]
 
 ## 🔴 RTAB-MAP RUN 2026-08-02 12:30 — **MAP BUILT, BUT ZERO LOOP CLOSURES. THE ROUTE WAS WRONG.**
-Ran offline on the Pi over `~/mapping_run2_20260802`, **VISUAL odometry only** (`/odom` and `/tf`
+Ran offline on the Pi over `~/mapping_run2_20260802` (🔴 **BAG DELETED 2026-09-12 — results below stand,
+but they can no longer be re-derived without a re-drive**), **VISUAL odometry only** (`/odom` and `/tf`
 excluded from playback so wheel odom could not contaminate it; `/tf_static` kept for
 `base_link->camera_link`). Bag replayed at **0.3×** with `--clock` + `use_sim_time`.
 ✅ **Visual odometry WORKS WELL:** **93% tracking**, 370-400 inliers, **0.07-0.14 s per update**
@@ -320,7 +321,8 @@ different pose graph each time. **⛔ NEVER compare RTAB-Map parameters via `ros
 DB, no replay, far faster. All parameter comparisons must go through it.
 ## 🔴 RUN 3 (CIRCUIT) 2026-08-02 — **THE CIRCUIT DID NOT HELP. ODOMETRY IS NOW THE BOTTLENECK.**
 Re-drove as a closed circuit on my advice. Capture perfect (264 s, 67 037 msgs, **0 loss**,
-depth 99.5% / colour 99.3%). `~/mapping_run3_20260802`, db `~/rtabmap_run3_raw.db`.
+depth 99.5% / colour 99.3%). `~/mapping_run3_20260802` (🔴 **BAG DELETED 2026-09-12**; the derived db
+`rover_data/maps/rtabmap_run3_raw.db` SURVIVES), db `~/rtabmap_run3_raw.db`.
 | | loops | p1-p99 | p5-p95 | floor std |
 |---|---|---|---|---|
 | run2 out-and-back | 32 | **2.31 m** | **1.68 m** | **134 mm** |

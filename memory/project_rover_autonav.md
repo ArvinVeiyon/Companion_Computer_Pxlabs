@@ -229,7 +229,10 @@ total is not.** Do not cite the 2554° as the defect.
   evidence before assuming the controller is at fault.**
 - ⏭ Next diagnostic: log `quat_reset_counter` alongside `vehicle_attitude` and see whether the jumps
   coincide with resets that are being missed.
-- Data: `~/mapping_run2_20260802` (3.4 GiB, 99.7% capture) — re-runnable, no re-drive needed.
+- 🔴 **Data: `mapping_run2_20260802` was DELETED 2026-09-12** (operator's call, disk was at 85%). The old
+  "re-runnable, no re-drive needed" no longer holds — **the `quat_reset_counter` diagnostic above now
+  REQUIRES A RE-DRIVE**, and the 13.15 rad/s attitude-spike evidence is no longer re-examinable from a bag.
+  ⚠️ If the #20 "measurement not motion" question is reopened, budget a fresh recording first.
 
 ## ⏭ RESUME HERE — 2026-08-01 (session crashed ~16:12; state recovered + verified 16:55)
 **Verified live at recovery: services mavlink.router / microxrce-agent / wifibroadcast@drone /
