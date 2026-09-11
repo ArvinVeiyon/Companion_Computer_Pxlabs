@@ -66,3 +66,37 @@ Two coherent options; **(b) is what we have built and it is the simpler one:**
   send only velocity to PX4 via `autonav_mode`. **PX4 never needs to know where it is.**
 ⇒ **Division of labour:** PX4 = motors, rate/speed loops, arming, failsafe. Companion = map,
 localization, global plan, local avoidance, **and the collision reflex** (PX4 will never supply it).
+
+
+## ✅ 4. OUR BRIDGE **IS** ON THE PX4 NAVIGATION INTERFACE — audited 2026-09-12
+⛔ **Do not say "PX4 offers no companion navigation API" — it does, and we use it.** (§2 above is about
+PLANNERS; this is the navigation/state-estimate interface, a different thing.)
+`rover_ekf_bridge/src/main.cpp` (115 lines) uses **`px4_ros2::LocalPositionMeasurementInterface`**
+from `px4_ros2/navigation/experimental/` — the sanctioned API, **not** a raw `vehicle_visual_odometry`
+publish.
+
+**`LocalPositionMeasurement` offers FIVE optional channels. We populate TWO:**
+| channel | `EKF2_EV_CTRL` bit | ours |
+|---|---|---|
+| `position_xy` (+variance) | bit0 = 1 | ❌ not sent |
+| `position_z` (+variance) | bit1 = 2 | ❌ not sent |
+| `velocity_xy` (+variance) | bit2 = 4 | ✅ **sent** — `/odom` twist, **y flipped FLU→FRD** |
+| `velocity_z` (+variance) | bit2 = 4 | ✅ **sent as hard 0.0** |
+| `attitude_quaternion` (+variance) | bit3 = 8 | ❌ not sent |
+
+Frames: **`PoseFrame::Unknown`** (correct — no position is sent) + **`VelocityFrame::BodyFRD`**.
+✅ **CONSISTENCY CHECK PASSES: FC reads `EKF2_EV_CTRL = 4`** (velocity only) — firmware config and
+companion implementation agree. (Also live 09-12: `EKF2_EV_DELAY` 0.0, `EKF2_EV_NOISE_MD` 0.)
+
+🔑 **`velocity_z` MUST be sent even though a ground rover has none** — EKF2 **drops the WHOLE EV
+sample** unless the velocity vector is all-finite (`ev_vel_control.cpp`: `ev._sample.vel.isAllFinite()`).
+Leaving it `nullopt` silently discards every sample. Already handled in our code; do not "tidy" it out.
+
+### 🔑🔑 THE THREE UNUSED CHANNELS ARE BLOCKED ON LOCALIZATION, NOT NEGLECTED
+`position_xy` and `attitude_quaternion` both need a **non-drifting** source. Wheel-odom position
+drifts without bound; the camera-gyro yaw drifts **~0.19 °/s** (18.6° over 96 s, wheels stationary).
+Feeding either to EKF2 makes the estimate WORSE. The source that would qualify is **RTAB-Map's
+`map→odom`**.
+⇒ **Fixing localization does not only unlock M3 — it makes `EKF2_EV_CTRL` bit0 (position) and bit3
+(yaw) legitimate to enable, which is the one path to a usable FC heading that depends on NEITHER the
+magnetometer NOR GPS.** → [[project_indoor_mapping_slam]] · [[project_rover_autonav]]
