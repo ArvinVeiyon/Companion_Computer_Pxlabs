@@ -79,20 +79,11 @@ dtoverlay=uart2
 dtoverlay=uart3-pi5
 dtoverlay=uart4
 
-# 2026-09-05: Waveshare RS485 CAN HAT (rev 2.1, 12 MHz crystal) -> MCP2515 on spi0.0 (CE0=GPIO8),
-# INT on GPIO25. Bus is 1 Mbit to match PX4 UAVCAN_BITRATE=1000000 and VESC can_baud_rate=3
-# (CAN_BAUD_1M). Purpose: DroneCAN firmware update of the four VESCs (node IDs 10-13).
-# NOTE: config.txt has NO inline-comment support - keep the dtoverlay line free of trailing "#".
-# NOTE: SPI0 takes GPIO8/9, so dtoverlay=uart3-pi5 (STL-19 lidar, ttyAMA3) loses the pins and
-# does not probe. That was ALREADY true before this line - dtparam=spi=on is set at line 12.
-# VERIFY AFTER REBOOT WITH:  ip -details link show can0   (must exist)
-# NOT with "lsmod | grep mcp251x" alone - the module can load without the device binding.
-# 2026-09-06: probe fails with "MCP251x didn't enter in conf mode after reset", err=110.
-# The SPI-clock hypothesis is DISPROVEN - 1 MHz behaved identically to 10 MHz, and raw register
-# reads fail at every mode/speed both through the controller AND bit-banged with it unbound.
-# MISO is not driven by anything: it is pinned low when MOSI is low and floats when MOSI is high,
-# regardless of CS. That is ESD-diode back-feed through an unpowered die => THE MCP2515 HAS NO VDD.
-# It is a HARDWARE fault on the hat; no setting on the line below can fix it.
-# Re-run the diagnosis with:  sudo python3 ~/codex-work/bldc_can/diag/spi_probe.py
-# Left at 10 MHz because 1 MHz SPI is too slow to service a busy 1 Mbit CAN bus once power is fixed.
-dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=10000000
+# 2026-09-09: CAN HAT INTEGRATION DROPPED (time concern) - overlay disabled below.
+# The hat is hardware-dead on the SPI side and was never on the critical path: the VESC firmware
+# it existed to deliver MUST be flashed over USB, not DroneCAN. That work is now DONE over USB.
+# Full record - what changed at driver level here, and how to finish reverting:
+#   ~/codex-work/companion_can_driver_status.md
+# NOTE: removing this line does NOT restore /dev/ttyAMA3 (STL-19 lidar). GPIO8/9 are claimed by
+# dtparam=spi=on at line 12, which predates the hat. Do not remove that as part of undoing this.
+#dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25,spimaxfrequency=10000000
