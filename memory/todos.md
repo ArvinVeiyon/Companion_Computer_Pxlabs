@@ -80,9 +80,13 @@ Full method, numbers and limits → `project_rover_autonav` 2026-09-11.
 **G1 — LOCALIZATION ALIVE (R1).** Live `camera_info` vs `house_map_v4.db`'s calibration. 🔑 **Adjudicate
 on the ACCEPTED-FIX COUNT — a changing `map→odom` with 0 accepted is drift, not health.** ⛔ Do not
 re-map the house first.
-**G2 — MOTION TRUTH (R4, R5.4, T1).** Open-loop `RO_MAX_THR_SPEED` sweep (d) · ESC zero-dropout (a) ·
-`si_motor_poles` (h) · **(b) gate safety on `/scan` clearance, not `/odom`** · then **T1**.
-⛔ Gate every moving test on MEASURED speed, never the command.
+**G2 — MOTION TRUTH (R4, R5.4, T1).** 🔴 **MEASURED OUT 2026-09-12 — IT IS NOW A DECISION, NOT A
+TEST.** ✅ closed: the sweep (d), answered in the negative — the constant does not exist; the odometry
+scale and sign; `si_motor_poles` (h); the R5.4 stopping numbers; **(b)** gate on `/scan` not `/odom`.
+⬜ open: **the duty-vs-torque control decision (blocks R4)** · the brake reflex wiring (R5.4, needs the
+VESC reflash) · the zero-dropout floor figure (a) · **T1 re-examined, not re-ticked**.
+⛔ Gate every moving test on MEASURED speed, never the command — and on DURATION, not stick position.
+→ the START HERE block above · `project_rover_autonav` 09-12.
 **G3 — VENUE DECISION → M2 PROVEN.** ⏭ **OPERATOR CALL, still open:** corridor (recommended) ·
 re-scope T2 to 0.8 m · or drop this room as the M3 target. Then **T2 → T3 → T4 → T5** = M2 done.
 ⚠️ T3+ need turning, so **S3 (yaw open/closed) gates them.**
@@ -119,7 +123,57 @@ blocking AutoNav:
 
 ⚠️ `MEMORY.md` is **19.8 kB against its own 17 kB cap** — needs a compression pass.
 
-## ⏭⏭ START HERE — 2026-09-12 (02:00). **RESUME G2.**
+## ⏭⏭ START HERE — 2026-09-12 (floor). **G2 IS MEASURED OUT. THE BLOCKER IS NOW A DECISION.**
+
+🔴🔴 **WHAT STOPS US: PX4'S SPEED CONTROLLER CANNOT WORK AGAINST A TORQUE ACTUATOR, AND NO AMOUNT OF
+MEASURING CHANGES THAT.** Proven on the floor: at a constant stick the rover accelerates for as long
+as it is held, current flat. There is no throttle→speed mapping, so `RO_MAX_THR_SPEED` has no correct
+value. ⛔ **Nothing above M1 is safe until this is resolved** — a planner that commands m/s to a
+vehicle that integrates torque will overshoot every goal.
+
+### ⏭ THE DECISION (operator's, one of two — I can prepare either)
+**(A) MOVE THE ESCs TO DUTY MODE** so throttle means speed and PX4's model matches the hardware.
+⚠️ USB + VESC Tool per ESC, all four; VESC Tool over CAN is impossible. ⚠️ Re-validates nothing else —
+`erpm_to_ms`, the brake and the sign map all stand. 🔑 Cheapest path to a working `RO_MAX_THR_SPEED`.
+**(B) KEEP TORQUE MODE AND REBUILD THE LOOP** — stop leaning on the feedforward, close the loop on
+`/odom` velocity in the companion rather than trusting PX4's. ⚠️ More code, no reflash, and it keeps
+the ESC config that the brake work already depends on.
+
+### ✅ CLOSED BY THE FLOOR RUNS — do not re-run these
+- **(d) open-loop sweep** — answered in the NEGATIVE: the constant does not exist. ⛔ Don't calibrate it.
+- **odometry scale + sign** — `/scan` 3.188 m vs wheels 3.469 m = **8.1% over-read**; the addr-10 sign
+  fix is confirmed by the same run. ⇒ **(h) `si_motor_poles` is SETTLED — leave it alone.**
+- **R5.4 numbers** — coast **0.46 m/s²** (0.70 m from 0.8 m/s) · brake **1.44 m/s²** (0.22 m) ⇒ **3.1×**,
+  both runs to a full stop. The "3.4× provisional" is superseded.
+- **(b) gate on `/scan`, not `/odom`** — reinforced, with a new limit: **`/scan` does not track beyond
+  ~3 m in this corridor**, so park ~2.5 m out to measure anything.
+
+### ⬜ STILL OPEN IN G2 — the rest, in priority order
+1. 🔴 **R4 is DIAGNOSED, NOT FIXED.** Blocked on the decision above. **Nothing else in G2 matters
+   until it is made.**
+2. 🔴 **R5.4 has its numbers but not its capability — the reflex STILL cannot brake.** `UAVCAN_EC_FUNC6`
+   =301 is set and persisted, but **INERT until all four VESCs are reflashed to read RawCommand
+   idx 5** (`max(idx4, idx5)`, **bounds-check `cmd.len`**). ⚠️ Pair this with (A) if (A) is chosen —
+   both need the same USB session on the same four ESCs.
+3. ⬜ **ESC zero-dropout (a) — floor figure still missing.** Stands gave **54 ERPM ≈ 0.21 m/s**;
+   never measured under load. `field_measure.py dropout`.
+4. ⚠️ **T1 NEEDS RE-EXAMINING, NOT RE-TICKING.** Its recorded pass predates all of this, and what it
+   measures — sustained speed tracking within ±20% — is exactly what torque mode makes unstable.
+   ⛔ Do not treat that tick as evidence until after the decision.
+5. ⬜ **A second coast run** to make 0.46 m/s² n=2. Cheap, and every ratio quoted rests on it.
+
+### 🔑 MEASUREMENT RULES EARNED TODAY — read before the next floor session
+⛔ **DURATION is the control, not stick position.** 2.5 s at 0.11 gave 2.2 m/s, 3.2 m of travel, and a
+stop 0.185 m from a wall — inside the standoff.
+⛔ **Park ~2.5 m from a FLAT, SQUARE surface.** Gate on **jitter < 0.05 m AND spread < 0.05 m** before
+driving. A sofa gave 0.074 m, then 2.069 m as the corridor flickered between two surfaces.
+🔑 **A high NaN count is NOT blindness** — the corridor filter drops everything outside 0.275 m by
+design. Judge on whole-scan health plus the nearest in-corridor return.
+🔧 **Tooling: `tools/field_measure.py` (nine routines, suggests and never writes) + `rover_diag.py`.**
+⚠️ **Five analyser defects were found by checking output against runs readable by eye — all the same
+family, a confident number from data that did not support it. Distrust any unchecked analyser output.**
+
+## 🗄 (previous) START HERE — 2026-09-12 (02:00). **RESUME G2.**
 ✅ **Blocker SOLVED: armed AutoNav engaged (nav_state=23).** Cause was `eph` 307 m vs `COM_POS_FS_EPH`
 5 m, not the mode/bridge/registration. Full chain → `project_rover_autonav` 09-12.
 **TOMORROW, IN ORDER:**
