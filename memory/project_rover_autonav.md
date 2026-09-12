@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-09-12T06:07:45.971Z
+  modified: 2026-09-12T07:43:27.490Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
@@ -90,9 +90,12 @@ yields the loaded torque→speed point in one run.
 
 🔴 **`NAV_RCL_ACT` READS 1 (Hold), NOT 6 (Disarm).** `bldc_can/RESUME.md` argues brake-off-on-RC-loss
 FROM `=6` — **that argument no longer holds, and RC loss will NOT disarm.**
-🔑 **`RO_YAW_RATE_I` = 0.0** ⇒ the yaw-windup mechanism blamed in the 08-02 runaway RCA is
-**currently disabled**; that RCA describes a parameter state that no longer exists. `RO_SPEED_I` is
-still 0.1, so **speed**-loop windup remains possible.
+✅ **`RO_YAW_RATE_I` = 0.0 IS DELIBERATE — IT IS THE FIX, NOT A DRIFTED VALUE.** ⛔ **NEVER restore
+it to 0.1.** Corrected 2026-09-12 against the AutoNav Technical Reference artifact §5
+(`bc09dd55`, rev 08-09), which carries the rule verbatim: *"Integral windup was one of the two
+causes of the yaw problem."* ⚠️ My first reading of it as a stale RCA was wrong.
+🔑 `RO_SPEED_I` is still **0.1**, so **speed**-loop windup remains possible — that is a different
+loop and a live suspect.
 ⚠️ `RO_ACCEL_LIM`/`RO_DECEL_LIM`/`RO_JERK_LIM` all −1. Deliberate (they slew the manual stick), but
 `RO_DECEL_LIM = -1` guarantees waypoint overshoot in auto modes — an M2/M3 blocker, not a floor one.
 ⚠️ `RO_SPEED_LIM` 0.7 · `RO_SPEED_TH` 0.10 against a measured ESC dropout ~0.14.

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b207e8d3-f638-4331-a8d8-7c4c291479c2
-  modified: 2026-08-02T12:20:14.065Z
+  modified: 2026-09-12T07:48:27.611Z
 ---
 
 # Autonomy plan reframe — 2026-08-01
@@ -304,6 +304,25 @@ height at **109 mm** forward; plate runs to the bumper at **345 mm** (11.5° bel
 look identical from every pose ⇒ they match between ANY two frames, padding `matches=` while
 contributing zero consistent geometry. **That is exactly the observed signature: matches 75-102,
 inliers only 14-19/20.** RANSAC was discarding the self-view.
+⚠️⚠️ **RE-CHECKED 2026-09-12 — THE GEOMETRY ABOVE USED A PITCH THAT IS NOW KNOWN TO BE WRONG, AND
+THE CONCLUSION SURVIVES ANYWAY.** The 2.33° is the stale 07-27 launch value (`cam_pitch` 0.0406).
+The mount was re-measured 09-09 at **1.436°** (0.0251), corrected in `depth_to_scan.launch.py`, and
+**verified at a wall 09-11 when G0 closed**. Recomputed at the true pitch:
+| | as published (2.33°) | corrected (1.436°) |
+|---|---|---|
+| bottom ray below horizontal | 32.68° | **31.79°** |
+| plate enters view at | 109 mm | **113 mm** |
+| band | 21.2° | **20.3°** |
+| share of the 60.7° vFOV | 35% | **33.5%** |
+✅ **THE `RoiRatios` MASK AT 0.35 STILL COVERS THE TRUE 33.5% BAND, with margin — it errs toward
+masking slightly too much, which is the safe direction. ⛔ Do not "tighten" it to 0.335.**
+🔑 Everything that was MEASURED rather than derived is unaffected: the 0.74% of depth pixels, the
+matches 75-102 / inliers 14-19 signature, and all three fix results. Only the three numbers computed
+from `cam_pitch` moved, and only by ~1 mm-scale amounts.
+📄 Published as the artifact *"The rover is in its own camera — plate/FOV geometry"* (`825a20b4`,
+2026-08-02) — which carries the OLD pitch in its footer. ⚠️ **If that artifact is ever re-rendered,
+correct the pitch first.**
+
 ✅ **FIXES THAT WORKED (all software, NO hardware change):**
 1. `point_cloud_xyz` **`min_depth: 0.45`** ⇒ ICP correspondence ratio **0.612 → 0.770**.
 2. **`Kp/RoiRatios` + `Vis/RoiRatios` = `"0.0 0.0 0.0 0.35"`** (mask bottom 35% of colour)
