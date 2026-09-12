@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-09-12T08:24:53.263Z
+  modified: 2026-09-12T12:24:35.326Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
@@ -99,9 +99,24 @@ carry **`uavcan_raw_mode = 0` = `UAVCAN_RAW_MODE_CURRENT`**, and the behaviour m
 ESC. In torque mode speed is whatever the load allows, so the "right" value of `RO_MAX_THR_SPEED`
 differs on every surface. ⇒ **the 5.5× overspeed is structural.** ⛔ Do not set the parameter from
 one floor run and call it fixed.
-⏭ **Two ways out, operator's call:** (a) move the VESCs to duty/RPM mode so the hardware matches
-PX4's model — USB + VESC Tool per ESC; or (b) keep torque mode and stop leaning on the feedforward.
-**Measure one loaded floor point first.**
+⏭ **TWO WAYS OUT, OPERATOR'S CALL — both now scoped (09-12):**
+**(A) `uavcan_raw_mode` = 3 (`UAVCAN_RAW_MODE_RPM`)** — the VESC closes its OWN speed loop
+(`mc_interface_set_pid_speed`), so PX4's assumption becomes true, and **`uavcan_raw_rpm_max` IS the
+speed cap the operator wanted.** Then set `RO_MAX_THR_SPEED` to that cap in m/s. ⛔ **Not settable
+over CAN** (8 params only) — **UART or USB, ONE SESSION PER ESC, no multi-drop.** ⛔ **BLE is out on
+these boards** (the module sits on the DRV8301 SPI). → `project_vesc_can_flashing` 09-12
+**(B) CLOSE THE LOOP IN THE COMPANION** — ✅ **feasible, confirmed:** `px4_ros2` ships rover
+**throttle** setpoint types (`throttle_steering.hpp` · `throttle_attitude.hpp` · `throttle_rate.hpp`
+alongside the `speed_*` ones). `rover-autonav-mode` uses a **speed** type today, which hands control
+to PX4's broken loop; switching to a **throttle** type lets us run the PI on our own validated
+`/odom` and enforce the cap ourselves. **One file in `ros2_ws`, nothing on the vehicle changes.**
+🔑 **OPERATOR'S OWN POINT, AND IT IS RIGHT: DRIVE ON MEASURED DISPLACEMENT, NOT ON TIME.** The
+2 m→10 m failure came from test harnesses that commanded a speed for N seconds and assumed the
+distance. Integrating `/odom` and stopping on distance removes it **without touching the ESCs** —
+and today's coast/brake figures are what let the stop be commanded EARLY enough.
+⚠️ **A displacement controller is a workaround; Nav2's local planner already closes on pose.** But it
+publishes `cmd_vel` in m/s and assumes the base honours it, so it inherits the same defect —
+**G2 is a precondition for Nav2, not an alternative to it.**
 
 🔑 **METHOD LESSON — STANDS CANNOT MEASURE A THROTTLE→SPEED CURVE ON THIS VEHICLE.** Under no load
 the answer saturates. The ladder MUST be run loaded. `throttle_ladder_record.py --analyse` now

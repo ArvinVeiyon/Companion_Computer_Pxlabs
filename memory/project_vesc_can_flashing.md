@@ -67,3 +67,48 @@ differs, or the cap is per-motor?). Needs USB.
 hash. Disarm / RC-loss brake-off is correct by construction, **untested**.
 
 See also [[rover-odometry]], [[uart-map]], [[this-machine]].
+
+## 🔑🔑 2026-09-12 — **HOW TO REACH THE ESC CONFIG, AND WHAT `uavcan_raw_mode` OFFERS**
+
+Read from the firmware itself: **`ArvinVeiyon/PXLABS_BLDC_VESC6_MK5`, branch
+`pxlabs-6.06-rover-brake-rc`** (clones fine over SSH; the tree is NOT on this machine).
+
+### THE FOUR RAW MODES — `datatypes.h:871`
+```c
+UAVCAN_RAW_MODE_CURRENT = 0,          // ← OURS. mc_interface_set_current_rel() = TORQUE
+UAVCAN_RAW_MODE_CURRENT_NO_REV_BRAKE, // 1
+UAVCAN_RAW_MODE_DUTY,                 // 2  mc_interface_set_duty()
+UAVCAN_RAW_MODE_RPM                   // 3  mc_interface_set_pid_speed(raw * uavcan_raw_rpm_max)
+```
+🔑🔑 **MODE 3 IS THE FIX FOR G2 AT THE ESC END: the VESC closes its own speed loop, so PX4's
+"throttle means speed" assumption becomes TRUE, and `uavcan_raw_rpm_max` IS the speed cap the
+operator asked for.** The switch is at `libcanard/canard_driver.c:749`; ⛔ **the PXLABS brake block
+sits IN FRONT of it and is untouched by the mode.**
+
+### 🔴 WHERE IT CAN AND CANNOT BE SET
+⛔ **NOT OVER CAN.** The UAVCAN GetSet table (`canard_driver.c:225`) exposes **exactly 8** params:
+`can_baud_rate · can_status_rate_1 · can_status_rate_2 · can_status_msgs_r1 · can_status_msgs_r2 ·
+can_esc_index · controller_id · ctl_dir`. **`uavcan_raw_mode` is not among them.** (🔑 `ctl_dir` IS
+remotely settable — motor DIRECTION can be changed over CAN, the control MODE cannot.)
+✅ **OVER UART — YES, AND IT IS ALWAYS LIVE.** `main.c:299-301` calls `app_uartcomm_start()` for
+**BUILTIN and EXTRA_HEADER** *before* `app_set_configuration()`, so serial comms is up **regardless
+of `app_to_use` (0 on ours)**. Default **115200** (`app_uartcomm.c:32`). Same `commands` layer as
+USB ⇒ **full app+motor config access.**
+⛔ **ONE CONNECTION PER ESC — THERE IS NO MULTI-DROP.** VESC CAN forwarding is gated on
+`can_mode == CAN_MODE_VESC`; in `CAN_MODE_UAVCAN` the CAN process thread simply `continue`s
+(`comm_can.c:1346`). Switching `can_mode` takes DroneCAN — and the rover's drive — DOWN.
+⇒ **4 separate sessions: one adapter moved between them, or an FT4232H, or a UART mux.**
+⚠️ On the companion only **`ttyAMA1` (GPIO0/1, needs `dtoverlay=uart1-pi5`)** is free — enough to
+wire ONE ESC permanently, not four. → `reference_uart_map`
+
+### ⛔⛔ BLE IS OFF THE TABLE ON THESE BOARDS — AND NOT SOLDERING IT WAS CORRECT
+MK5 firmware moved the NRF to a **permanent UART, PC11/PC12** (`HW_UART_P_*`, 115200) and
+**#if-outs the old NRF SPI block**. On MK5 the **DRV8301 gate-driver SPI took PB3/PB4** — the pins
+the old HW60 used for NRF SPI. The two swapped.
+🔴 **OUR BOARDS ARE WIRED THE ORIGINAL (SPI) WAY, so the module footprint sits on the DRV8301 SPI.
+Populating it would put a second device on the GATE DRIVER's bus — over-current thresholds, gain and
+fault readback all ride there ⇒ a MOTOR-SAFETY problem, not a comms one.** The operator left it
+unsoldered; ⛔ **do not suggest fitting it.**
+✅ **Consequence worth having: the permanent UART on PC11/PC12 is therefore FREE and already started
+as a comm port** — if those pads are reachable it is a second wired way into each ESC, possibly
+easier than the USB connector depending on the chassis.
