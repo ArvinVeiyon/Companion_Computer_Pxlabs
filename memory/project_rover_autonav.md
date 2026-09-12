@@ -5,10 +5,130 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-08-02T13:56:33.211Z
+  modified: 2026-09-12T06:07:45.971Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## 🔴🔴🔴 2026-09-12 (day) — **G2 REFRAMED: THE ESCs TAKE THROTTLE AS *TORQUE*, SO `RO_MAX_THR_SPEED` CANNOT BE CALIBRATED**
+
+> ⛔ **STOP TREATING THE OVERSPEED AS A WRONG CONSTANT. IT IS THE WRONG *KIND* OF COMMAND.**
+> The operator's own question — *"why not just calibrate max wheel speed × circumference like a
+> human would?"* — is what exposed this. He was right to ask, and the answer is that the number
+> would not stay put.
+
+**MEASURED, wheels-up, Manual, 21 held rungs** (`tools/throttle_ladder_record.py`, new this day;
+raw log `~/rover_data/logs/ladder_20260912_103319.json`):
+
+| stick | 0.148 | 0.238 | 0.356 | 0.540 | 0.602 | 1.000 |
+|---|---|---|---|---|---|---|
+| ERPM | 1502 | 1507 | 1511 | 1510 | 1510 | 1504–1511 |
+
+**Speed is FLAT from ~1/7 stick to full stick**, current ~2.0 A throughout. 🔑 **That is the
+signature of a CURRENT (torque) command with no load:** anything above friction accelerates to the
+same ceiling, which is set by back-EMF against the 24.7 V pack, not by the stick. Bigger stick only
+means it *arrives sooner*.
+
+✅ **CONFIRMED IN CONFIG, TWO INDEPENDENT RULERS:** all four `configs_from_repo/vesc_appconf_*.xml`
+carry **`uavcan_raw_mode = 0` = `UAVCAN_RAW_MODE_CURRENT`**, and the behaviour matches.
+⚠️ Still never read off live hardware (needs USB) — it is an open item in `bldc_can/RESUME.md`.
+
+🔴 **WHY THIS BREAKS PX4:** `RoverControl::speedControl` computes
+`throttle = setpoint / RO_MAX_THR_SPEED`, which assumes **throttle ∝ speed** — true for a DUTY-mode
+ESC. In torque mode speed is whatever the load allows, so the "right" value of `RO_MAX_THR_SPEED`
+differs on every surface. ⇒ **the 5.5× overspeed is structural.** ⛔ Do not set the parameter from
+one floor run and call it fixed.
+⏭ **Two ways out, operator's call:** (a) move the VESCs to duty/RPM mode so the hardware matches
+PX4's model — USB + VESC Tool per ESC; or (b) keep torque mode and stop leaning on the feedforward.
+**Measure one loaded floor point first.**
+
+🔑 **METHOD LESSON — STANDS CANNOT MEASURE A THROTTLE→SPEED CURVE ON THIS VEHICLE.** Under no load
+the answer saturates. The ladder MUST be run loaded. `throttle_ladder_record.py --analyse` now
+detects the flat case and refuses to print a fit. ⚠️ It also drops rungs where ERPM is still
+drifting or current is NEGATIVE — those are spin-downs, and scoring them invented low-throttle
+points that were never held.
+⚠️ **`0.0039 × 1505 = 5.87 m/s` is an EXTRAPOLATION ~6× beyond where that constant was validated.**
+`setup_manual` §A7 records the drivetrain measured at **0.58–0.60 m/s** on 08-02, and the pre-08-13
+`erpm_to_ms` of 0.000380 would give 0.57 m/s at 1505. **That ~10× conflict is UNRESOLVED — the
+taped floor run settles it.** ⛔ Do not quote a top speed until it does.
+
+## 🔴🔴 2026-09-12 — **`/odom` WAS READING HALF: THE ADDR-10 SIGN INVERSION WAS STALE. FIXED.**
+
+**Measured on stands, BOTH directions, 38,396 samples** (`ladder_*.json` + `reverse_*.json`):
+
+| addr | forward | reverse |
+|---|---|---|
+| 10 | 11,410 positive vs 43 | 5,001 negative vs 33 |
+| 11 | 11,430 positive vs 15 | 5,002 negative vs 33 |
+| 12 | 11,412 positive vs 40 | 4,999 negative vs 31 |
+| 13 | 11,460 positive vs 16 | 5,008 negative vs 39 |
+
+⇒ **all four ESCs report SIGNED ERPM on ONE convention and flip together.** Operator confirmed by
+eye, both directions. With the old `wheel_signs = [-1.0, ...]` the right side averaged
+`(-1487 + 1532)/2 ≈ 9` ERPM instead of ~1500 — **it cancelled itself**, and `/odom` published ~half.
+✅ **FIXED:** `wheel_odometry_node.py` default → `[1.0, 1.0, 1.0, 1.0]`, rebuilt, service restarted,
+log verified `signs={10: 1.0, ...}`. Same correction applied to `manual_drive_log.py` (the ORIGIN of
+the claim — every other tool copied it), `wheel_erpm_log.py`, `odom_scale_measure.py`.
+⚠️ `config/rover_odometry.yaml` is **NOT LOADED** (no `--params-file` on the unit) — the node
+defaults are what run. Both were changed, but only the source default takes effect.
+🔑 **The scale is safe:** had `erpm_to_ms` been tape-fitted while the right side cancelled, it would
+have had to come out ~0.0085; it is 0.0039 against ~0.0042 from geometry. **So the map was correct
+in August and broke later** — the 09-09 four-ESC reflash is the likeliest trigger, NOT PROVEN.
+🔴 **`/odom` NOW REPORTS ~2× WHAT IT DID. UNVALIDATED UNTIL IT MEETS TAPE.** It feeds the EKF
+bridge, so the next armed run hands PX4 roughly double the velocity of yesterday's runs ⇒
+**yesterday's overspeed numbers are NOT directly comparable to whatever comes next.**
+⏭ **FIRST FLOOR ITEM: drive a taped distance, compare with `/odom`.** That validates the fix and
+yields the loaded torque→speed point in one run.
+
+## 🔧 2026-09-12 — **PX4 PARAM AUDIT, READ LIVE. Nothing written by me; 4 written by the operator.**
+
+✅ **Correct, verified against the flashed source:** `RD_WHEEL_TRACK` 0.31 · `CA_AIRFRAME` 6 ·
+`CA_R_REV` 3 · `UAVCAN_ENABLE` 3 · `RC_MAP_ARM_SW` 5 / `KILL_SW` **12** / `FLTMODE` 6 /
+`THROTTLE` 2 / `YAW` 4 · `RC_KILLSWITCH_TH` 0.75 · `UAVCAN_EC_FUNC1..4` = 101,102,101,102
+(Motor1/Motor2 — correct left/right pairing) · `MIN` 110 / `MAX` 8082 · `EKF2_EV_CTRL` 4 ·
+`EKF2_GPS_CTRL` 7 · `EKF2_MAG_TYPE` 1 · `COM_POS_FS_EPH` 5 · `COM_DISARM_PRFLT` 10.
+
+🔴 **`NAV_RCL_ACT` READS 1 (Hold), NOT 6 (Disarm).** `bldc_can/RESUME.md` argues brake-off-on-RC-loss
+FROM `=6` — **that argument no longer holds, and RC loss will NOT disarm.**
+🔑 **`RO_YAW_RATE_I` = 0.0** ⇒ the yaw-windup mechanism blamed in the 08-02 runaway RCA is
+**currently disabled**; that RCA describes a parameter state that no longer exists. `RO_SPEED_I` is
+still 0.1, so **speed**-loop windup remains possible.
+⚠️ `RO_ACCEL_LIM`/`RO_DECEL_LIM`/`RO_JERK_LIM` all −1. Deliberate (they slew the manual stick), but
+`RO_DECEL_LIM = -1` guarantees waypoint overshoot in auto modes — an M2/M3 blocker, not a floor one.
+⚠️ `RO_SPEED_LIM` 0.7 · `RO_SPEED_TH` 0.10 against a measured ESC dropout ~0.14.
+⛔ **`COM_POS_FS_EPV` DOES NOT EXIST on this firmware** (only `_EPH`) — settled with the fake-name
+control. ⚠️ **`dump_params.py` (bulk `PARAM_REQUEST_LIST`) returns "received 0" today** — named
+reads work fine, so the param BACKUP path is broken while single reads are not.
+🔑 **MANUAL MODE BYPASSES THE WHOLE SPEED LOOP** (`DifferentialManualMode::manual()` copies the stick
+into `throttle_body_x`) ⇒ every `RO_*` value is INERT for an open-loop ladder. Nothing needed
+changing to run it.
+
+## ⏭ 2026-09-12 — **SOFTWARE BRAKE PATH OPENED: SLOT 6 = `Peripheral_via_Actuator_Set1`**
+
+**Why:** the RC brake is on `UAVCAN_EC_FUNC5 = 407 = RC_AUX1`, i.e. **pure RC passthrough — there is
+no software path to it at all.** That is the verified reason the collision reflex can only zero the
+setpoint. ⛔ **Do NOT move slot 5** — that would make the operator's emergency brake depend on the
+companion, whose crash behaviour is untested (R5.5).
+
+✅ **OPERATOR SET THESE 2026-09-12, VERIFIED LIVE:** `UAVCAN_EC_FUNC6` **301** · `MIN6` **1** ·
+`MAX6` **8191** · `FAIL6` **0** (slot 5 left at 407). **`esc_count` 5 → 6, `esc_armed_flags` 63,
+`esc_online_flags` still 15.** ✅ **PERSISTED — set from QGC, which commits to flash on write; the
+operator confirmed no reboot is needed.** (⚠️ that is NOT true of `set_param.py`, which is RAM-only
+and needs `param_save.py`.)
+🔑 **IT REALLY DOES GO OUT ON DroneCAN RawCommand** — `esc.cpp:104-123` fills `cmd` then
+`msg.cmd.resize(min_size)` where `min_size` = highest slot with `FUNCn > 0`. 5 slots before, 6 now,
+so index 5 is broadcast. Same message, no protocol change.
+🔑 **`Peripheral_via_Actuator_Set1..6` = 301-306, driven ONLY by `VEHICLE_CMD_DO_SET_ACTUATOR` (187)
+on `vehicle_command`** (`FunctionActuatorSet.hpp:55-80`): `param7`=group (0), `param1..6`=values,
+NaN = leave alone. **`/fmu/in/vehicle_command` is ALREADY BRIDGED** (same topic as the force-disarm)
+⇒ the companion can drive it over DDS, no MAVLink.
+⛔ **−1.0 = OFF, 0.0 ≈ 50% BRAKE** (the value maps onto MIN..MAX) — the `RC3_TRIM` trap in a new
+costume. ⚠️ **The value LATCHES**; the reflex must explicitly release. Outputs act only ARMED.
+⏭ **STILL INERT — the VESC side is not done.** `canard_driver.c` (~746, line from notes, the
+firmware tree is NOT on this machine) must read index 5 as well and take `max(idx4, idx5)`.
+🔴 **BOUNDS-CHECK `cmd.len` BEFORE READING INDEX 5** — PX4 resizes the array, so it is 5 long
+whenever `FUNC6` is 0. With the check either side can be updated in any order; without it, not.
+Needs all four reflashed over USB; rollback tag `v6.06.0-pxlabs-rover-r1`.
 
 ## ✅✅ 2026-09-12 (02:00) — **ARMED AUTONAV ENGAGED FOR THE FIRST TIME. THE eph PROCEDURE WORKS.**
 `AutoNav holding (nav_state=23)` **while ARMED** — the first time all evening, and the direct

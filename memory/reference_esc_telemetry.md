@@ -1,9 +1,11 @@
 ---
 name: reference-esc-telemetry
-description: "ESC/DroneCAN telemetry on the rover — what esc_status actually means, the brake on slot 5, the UAVCAN_EC scaling, and why zero throttle is not braking. Read before diagnosing any ESC or quoting a stopping figure."
-metadata:
+description: "ESC/DroneCAN telemetry on the rover — what esc_status actually means, the two brake slots (5 = RC, 6 = software), the UAVCAN_EC scaling, that the ESCs run in CURRENT/torque mode, and why zero throttle is not braking. Read before diagnosing any ESC or quoting a stopping figure."
+metadata: 
   node_type: memory
   type: reference
+  originSessionId: 3d6fddee-7330-454a-a767-3665b8dfbebf
+  modified: 2026-09-12T06:07:38.813Z
 ---
 
 # ESC / DroneCAN telemetry — how to read it, and what it does NOT mean
@@ -30,12 +32,22 @@ blind returns zero-filled phantoms that look exactly like a dead ESC.
 🔑 `input_rc` / `manual_control_setpoint` / `esc_status` are **all on DDS** ⇒ diagnose ESCs with
 **no VESC Tool and no `mavlink_shell`**.
 
-## 🔑 SLOT 5 IS THE BRAKE — and it has broken QGC's ESC health (2026-09-11)
+## 🔑 SLOTS 5 AND 6 ARE BRAKES — and they have broken QGC's ESC health (2026-09-11/12)
 
-`esc_count` now reads **5, not 4**. Slot 5 (array index 4) is the **RC brake** on
-`UAVCAN_EC_FUNC5`. Measured live: `esc_armed_flags` **31** (five bits) against `esc_online_flags`
-**15** (four bits) — the brake is armed but **never online**, because a brake output is not a
-telemetry-reporting ESC.
+🔴 **UPDATED 2026-09-12: `esc_count` now reads 6.** Slot 5 (array index 4) is the **RC brake** on
+`UAVCAN_EC_FUNC5 = 407` (`RC_AUX1`, pure stick passthrough). Slot 6 (index 5) was added by the
+operator the same day as `UAVCAN_EC_FUNC6 = 301` = **`Peripheral_via_Actuator_Set1`**, a
+**software-commandable** brake channel so the collision reflex can finally reach the brake — see
+[[project_rover_autonav]] 2026-09-12. Measured live after the change: `esc_armed_flags` **63**
+(six bits) against `esc_online_flags` **15** (four bits). **Neither brake is ever online**, because
+a brake output is not a telemetry-reporting ESC. (Before 09-12 the readings were 5 and 31.)
+
+🔑 **BOTH GO OUT ON THE SAME DroneCAN `RawCommand`.** `esc.cpp:104-123` fills `cmd` from the mixer
+then `msg.cmd.resize(min_size)`, where `min_size` is the highest slot with `UAVCAN_EC_FUNCn > 0`.
+Five entries before, six now. ⛔ **The VESC firmware must bounds-check `cmd.len` before reading
+index 5** — the array is 5 long whenever `FUNC6` is 0.
+⏭ **Slot 6 IS INERT until all four ESCs are reflashed** to read index 5 (`canard_driver.c`,
+`max(idx4, idx5)`). ⛔ **−1.0 = off, 0.0 ≈ 50% brake**, and the value **latches**.
 
 ⇒ **QGC's "ESC 5 not connected" error is EXPECTED, not a fault.**
 🔴 **BUT it permanently lights QGC's ESC health, so ⛔ QGC CAN NO LONGER FLAG A REAL DISCONNECT.**
@@ -86,3 +98,20 @@ turns. **Re-measure against `esc_current` when S1 is re-run.**
 
 **`/scan` reads SHORT** (scale 0.9845) ⇒ the reflex fires **early**, which is the safe direction.
 ⚠️ Read `autonav_reference` §5 / §12 / §13 before quoting any of these.
+
+## 🔴🔴 THE ESCs RUN IN CURRENT (TORQUE) MODE — PX4'S THROTTLE IS NOT A SPEED COMMAND (2026-09-12)
+
+All four `configs_from_repo/vesc_appconf_*.xml` carry **`uavcan_raw_mode = 0` =
+`UAVCAN_RAW_MODE_CURRENT`**, and a wheels-up ladder confirmed it behaviourally: **speed was FLAT at
+~1505 ERPM from 0.148 stick to full stick**, ~2.0 A throughout. With no load, any torque above
+friction accelerates to the same back-EMF ceiling; the stick only changes how fast it gets there.
+⚠️ The config value has **never been read off live hardware** (needs USB) — open in `RESUME.md`.
+
+🔑 **CONSEQUENCES, and they are structural:**
+- `RO_MAX_THR_SPEED` assumes **throttle ∝ speed**, which is a DUTY-mode property. ⛔ **It cannot be
+  calibrated to a single correct value** — in torque mode speed depends on the load/surface.
+- ⛔ **A WHEELS-UP TEST CANNOT MEASURE A THROTTLE→SPEED CURVE HERE.** It saturates. Run it loaded.
+- **Lower stick is REVERSE, not brake** — which is exactly why a separate brake slot had to exist.
+
+→ full reasoning, numbers and the unresolved ~10× speed-scale conflict: [[project_rover_autonav]]
+2026-09-12.

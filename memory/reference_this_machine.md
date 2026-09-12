@@ -98,3 +98,18 @@ resolves to nothing and `ros2 topic echo` reports it as "not published yet", whi
 FC. ⚠️ **The bridged `/fmu/` set is THIN and appears lazily** — after an FC reboot only ~12 topics
 existed; `manual_control_setpoint`, `actuator_outputs` and `esc_status` were **absent**, so do not
 plan a measurement around them without checking `ros2 topic list` first.
+
+## 🗂️ FILESYSTEM LAYOUT — REORGANISED 2026-09-12 (83 loose `$HOME` files → 4)
+
+- `~/rover_data/{maps,bags,logs,fc}` — **MUTABLE DATA.** ⛔ deliberately NOT inside `ros2_ws`:
+  a map `.db` is ~166 MB and GitHub hard-rejects >100 MB blobs.
+- `~/apps/` — source and build trees; all were git clones. 🔑 **Nothing in `$HOME` was ever a live
+  service dependency** — services run from `/usr/local/bin`, DKMS from `/usr/src`.
+- `~/bin/` — loose scripts. `~/apps/stray_home_ws/` — a colcon workspace someone built in `$HOME`
+  (moved, NOT deleted).
+- ⛔ **`~/ros2_ws` and `~/codex-work` DID NOT MOVE** — systemd references them by absolute path.
+- 🔴 **THE MAP MOVED: `~/house_map_v4.db` → `~/rover_data/maps/house_map_v4.db`** (3 configs +
+  3 tools updated, `ros2_ws` `2fa781a`). **Any doc still naming the old path is STALE.**
+- ⚠️ **DISK 85% FULL** (8.7 G free); `rover_data/bags` alone is 15 G. ⛔ `map_run_20260809_185011`
+  is NOT disposable — it is the replay adjudication bag. The two `mapping_run*_20260802` are
+  false-map era.
