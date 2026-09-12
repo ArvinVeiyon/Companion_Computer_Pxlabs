@@ -5,10 +5,71 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-09-12T07:43:27.490Z
+  modified: 2026-09-12T08:24:53.263Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## ✅✅ 2026-09-12 (floor) — **THE FLOOR RUNS. SCALE VALIDATED · COAST CLOSED · BRAKE RATIO REAL · G2 ANSWERED**
+
+Operator-driven, Manual, open loop. `tools/field_measure.py`, four recordings in
+`~/rover_data/logs/floor_*.json`. ⛔ I commanded nothing; he drove and I watched.
+
+### 🔴🔴 THE G2 ANSWER — **AT A CONSTANT STICK THE ROVER NEVER REACHES A STEADY SPEED**
+Stick held at **~0.11 for 2.5 s**: ERPM **82 → 184 → 279 → 373 → 466 → 564**, climbing the whole
+time, **current FLAT at 2.6-2.9 A**. Constant current = constant torque = constant acceleration, no
+equilibrium. ⇒ **CONFIRMED ON THE FLOOR: the ESCs take throttle as TORQUE.**
+🔑🔑 **THE OVERSPEED IS AN INTEGRAL, NOT A RATIO.** ⛔ **STOP QUOTING "~5.5×"** — hold twice as long
+and you get twice the speed. `RO_MAX_THR_SPEED` describes a throttle→speed relationship that **DOES
+NOT EXIST ON THIS VEHICLE**. ⛔ Do not "calibrate" it. Acceleration **0.75 m/s² at 2.7 A**.
+⚠️ That run reached **2.2 m/s on a tenth of stick**, covered 3.2 m, and stopped **0.185 m** from a
+wall — INSIDE the 0.35 m standoff — only because the operator hit reverse. **Duration is the control,
+not stick position.**
+
+### ✅ ODOMETRY SCALE VALIDATED — `/odom` over-reads **8.1%** ⇒ THE SIGN FIX IS CONFIRMED
+Gentle burst, `/scan` tracking from the first sample: **3.188 m by `/scan` vs 3.469 m from the
+wheels.** 🔑 **With the OLD addr-10 inversion the wheels would have read ~HALF. They read 8% MORE.
+Only the corrected sign map produces that.** ⛔ **THE ~10× CONFLICT IS DEAD** — the old 0.000380
+would predict 0.21 m/s where the wall measured 2.13.
+⛔ **DO NOT CHANGE `erpm_to_ms`.** The tool suggests 0.003584; 8% is inside the slip spread the
+constant was fitted across, and one run at one speed on one floor is not grounds to move a
+tape-validated value. ⚠️ The aggressive run gave **13%** — slip grows with acceleration.
+
+### ✅✅ COAST BASELINE CLOSED (open since 09-09) AND THE BRAKE RATIO IS NOW REAL
+| | deceleration | stop from 0.8 m/s | run |
+|---|---|---|---|
+| **coast** | **0.46 m/s²** | 0.70 m | 1.42 → −0.03 m/s over 2.01 s, **to rest** |
+| **RC brake** | **1.44 m/s²** | 0.22 m | 1.53 → 0.05 m/s over 1.17 s, **to rest** |
+🔑 **BRAKE IS 3.1× COASTING — MEASURED, same session, same floor, BOTH runs to a full stop.** The
+old "3.4× PROVISIONAL" (coast n=2, neither to rest) is superseded and lands close.
+🔴 **THE BRAKE TAKES ~0.3 s TO BITE.** Throttle centred at 1.535 m/s; current stayed ~0 for 0.32 s,
+during which it slowed at **0.43 m/s² on drag alone — independently reproducing the coast figure.**
+Total stopping distance **0.925 m**, of which the first **0.14 m** was before the brake engaged.
+🔑 **REGEN CURRENT CAPPED AT −4.99 A** ⇒ **`l_in_current_min` = −5 A IS what binds**, answering the
+`RESUME.md` open item that tried to reconcile a −12.06 A peak against the −5 A cap.
+🔑 Current faded −4.99 A @1.1 m/s → −0.44 A @0.06 m/s ⇒ **regenerative, strongest when fast** — right
+for cutting the reflex coast, wrong for holding still.
+🔴 **COASTING IS LONG: 1.78 m from 1.40 m/s.** A burst released with 1.78 m of clearance rolled to
+**0.34 m raw ≈ ZERO bumper clearance.** ⇒ the standoff is speed-bound, exactly as recorded.
+
+### ⚠️ MEASUREMENT TRAPS FOUND THE HARD WAY — READ BEFORE THE NEXT FLOOR SESSION
+🔴 **`/scan` DOES NOT TRACK BEYOND ~3 m IN THIS CORRIDOR.** At 3.8 m the 0.275 m corridor subtends
+only **±4°** and the wall sat at the **5 m range limit**, so for the first **1.9 s** the sector
+minimum was FLAT (drifting UP) while the wheels integrated 1.7 m. Scoring it in gave **36%** error
+against **8%** for the tracking window. ⇒ **PARK ~2.5 m OUT, NOT 3.5.**
+🔴 **A SOFA IS A POOR RULER** — jitter 0.074 m, and once 2.069 m as the corridor flickered between
+two surfaces. ⛔ **Gate on jitter < ~0.05 m AND spread < ~0.05 m before driving.** A flat wall
+squared-up gave 0.002 m on 09-11.
+🔑 **HIGH NaN COUNT IS NOT BLINDNESS** — the corridor filter rejects everything outside 0.275 m BY
+DESIGN, which is most of the sector at range. Judging on NaN alone called a clear corridor "blind"
+twice. Judge on whole-scan health (was 66-88%) plus the nearest in-corridor return.
+🔧 **FIVE defects fixed in my own analysers today, ALL the same family — a confident number from
+data that did not support it:** steepest-sample-pair decel reporting **87 m/s²** (nine g) as a brake
+figure · a coasting wheel counted as evidence of a deadband · an inverted bracket averaged into a
+plausible answer · scale scored first-to-last so an out-and-back cancelled to "scan −0.006 m, erpm
+15.281 m" · a decel run broken by ERPM noise, truncating a 1.44 m/s² brake to 0.60.
+⇒ **`ros2_ws` `1ca3fdf`. ⛔ Distrust any analyser output that has not been checked against a run you
+can read by eye.**
 
 ## 🔴🔴🔴 2026-09-12 (day) — **G2 REFRAMED: THE ESCs TAKE THROTTLE AS *TORQUE*, SO `RO_MAX_THR_SPEED` CANNOT BE CALIBRATED**
 
