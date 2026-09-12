@@ -133,7 +133,7 @@ export PATH=$HOME/.npm-global/bin:$PATH
 
 # ── Claude always runs inside tmux ────────────────────
 # Survives a PuTTY/SSH drop: detach with Ctrl-b d, reattach from anywhere
-# with `claude` (or ~/claude-tmux.sh). Defined BEFORE the auto-wake block
+# with `claude` (or ~/bin/claude-tmux.sh, moved there 2026-09-12). Defined BEFORE the auto-wake block
 # below, which calls `claude` and so goes through this wrapper too.
 claude() {
     local session="${CLAUDE_TMUX_SESSION:-vindroz}"
