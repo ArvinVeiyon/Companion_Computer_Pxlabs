@@ -25,7 +25,8 @@ That closes the September open item where no post-flash readback hash was ever r
 | `s_pid_kp` | **0.008** | was 0.004. Bench: drive current 12.0 → 20.7 A, matching current mode's 21.1 A |
 | `s_pid_min_erpm` | **50** | was 200. Only replicated metric: rpm scatter at rest, 0.00 twice at 50 vs 0.36 at 100, 0.69 at 0 |
 | `l_in_current_min` | **−10** | was −5. Battery-side regen ceiling = braking authority. ⏭ STILL UNTESTED UNDER LOAD |
-| `s_pid_ramp_erpms_s` | 20000 | unchanged |
+| `l_current_min` | **−15** | was −25, softened 2026-09-13 (late evening): braking pulled harder than wanted. ⏭ floor figures at −25 are STALE |
+| `s_pid_ramp_erpms_s` | **2000** | was 20000 (stock 5000), softened 2026-09-13 (late evening): neutral stick hard-braked every time. 🔑 20000 was set 09-12 for the OPPOSITE complaint, LATE STOPS. ⚠️ SYMMETRIC — acceleration softens too. 🔴 the collision reflex only zeroes the setpoint, so this slews the EMERGENCY stop at the same rate |
 | `s_pid_kd`, `s_pid_ki` | 0.0001 / 0.004 | unchanged — one variable at a time |
 
 ## ⛔ Do not repeat these dead ends

@@ -253,10 +253,22 @@ record it as verified.**
       ⚠️ Lower winding resistance means RL reaches a given current at less applied voltage, so it is
       the wheel most likely to hit `l_current_max` (25 A, identical on all four) first under load.
       🔑 Cross-check of all four live mcconfs, 2026-09-13: tuning identical everywhere
-      (`s_pid_kp` 0.008 · `s_pid_min_erpm` 50 · `l_current_min` −25 · `l_in_current_min` −10 ·
-      `si_motor_poles` 14 · `l_current_max` 25 · `l_max_duty` 0.95 · `s_pid_ramp_erpms_s` 20000);
-      `m_invert_direction` correctly mirrored (FR/RR 0, FL/RL 1); every wheel's detection results
-      distinct ⇒ positive evidence no config was ever cross-written.
+      (`s_pid_kp` 0.008 · `s_pid_min_erpm` 50 · `l_in_current_min` −10 · `si_motor_poles` 14 ·
+      `l_current_max` 25 · `l_max_duty` 0.95); `m_invert_direction` correctly mirrored
+      (FR/RR 0, FL/RL 1); every wheel's detection results distinct ⇒ positive evidence no config
+      was ever cross-written.
+      🔴 **SOFTENED LATE THE SAME EVENING, all four, verified by readback:** `l_current_min`
+      −25 → **−15** (braking pulled harder than wanted) and `s_pid_ramp_erpms_s` 20000 → **2000**
+      (returning the stick to NEUTRAL hard-braked every time). 🔑 **20000 was set 2026-09-12 for
+      the OPPOSITE complaint — LATE STOPS**; stock is 5000, so 2000 is BELOW stock and reverses
+      that call. 🔑 In RPM mode neutral is "hold 0 ERPM", an ACTIVE stop — `l_current_min` caps how
+      hard it pulls, only the ramp changes how abruptly zero is demanded. ⚠️ the ramp is SYMMETRIC
+      ⇒ acceleration softens identically.
+      🔴🔴 **SAFETY, UNRESOLVED: the collision reflex ONLY ZEROES THE SETPOINT**, which worked
+      because zeroing was instant. The 2000 ramp slews the EMERGENCY stop at the same rate as a
+      comfort stop — it cannot tell a released stick from a detected obstacle. **Both the 09-13
+      floor figures (0.52 s / 0.19 m / 1.28 m/s², measured at −25 and ramp 20000) and the reflex's
+      clearance margin are STALE. Re-measure before driving at speed.**
 - [ ] Correct `Testing_Bin/README.md` upstream — it still recommends the DroneCAN path.
 - [x] ~~Fix `RC3_TRIM == RC3_MIN`~~ — done 2026-09-07 with `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5`, saved.
 - [x] ~~Flash one ESC over USB, verify, then the rest~~ — all four, 2026-09-09.

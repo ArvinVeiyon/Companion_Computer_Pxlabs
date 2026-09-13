@@ -27,8 +27,35 @@ Targets (agreed 2026-09-13, proven on RL):
                                ⚠️ The dead-band/breakaway metric was NOT usable at any setting:
                                stiction is larger than the release band and the spread within
                                one setting exceeded the spread between settings.)
-    l_current_min     -25     (motor-side braking current. FL alone read -25.8, a detection
-                               artifact; squared up 2026-09-13 so all four brake identically.)
+    l_current_min     -15     (motor-side braking current, SOFTENED from -25 on 2026-09-13 at the
+                               operator's call: -25 braked harder than wanted. -25 was itself a
+                               squaring-up of FL's -25.8 detection artifact so all four brake
+                               identically -- that requirement still holds, ALL FOUR MOVE TOGETHER
+                               or braking yaws the rover.
+                               ⚠️ The 2026-09-13 floor brake figures -- 0.52 s / 0.19 m / 1.28 m/s²
+                               -- were measured at -25 and are STALE at -15. Re-measure before
+                               trusting the collision reflex's clearance margin at speed.
+                               ⛔ This is the motor-side lever. Do NOT soften the brake via
+                               l_in_current_min (battery-side, stays -10) or the ramp (symmetric,
+                               would slow acceleration too).)
+    s_pid_ramp_erpms_s 2000   (setpoint slew, SOFTENED from 20000 on 2026-09-13 at the operator's
+                               call: returning the stick to NEUTRAL hard-braked every time.
+                               🔑 WHY IT WAS 20000: set 2026-09-12 with the RPM-mode template, when
+                               the complaint was the OPPOSITE -- LATE STOPS. 20000 ⇒ ~11 m/s²
+                               (1.1 g) of setpoint slew, deliberately beyond tyre grip so the
+                               SETPOINT would never be what limited a stop. Stock is 5000; 2000 is
+                               BELOW stock, so this reverses that decision.
+                               🔑 In RPM mode neutral is not "no torque", it is "hold 0 ERPM" -- an
+                               ACTIVE stop. l_current_min caps how hard it pulls; only this ramp
+                               changes how abruptly zero is DEMANDED.
+                               ⚠️ SYMMETRIC (foc_math.c:504, utils_step_towards) ⇒ acceleration
+                               softens identically. At 1 m/s (~1795 true ERPM) 2000 gives ~0.9 s
+                               to a stop, ~1.1 m/s².
+                               🔴 SAFETY: the collision reflex ONLY ZEROES THE SETPOINT, which
+                               works because zeroing is instant. This ramp slews the reflex's
+                               emergency stop at the SAME rate as a comfort stop -- it cannot tell
+                               a released stick from a detected obstacle. Reflex stopping distance
+                               grows accordingly. RE-MEASURE before trusting the clearance margin.)
     uavcan_raw_mode   3       (RPM; left alone if already 3)
 
 Every write is verified by reading the config back and diffing. A mismatch aborts.
@@ -48,13 +75,12 @@ LIVE = pathlib.Path('/home/roz/codex-work/bldc_can/configs_live')
 WHEEL = {10: 'FR', 11: 'FL', 12: 'RR', 13: 'RL'}
 
 TARGET_MC = {'s_pid_kp': '0.008', 'l_in_current_min': '-10', 's_pid_min_erpm': '50',
-             'l_current_min': '-25'}
+             'l_current_min': '-15', 's_pid_ramp_erpms_s': '2000'}
 TARGET_APP = {'uavcan_raw_mode': '3'}
 
 # Values that must already match across the set. Not changed here -- only reported, because a
 # difference means that ESC never got the September migration and needs a look, not a silent fix.
-EXPECT_MC = {'s_pid_ramp_erpms_s': '20000',
-             'si_motor_poles': '14', 'l_max_duty': '0.95',
+EXPECT_MC = {'si_motor_poles': '14', 'l_max_duty': '0.95',
              'l_current_max': '25'}
 EXPECT_APP = {'uavcan_raw_rpm_max': '9000', 'can_mode': '1'}
 
