@@ -252,6 +252,38 @@ collapse (still an open item).
 ⛔ **The 09-13 floor figures (0.52 s / 0.19 m / 1.28 m/s²) were taken at `l_current_min` −25, now
 −15, and the reflex clearance margin is sized against them. RE-MEASURE BEFORE DRIVING AT SPEED.**
 
+### ⛔⛔ 2026-09-14 — **`l_current_min` IS NOT THE BRAKE LEVER. MEASURED. ALL CHANGES REVERTED.**
+Chasing a neutral stick that hard-brakes, `l_current_min` was taken **−25 → −15 → −6** on all four.
+**The operator felt NO difference at any setting.** All four are back at **−25** (readback-verified),
+so the ESCs end the session in exactly the config they started it in.
+
+🔑🔑 **WHY — FULL-RATE BENCH LOG, 99.3 Hz, 5955 samples, 9 stop events, rover ON A STAND:**
+**peak braking current is only −3.5 to −4.6 A** (FR −3.47 · FL −3.49 · RR −3.79 · RL −4.59).
+**Every limit tried — −25, −15, −6 — sits ABOVE that, so NONE of them ever bind.** Drive current
+peaked **+11.7 to +20.3 A**, so the drive side is healthy. ⛔ **Stop reaching for `l_current_min`
+for a harshness complaint.**
+
+🔴🔴 **THE STAND DOES NOT REPRODUCE THE SYMPTOM — DO NOT DIAGNOSE THE BRAKE ON A STAND.** Those 9
+stops were **1.3–2.7 s coast-downs** from ~1265 rpm with **MEAN current POSITIVE (+0.7 to +1.1 A)**
+— the motor gently *driving*, not braking. With no vehicle mass there is no kinetic energy, the
+speed error collapses on its own, and the loop never demands real braking current. **The hard stop
+needs inertia to exist.**
+
+⚠️⚠️ **MEASUREMENT TRAP THAT NEARLY COST THE ANSWER: `brake_run_record.py` writes its CSV on a
+0.2 s timer (5 Hz) while `esc_status` arrives at ~98 Hz — it keeps ~1 sample in 20 and is BLIND to
+a current spike inside a 0.4 s stop.** The 5 Hz and 99 Hz passes happened to agree here, but only
+the second is evidence. ✅ **Use `diag/brake_fullrate.py`** (added 09-14, logs every message).
+
+⏭ **STILL UNDIAGNOSED: what makes the floor stop hard.** Next step is the SAME full-rate log **on
+the floor**. ⏭ The one untested ESC-side brake lever is **`foc_duty_dowmramp_kp` (50) / `_ki`
+(1000)** — they appear at exactly two lines in the firmware, both inside the duty-control PI, and
+for this rover the ONLY entry into duty-control is the neutral duty-0 short brake ⇒ **brake-path
+only, cannot touch acceleration or yaw.** ⚠️ **UNCONFIRMED — do not tune them until a floor run
+shows the short brake actually engaging.**
+⛔ **CORRECTION to the 09-13 note below:** "there is NO brake-only ramp in VESC FOC" was too strong.
+`cc_ramp_step_max`/`m_duty_ramp_step` really are dead (mcpwm.c/BLDC only), but `foc_duty_dowmramp_*`
+were missed and ARE in the FOC brake path.
+
 ### ⛔⛔ 2026-09-13/14 — **THE RAMP WENT 20000 → 2000 → 20000. IT IS BACK AT 20000. DO NOT RE-PROPOSE 2000.**
 2000 **did** fix the hard neutral brake. It was reverted the same night for two reasons:
 1. **Sluggish off the line** — "takes more seconds to respond" (operator, on the floor).

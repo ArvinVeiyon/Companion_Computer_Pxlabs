@@ -27,17 +27,35 @@ Targets (agreed 2026-09-13, proven on RL):
                                ⚠️ The dead-band/breakaway metric was NOT usable at any setting:
                                stiction is larger than the release band and the spread within
                                one setting exceeded the spread between settings.)
-    l_current_min     -15     (motor-side braking current, SOFTENED from -25 on 2026-09-13 at the
-                               operator's call: -25 braked harder than wanted. -25 was itself a
-                               squaring-up of FL's -25.8 detection artifact so all four brake
-                               identically -- that requirement still holds, ALL FOUR MOVE TOGETHER
-                               or braking yaws the rover.
-                               ⚠️ The 2026-09-13 floor brake figures -- 0.52 s / 0.19 m / 1.28 m/s²
-                               -- were measured at -25 and are STALE at -15. Re-measure before
-                               trusting the collision reflex's clearance margin at speed.
-                               ⛔ This is the motor-side lever. Do NOT soften the brake via
-                               l_in_current_min (battery-side, stays -10) or the ramp (symmetric,
-                               would slow acceleration too).)
+    l_current_min     -25     (motor-side braking current. ⛔⛔ DO NOT CHASE THE HARD NEUTRAL BRAKE
+                               WITH THIS -- IT IS NOT THE LEVER. MEASURED 2026-09-14.
+                               Taken -25 -> -15 -> -6 chasing a neutral stick that hard-braked; the
+                               operator reported NO FELT DIFFERENCE at any setting, and the bench
+                               run explains why:
+                               🔑🔑 ON A STAND, PEAK BRAKING CURRENT IS ONLY -3.5 to -4.6 A across
+                               all four wheels (full-rate log, 99.3 Hz, 9 stop events). Every limit
+                               tried -- -25, -15, -6 -- sits ABOVE that, so NONE OF THEM EVER BIND.
+                               Drive current peaked +11.7 to +20.3 A, so the drive side is fine.
+                               ⚠️ MEASURE AT FULL RATE: brake_run_record.py writes its CSV on a
+                               0.2 s timer (5 Hz) while esc_status arrives at ~98 Hz, so it keeps
+                               ~1 sample in 20 and CANNOT see a spike inside a 0.4 s stop. The
+                               5 Hz pass and the 99 Hz pass happened to agree here, but only the
+                               second one is evidence. Use diag/brake_fullrate.py.
+                               🔴 THE STAND DOES NOT REPRODUCE THE SYMPTOM: those stops were
+                               1.3-2.7 s coast-downs from ~1265 rpm with MEAN current POSITIVE
+                               (+0.7 to +1.1 A) -- the motor gently driving, not braking. With no
+                               vehicle mass there is no kinetic energy, the speed error collapses
+                               on its own, and the controller never demands real braking current.
+                               ⏭ THE HARD STOP IS STILL UNDIAGNOSED. It needs a FLOOR run with
+                               diag/brake_fullrate.py to catch the peak current with inertia behind
+                               it. Until then the duty-0 short-brake theory (see s_pid_min_erpm) is
+                               UNCONFIRMED -- do not tune foc_duty_dowmramp_kp/ki on the strength
+                               of it.
+                               🔑 -25 is also the squaring-up of FL's -25.8 detection artifact so
+                               all four brake identically. ALL FOUR MOVE TOGETHER or braking yaws.
+                               ⚠️ The 09-13 floor figures 0.52 s / 0.19 m / 1.28 m/s² are the ONLY
+                               floor brake data and predate all of this; the collision reflex's
+                               0.69 m forward clearance is sized against them.)
     s_pid_ramp_erpms_s 20000  (setpoint slew. ⛔⛔ LEAVE IT HERE. Tried 20000 -> 2000 on 2026-09-13
                                to soften the brake and REVERTED the same evening.
                                ⛔⛔ 2000 WAS REJECTED ON THE FLOOR: it did soften the stop, but the
@@ -62,12 +80,16 @@ Targets (agreed 2026-09-13, proven on RL):
                                🔑 In RPM mode neutral is not "no torque", it is "hold 0 ERPM" -- an
                                ACTIVE stop. l_current_min caps how hard it pulls; only this ramp
                                changes how abruptly zero is DEMANDED, and it cannot be lowered.
-                               ⏭ SO: THE SOFT-STOP LEVER LEFT ON THE ESC IS l_current_min ALONE
-                               (now -15). ⛔ THERE IS NO BRAKE-ONLY RAMP IN VESC FOC -- verified
-                               2026-09-13: cc_ramp_step_max and m_duty_ramp_step are referenced
-                               ONLY in mcpwm.c, the BLDC driver, and this rover runs FOC, so both
-                               are DEAD parameters here. The only brake-specific levers are the
-                               current limits and l_max_erpm_fbrake.
+                               ⛔ cc_ramp_step_max and m_duty_ramp_step are NOT usable brake ramps
+                               -- referenced ONLY in mcpwm.c, the BLDC driver; this rover runs FOC,
+                               so both are DEAD parameters here.
+                               ⏭ THE ONE UNTESTED ESC-SIDE BRAKE LEVER IS foc_duty_dowmramp_kp (50)
+                               / _ki (1000): they appear at exactly two lines in the firmware, both
+                               inside the duty-control PI, and for this rover the ONLY way into
+                               duty-control is the duty-0 short brake at neutral -- so they are
+                               brake-path-only and cannot touch acceleration or yaw. ⚠️ UNTESTED
+                               AND UNCONFIRMED: the stand run could not show the short brake at all
+                               (see l_current_min). Get a FLOOR measurement first.
                                ⏭ Asymmetry needs PX4: RO_ACCEL_LIM / RO_DECEL_LIM are SEPARATE
                                params, the only way to soften the stop while leaving the launch
                                and the turn-in alone. ⚠️ Both pinned at -1 because they slew the
@@ -92,7 +114,7 @@ LIVE = pathlib.Path('/home/roz/codex-work/bldc_can/configs_live')
 WHEEL = {10: 'FR', 11: 'FL', 12: 'RR', 13: 'RL'}
 
 TARGET_MC = {'s_pid_kp': '0.008', 'l_in_current_min': '-10', 's_pid_min_erpm': '50',
-             'l_current_min': '-15', 's_pid_ramp_erpms_s': '20000'}
+             'l_current_min': '-25', 's_pid_ramp_erpms_s': '20000'}
 TARGET_APP = {'uavcan_raw_mode': '3'}
 
 # Values that must already match across the set. Not changed here -- only reported, because a
