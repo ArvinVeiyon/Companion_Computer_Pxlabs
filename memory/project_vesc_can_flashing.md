@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b7052c6e-f42f-48fd-9d7e-c0dffff0ecc5
-  modified: 2026-09-12T18:10:37.278Z
+  modified: 2026-09-13T18:21:14.629Z
 ---
 
 **POINTER FILE. The detail lives in three documents — open them, do not work from this summary.**
@@ -218,8 +218,46 @@ NOT a reliable indicator of physical direction** on mirrored mounts — always g
 | `s_pid_kp` | **0.008** | 0.004 | the loop was UNDER-ASKING for current, not limited by it |
 | `s_pid_min_erpm` | **50** | 200 | only replicated metric; see below |
 | `l_in_current_min` | **−10** | −5 | braking ceiling — but it turned out NOT to be binding |
-| `l_current_min` | **−25** | FL was −25.8 | squared up so all four brake alike |
-| `uavcan_raw_mode` 3 · `rpm_max` 9000 · ramp 20000 · `l_max_duty` 0.95 | unchanged | | operator wants the duty headroom for 360s |
+| `l_current_min` | ~~−25~~ → **−15** | FL was −25.8 | squared up so all four brake alike; **SOFTENED to −15 late the same evening — see below** |
+| `s_pid_ramp_erpms_s` | ~~20000~~ → **2000** | stock 5000 | **SOFTENED late the same evening — see below** |
+| `uavcan_raw_mode` 3 · `rpm_max` 9000 · `l_max_duty` 0.95 | unchanged | | operator wants the duty headroom for 360s |
+
+### ✅✅ 2026-09-13, LATE — **THE BRAKE WAS SOFTENED. NEUTRAL WAS HARD-BRAKING EVERY TIME.**
+Operator's complaint: **returning the stick to NEUTRAL hard-braked, every time.** Applied to all
+four over USB with `tune_esc.py`, each verified by readback: **`l_current_min` −25 → −15** and
+**`s_pid_ramp_erpms_s` 20000 → 2000**. Per-wheel detection values confirmed unchanged and still
+distinct afterwards ⇒ no cross-write. Committed `60ed7af`.
+
+🔑🔑 **THE MECHANISM — `l_current_min` WAS NEVER GOING TO FIX THIS.** In RPM mode neutral is not
+"no torque", it is **"hold 0 ERPM" — an ACTIVE stop**, finished by the duty-zero short brake below
+`s_pid_min_erpm`. **`l_current_min` caps how HARD the stop pulls; only the RAMP changes how
+ABRUPTLY zero is demanded.** ⛔ Don't reach for the current limit again for a *harshness*
+complaint.
+
+🔑🔑 **WHY IT WAS 20000 — IT WAS DELIBERATE, FOR THE OPPOSITE COMPLAINT.** Set 09-12 with the
+RPM-mode template when the problem was **LATE STOPS**: 20000 ⇒ ~11 m/s² (1.1 g) of setpoint slew,
+deliberately beyond tyre grip so the *setpoint* would never be what limited a stop. **Stock is
+5000, so 2000 is BELOW stock and reverses that call.** ⚠️ If late stops come back, this is why.
+📏 At 1 m/s (~1795 true ERPM) 2000 gives ~0.9 s to a stop, ~1.1 m/s². The old 20000 gave 0.09 s —
+i.e. **effectively no ramp at all**, which is exactly why it bit every time.
+⚠️ **SYMMETRIC** (`foc_math.c:504`, `utils_step_towards`) ⇒ **acceleration softens identically.**
+
+🔴🔴 **THE UNRESOLVED SAFETY CONSEQUENCE — THE REFLEX GOT SLOWER TOO.** The collision reflex
+**only zeroes the setpoint**, which was safe *because zeroing was instant*. At ramp 2000 the
+emergency stop slews at the **same rate as a comfort stop** — the ESC cannot distinguish a
+released stick from a detected obstacle. **⛔ The 09-13 floor figures (0.52 s / 0.19 m /
+1.28 m/s²) were taken at −25 AND ramp 20000 and are STALE, as is the reflex clearance margin.
+RE-MEASURE BEFORE DRIVING AT SPEED.** ⏭ If the reflex needs its authority back without losing the
+soft feel, the ramp is the wrong place to get it — the reflex needs to command a brake directly
+rather than rely on setpoint collapse (that wiring is still an open item).
+
+🔧 **USB WEDGE, 09-13:** mid-session RR and RL both refused with `Could not read firmware version /
+Could not connect`, twice each, while FR/FL worked fine. **Discriminator: re-reading FR succeeded**
+⇒ not the tool, bus or build. A **`USBDEVFS_RESET` ioctl** on just those two devices
+(`/dev/bus/usb/001/0NN`) cleared it and both wrote first try. 🔑 **Software wedge — NOT cable, NOT
+power, and NO physical replug needed.** 🔑 The failure hits the **first probe read**, before
+`controller_id` is resolved and long before any write ⇒ **a wedged ESC is never left
+half-configured.**
 
 ### 🔑🔑 THE Kp RESULT — why RPM mode felt slower than torque mode
 Bench, RL unloaded: **drive peak 12.0 A at Kp 0.004 → 20.7 A at 0.008**, against **21.1 A in
