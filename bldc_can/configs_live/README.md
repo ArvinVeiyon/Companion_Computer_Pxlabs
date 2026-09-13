@@ -26,7 +26,7 @@ That closes the September open item where no post-flash readback hash was ever r
 | `s_pid_min_erpm` | **50** | was 200. Only replicated metric: rpm scatter at rest, 0.00 twice at 50 vs 0.36 at 100, 0.69 at 0 |
 | `l_in_current_min` | **−10** | was −5. Battery-side regen ceiling = braking authority. ⏭ STILL UNTESTED UNDER LOAD |
 | `l_current_min` | **−15** | was −25, softened 2026-09-13 (late evening): braking pulled harder than wanted. ⏭ floor figures at −25 are STALE |
-| `s_pid_ramp_erpms_s` | **2000** | was 20000 (stock 5000), softened 2026-09-13 (late evening): neutral stick hard-braked every time. 🔑 20000 was set 09-12 for the OPPOSITE complaint, LATE STOPS. ⚠️ SYMMETRIC — acceleration softens too. 🔴 the collision reflex only zeroes the setpoint, so this slews the EMERGENCY stop at the same rate |
+| `s_pid_ramp_erpms_s` | **20000** | ⛔⛔ **LEAVE IT. Tried 2000 on 2026-09-13 and REVERTED the same night.** 2000 did soften the neutral hard-brake but went SLUGGISH off the line, and — decisive — 🔴 **this is a DIFFERENTIAL drive: the ramp limits how fast the two sides can DIVERGE, so it throttles YAW ONSET and every turn goes long.** ⚠️ SYMMETRIC by construction (`utils_step_towards`, same step both ways) ⇒ it can never give a soft stop with a snappy launch |
 | `s_pid_kd`, `s_pid_ki` | 0.0001 / 0.004 | unchanged — one variable at a time |
 
 ## ⛔ Do not repeat these dead ends

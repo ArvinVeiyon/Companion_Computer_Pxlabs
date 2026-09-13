@@ -233,8 +233,34 @@ results are distinct ⇒ **positive evidence no config was ever cross-written.**
 
 ⛔ **`/dev/serial/by-id/` CANNOT identify a VESC — all four report `SerialNumber: 304`**, so the
 by-id directory holds ONE ambiguous symlink for however many are plugged in, pointing at whichever
-enumerated last. `ttyACM` numbering is assignment-order, not port-order. **Always identify an ESC by
-reading its `controller_id` off the device** (`tune_esc.py --dry-run --port …`), never by port name.
+enumerated last. `ttyACM` numbering is assignment-order, not port-order, **and it reshuffles after
+any bus reset** (observed 2026-09-13/14). **Always identify an ESC by reading its `controller_id`
+off the device** (`tune_esc.py --dry-run --port …`), never by port name.
+
+### 🔧 USB WEDGE AND HOW TO CLEAR IT WITHOUT TOUCHING THE ROVER
+🔴 **THE ESCs ARE PERMANENTLY MOUNTED INSIDE THE ROVER — THERE IS NO PHYSICAL REPLUG.** Any recovery
+has to be done in software, so the procedure below is the only one available.
+
+**Symptom:** `tune_esc.py` fails with `Could not read firmware version / Could not connect` while
+other ESCs on the same bus work fine. It hits the **first probe read**, before `controller_id` is
+resolved and long before any write ⇒ **a wedged ESC is never left half-configured.**
+**Discriminator:** re-read a *working* port. If that succeeds, the tool, bus and build are all
+exonerated and it is that device's USB endpoint.
+
+**Fix, in order:**
+1. `USBDEVFS_RESET` ioctl on the single wedged device (`/dev/bus/usb/<bus>/<dev>`). Cleared it on
+   2026-09-13.
+2. If that fails or ports stop enumerating at all: **reset the ESC HUB `1-1.2`** (214b:7260), which
+   re-enumerates all four at once — the electrical equivalent of replugging every ESC. ✅ Recovered
+   two dead ports on 2026-09-14 with no physical access.
+
+⛔⛔ **NEVER LOOP THE RESET OVER SEVERAL DEVICES USING DEVICE NUMBERS READ UP FRONT.** Resetting the
+first device re-enumerates the bus and invalidates every other `devnum`; the stale resets then wedge
+*more* ports. That is exactly how `1-1.2.1` and `1-1.2.2` were killed on 2026-09-14
+(`device not accepting address, error -71`). **One device at a time, re-reading `devnum` immediately
+before each** — or just reset the hub.
+🔴 **DO NOT reset the hub ABOVE it (`1-1`)** — that one carries both Realtek NICs and the WFB link.
+`1-1.2` is a separate downstream hub and is safe; verify with `lsusb -t` before resetting anything.
 
 ## 7. Procedure
 

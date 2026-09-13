@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b7052c6e-f42f-48fd-9d7e-c0dffff0ecc5
-  modified: 2026-09-13T18:21:14.629Z
+  modified: 2026-09-13T18:41:30.309Z
 ---
 
 **POINTER FILE. The detail lives in three documents — open them, do not work from this summary.**
@@ -242,22 +242,60 @@ deliberately beyond tyre grip so the *setpoint* would never be what limited a st
 i.e. **effectively no ramp at all**, which is exactly why it bit every time.
 ⚠️ **SYMMETRIC** (`foc_math.c:504`, `utils_step_towards`) ⇒ **acceleration softens identically.**
 
-🔴🔴 **THE UNRESOLVED SAFETY CONSEQUENCE — THE REFLEX GOT SLOWER TOO.** The collision reflex
-**only zeroes the setpoint**, which was safe *because zeroing was instant*. At ramp 2000 the
-emergency stop slews at the **same rate as a comfort stop** — the ESC cannot distinguish a
-released stick from a detected obstacle. **⛔ The 09-13 floor figures (0.52 s / 0.19 m /
-1.28 m/s²) were taken at −25 AND ramp 20000 and are STALE, as is the reflex clearance margin.
-RE-MEASURE BEFORE DRIVING AT SPEED.** ⏭ If the reflex needs its authority back without losing the
-soft feel, the ramp is the wrong place to get it — the reflex needs to command a brake directly
-rather than rely on setpoint collapse (that wiring is still an open item).
+🔴🔴 **A HIDDEN DEPENDENCY THIS EXPOSED — THE REFLEX'S SAFETY RESTS ON THE RAMP BEING HIGH.** The
+collision reflex **only zeroes the setpoint**, which is safe *because zeroing is instant at 20000*.
+Lowering the ramp slews the **emergency** stop at the **same rate as a comfort stop** — the ESC
+cannot distinguish a released stick from a detected obstacle. The ramp is back at 20000 so this is
+**not currently live**, but ⛔ **treat it as a hard constraint on any future ramp reduction.**
+⏭ The durable fix is for the reflex to **command a brake directly** rather than rely on setpoint
+collapse (still an open item).
+⛔ **The 09-13 floor figures (0.52 s / 0.19 m / 1.28 m/s²) were taken at `l_current_min` −25, now
+−15, and the reflex clearance margin is sized against them. RE-MEASURE BEFORE DRIVING AT SPEED.**
 
-🔧 **USB WEDGE, 09-13:** mid-session RR and RL both refused with `Could not read firmware version /
-Could not connect`, twice each, while FR/FL worked fine. **Discriminator: re-reading FR succeeded**
-⇒ not the tool, bus or build. A **`USBDEVFS_RESET` ioctl** on just those two devices
-(`/dev/bus/usb/001/0NN`) cleared it and both wrote first try. 🔑 **Software wedge — NOT cable, NOT
-power, and NO physical replug needed.** 🔑 The failure hits the **first probe read**, before
-`controller_id` is resolved and long before any write ⇒ **a wedged ESC is never left
+### ⛔⛔ 2026-09-13/14 — **THE RAMP WENT 20000 → 2000 → 20000. IT IS BACK AT 20000. DO NOT RE-PROPOSE 2000.**
+2000 **did** fix the hard neutral brake. It was reverted the same night for two reasons:
+1. **Sluggish off the line** — "takes more seconds to respond" (operator, on the floor).
+2. 🔴🔴 **DECISIVE — THIS IS A DIFFERENTIAL / SKID-STEER DRIVE.** A turn **IS** a speed difference
+   between the two sides, so the ramp limits **how fast the sides can DIVERGE** ⇒ it throttles
+   **YAW ONSET** and **every turn goes long**. That is **control authority, not comfort** — and it
+   is why the ramp cannot be used as a comfort knob on this vehicle at all. (operator, 09-13)
+
+🔑🔑 **SYMMETRIC — PROVEN FROM SOURCE, NOT ASSUMED:** `foc_math.c:504` calls `utils_step_towards()`;
+`util/utils_math.h:131` applies the **same step magnitude both ways** (`+= step` / `-= step`, no
+direction test). ⇒ **no value can give a soft stop AND a snappy launch.** ⛔ Stop trying.
+📏 At 1 m/s (~1795 true ERPM): **20000 = 0.09 s** (11 m/s², never binds ⇒ current/grip sets the
+feel) · 5000 = 0.36 s · **2000 = 0.90 s** (1.1 m/s², binds BOTH ways — the sluggishness).
+
+⛔⛔ **THERE IS NO BRAKE-ONLY RAMP IN VESC FOC — CHECKED AGAINST THE FIRMWARE 09-13.** The other two
+ramp params in the mcconf, **`cc_ramp_step_max` and `m_duty_ramp_step`, are referenced ONLY in
+`mcpwm.c` — the BLDC commutation driver.** This rover runs FOC (`mcpwm_foc.c`) ⇒ **both are DEAD
+parameters here and would do nothing.** The only brake-specific levers are `l_current_min`,
+`l_in_current_min` and `l_max_erpm_fbrake`, and **none shape the ONSET — only the ceiling.**
+⏭ **SO THE ONLY SOFT-STOP LEVER LEFT ON THE ESC IS `l_current_min` (now −15).** Asymmetry has to
+come from **PX4: `RO_ACCEL_LIM` / `RO_DECEL_LIM` are SEPARATE params** — the only way to soften the
+stop while leaving launch and turn-in untouched. ⚠️ both pinned at −1 after the **08-14 wall hit**
+(they slew the MANUAL STICK) ⇒ **operator call, never a quiet change.**
+
+🔧 **USB WEDGE — AND THE ESCs CANNOT BE REPLUGGED.** 🔴🔴 **THEY ARE PERMANENTLY MOUNTED INSIDE THE
+ROVER (operator, 09-14): there is NO physical replug. Recovery is software-only.**
+**Symptom:** `Could not read firmware version / Could not connect` on one port while others work.
+**Discriminator:** re-read a **working** port — if that succeeds, the tool, bus and build are all
+exonerated and it is that device's USB endpoint. 🔑 The failure hits the **first probe read**,
+before `controller_id` is resolved and long before any write ⇒ **a wedged ESC is NEVER left
 half-configured.**
+**Fix, in order:** ① `USBDEVFS_RESET` ioctl on the ONE wedged device (worked 09-13) → ② if ports go
+dead entirely, **reset the ESC HUB `1-1.2` (214b:7260)**, which re-enumerates all four at once —
+the electrical equivalent of replugging every ESC. ✅ **recovered two dead ports 09-14 with no
+physical access.**
+⛔⛔ **NEVER LOOP THE RESET OVER SEVERAL DEVICES USING DEVNUMS READ UP FRONT** — resetting the first
+re-enumerates the bus and invalidates every other `devnum`; the stale resets then wedge MORE ports.
+**That is exactly how `1-1.2.1` and `1-1.2.2` were killed 09-14** (`device not accepting address,
+error -71`). One device at a time, re-reading `devnum` immediately before each — or just reset the
+hub.
+🔴 **DO NOT reset the hub ABOVE it (`1-1`) — both Realtek NICs and the WFB link ride on it.**
+`1-1.2` is a separate downstream hub and is safe; confirm with `lsusb -t` first.
+⚠️ **`ttyACM` numbering RESHUFFLES after any bus reset** (observed 09-14: ACM0 went from `1-1.2.2`
+to `1-1.2.1`) ⇒ **always key on `controller_id`, never on the port name.**
 
 ### 🔑🔑 THE Kp RESULT — why RPM mode felt slower than torque mode
 Bench, RL unloaded: **drive peak 12.0 A at Kp 0.004 → 20.7 A at 0.008**, against **21.1 A in

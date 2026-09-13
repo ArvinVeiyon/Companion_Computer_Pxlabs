@@ -257,18 +257,33 @@ record it as verified.**
       `l_current_max` 25 · `l_max_duty` 0.95); `m_invert_direction` correctly mirrored
       (FR/RR 0, FL/RL 1); every wheel's detection results distinct ⇒ positive evidence no config
       was ever cross-written.
-      🔴 **SOFTENED LATE THE SAME EVENING, all four, verified by readback:** `l_current_min`
-      −25 → **−15** (braking pulled harder than wanted) and `s_pid_ramp_erpms_s` 20000 → **2000**
-      (returning the stick to NEUTRAL hard-braked every time). 🔑 **20000 was set 2026-09-12 for
-      the OPPOSITE complaint — LATE STOPS**; stock is 5000, so 2000 is BELOW stock and reverses
-      that call. 🔑 In RPM mode neutral is "hold 0 ERPM", an ACTIVE stop — `l_current_min` caps how
-      hard it pulls, only the ramp changes how abruptly zero is demanded. ⚠️ the ramp is SYMMETRIC
-      ⇒ acceleration softens identically.
-      🔴🔴 **SAFETY, UNRESOLVED: the collision reflex ONLY ZEROES THE SETPOINT**, which worked
-      because zeroing was instant. The 2000 ramp slews the EMERGENCY stop at the same rate as a
-      comfort stop — it cannot tell a released stick from a detected obstacle. **Both the 09-13
-      floor figures (0.52 s / 0.19 m / 1.28 m/s², measured at −25 and ramp 20000) and the reflex's
-      clearance margin are STALE. Re-measure before driving at speed.**
+      🔴 **BRAKE SOFTENED LATE THE SAME EVENING, all four, verified by readback:** `l_current_min`
+      −25 → **−15** (braking pulled harder than wanted). ⏭ the 09-13 floor figures
+      (0.52 s / 0.19 m / 1.28 m/s²) were measured at −25 and are STALE at −15 — **re-measure, the
+      collision reflex's clearance margin is sized against them.**
+      ⛔⛔ **THE RAMP WAS TRIED AT 2000 AND REVERTED TO 20000 THE SAME NIGHT. DO NOT RE-PROPOSE IT.**
+      2000 did fix the hard brake, but the rover went SLUGGISH off the line ("takes more seconds to
+      respond"), and the decisive objection is 🔴🔴 **THIS IS A DIFFERENTIAL / SKID-STEER DRIVE: a
+      turn IS a speed difference between the sides, so the ramp limits how fast they can DIVERGE —
+      it throttles YAW ONSET and makes every turn go long. That is CONTROL AUTHORITY, not comfort.**
+      (operator, 2026-09-13)
+      🔑🔑 **THE RAMP IS SYMMETRIC — PROVEN, NOT ASSUMED:** `foc_math.c:504` → `utils_step_towards()`,
+      and `util/utils_math.h:131` applies the SAME step magnitude both ways (`+= step` / `-= step`,
+      no direction test). ⇒ **it can NEVER give a soft stop with a snappy launch.** ⛔ Stop trying to
+      tune asymmetry into it.
+      ⛔⛔ **THERE IS NO BRAKE-ONLY RAMP IN VESC FOC — verified against the firmware 2026-09-13:**
+      `cc_ramp_step_max` and `m_duty_ramp_step` are referenced **ONLY in `mcpwm.c`, the BLDC
+      driver**; this rover runs FOC, so both are **DEAD parameters here**. The only brake-specific
+      levers are the current limits (`l_current_min`, `l_in_current_min`) and `l_max_erpm_fbrake`,
+      and none of them shape the ONSET — only the ceiling.
+      ⏭ **ASYMMETRY NEEDS PX4, NOT THE ESC:** `RO_ACCEL_LIM` / `RO_DECEL_LIM` are SEPARATE params —
+      the only way to soften the stop while leaving launch and turn-in alone. ⚠️ both pinned at −1
+      because they slew the MANUAL STICK and caused the 2026-08-14 wall hit. **Operator call.**
+      🔴🔴 **STILL UNRESOLVED: the collision reflex ONLY ZEROES THE SETPOINT**, which is safe only
+      while zeroing is instant — i.e. it depends on the ramp staying high. Any future ramp
+      reduction slews the EMERGENCY stop at comfort-stop rate; the ESC cannot tell a released stick
+      from a detected obstacle. ⏭ the durable fix is to have the reflex **command a brake directly**
+      rather than rely on setpoint collapse.
 - [ ] Correct `Testing_Bin/README.md` upstream — it still recommends the DroneCAN path.
 - [x] ~~Fix `RC3_TRIM == RC3_MIN`~~ — done 2026-09-07 with `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5`, saved.
 - [x] ~~Flash one ESC over USB, verify, then the rest~~ — all four, 2026-09-09.

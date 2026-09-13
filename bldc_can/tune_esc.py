@@ -38,24 +38,41 @@ Targets (agreed 2026-09-13, proven on RL):
                                ⛔ This is the motor-side lever. Do NOT soften the brake via
                                l_in_current_min (battery-side, stays -10) or the ramp (symmetric,
                                would slow acceleration too).)
-    s_pid_ramp_erpms_s 2000   (setpoint slew, SOFTENED from 20000 on 2026-09-13 at the operator's
-                               call: returning the stick to NEUTRAL hard-braked every time.
-                               🔑 WHY IT WAS 20000: set 2026-09-12 with the RPM-mode template, when
-                               the complaint was the OPPOSITE -- LATE STOPS. 20000 ⇒ ~11 m/s²
-                               (1.1 g) of setpoint slew, deliberately beyond tyre grip so the
-                               SETPOINT would never be what limited a stop. Stock is 5000; 2000 is
-                               BELOW stock, so this reverses that decision.
+    s_pid_ramp_erpms_s 20000  (setpoint slew. ⛔⛔ LEAVE IT HERE. Tried 20000 -> 2000 on 2026-09-13
+                               to soften the brake and REVERTED the same evening.
+                               ⛔⛔ 2000 WAS REJECTED ON THE FLOOR: it did soften the stop, but the
+                               rover went SLUGGISH OFF THE LINE -- "takes more seconds to respond".
+                               🔴🔴 AND THE REAL REASON IT CANNOT BE LOWERED: THIS IS A
+                               DIFFERENTIAL (SKID-STEER) DRIVE. A turn IS a speed difference
+                               between the two sides, so the ramp limits how fast the sides can
+                               DIVERGE -- it throttles YAW ONSET, not just forward acceleration.
+                               A slow ramp means every turn goes long. That is control authority,
+                               not comfort. (operator, 2026-09-13)
+                               🔑🔑 THE RAMP IS SYMMETRIC -- PROVEN, NOT ASSUMED: foc_math.c:504
+                               calls utils_step_towards(), and util/utils_math.h:131 applies the
+                               SAME step magnitude in both directions (+= step / -= step, no
+                               direction test). ONE number for both. ⛔ It CANNOT give a soft stop
+                               AND a snappy launch. Stop trying to tune asymmetry into it.
+                               📏 At 1 m/s (~1795 true ERPM): 20000 = 0.09 s (11 m/s², never binds,
+                               so current/grip sets the feel) · 5000 = 0.36 s · 2000 = 0.90 s
+                               (1.1 m/s², BINDS BOTH WAYS -- the sluggishness).
+                               🔑 WHY 20000: set 2026-09-12 with the RPM-mode template for the
+                               OPPOSITE complaint, LATE STOPS -- deliberately beyond tyre grip so
+                               the SETPOINT never limits a stop. Stock is 5000.
                                🔑 In RPM mode neutral is not "no torque", it is "hold 0 ERPM" -- an
                                ACTIVE stop. l_current_min caps how hard it pulls; only this ramp
-                               changes how abruptly zero is DEMANDED.
-                               ⚠️ SYMMETRIC (foc_math.c:504, utils_step_towards) ⇒ acceleration
-                               softens identically. At 1 m/s (~1795 true ERPM) 2000 gives ~0.9 s
-                               to a stop, ~1.1 m/s².
-                               🔴 SAFETY: the collision reflex ONLY ZEROES THE SETPOINT, which
-                               works because zeroing is instant. This ramp slews the reflex's
-                               emergency stop at the SAME rate as a comfort stop -- it cannot tell
-                               a released stick from a detected obstacle. Reflex stopping distance
-                               grows accordingly. RE-MEASURE before trusting the clearance margin.)
+                               changes how abruptly zero is DEMANDED, and it cannot be lowered.
+                               ⏭ SO: THE SOFT-STOP LEVER LEFT ON THE ESC IS l_current_min ALONE
+                               (now -15). ⛔ THERE IS NO BRAKE-ONLY RAMP IN VESC FOC -- verified
+                               2026-09-13: cc_ramp_step_max and m_duty_ramp_step are referenced
+                               ONLY in mcpwm.c, the BLDC driver, and this rover runs FOC, so both
+                               are DEAD parameters here. The only brake-specific levers are the
+                               current limits and l_max_erpm_fbrake.
+                               ⏭ Asymmetry needs PX4: RO_ACCEL_LIM / RO_DECEL_LIM are SEPARATE
+                               params, the only way to soften the stop while leaving the launch
+                               and the turn-in alone. ⚠️ Both pinned at -1 because they slew the
+                               MANUAL STICK and that caused a wall hit 2026-08-14 -- operator
+                               call, not a quiet change.)
     uavcan_raw_mode   3       (RPM; left alone if already 3)
 
 Every write is verified by reading the config back and diffing. A mismatch aborts.
@@ -75,7 +92,7 @@ LIVE = pathlib.Path('/home/roz/codex-work/bldc_can/configs_live')
 WHEEL = {10: 'FR', 11: 'FL', 12: 'RR', 13: 'RL'}
 
 TARGET_MC = {'s_pid_kp': '0.008', 'l_in_current_min': '-10', 's_pid_min_erpm': '50',
-             'l_current_min': '-15', 's_pid_ramp_erpms_s': '2000'}
+             'l_current_min': '-15', 's_pid_ramp_erpms_s': '20000'}
 TARGET_APP = {'uavcan_raw_mode': '3'}
 
 # Values that must already match across the set. Not changed here -- only reported, because a
