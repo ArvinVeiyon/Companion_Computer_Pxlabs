@@ -111,7 +111,11 @@ def main():
         print(f'!! MISMATCH: asked {args.value}, got {got}. Not applied.')
         return 1
     print('verified.')
-    print('NOTE: RAM write. Run param_save.py to commit it to flash.')
+    print('NOTE: PX4 autosaves this to flash on its own -- param_set() calls '
+          'param_autosave() (parameters.cpp:450), which writes after 300 ms, '
+          'rate-limited to 2 s (autosave.cpp:60). param_save.py is NOT needed. '
+          'Verified 2026-09-12 by FC reboot. Only caveat: do not reboot within '
+          '~2 s of the write.')
     return 0
 
 

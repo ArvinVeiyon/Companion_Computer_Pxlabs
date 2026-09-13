@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b7052c6e-f42f-48fd-9d7e-c0dffff0ecc5
-  modified: 2026-09-09T17:24:47.147Z
+  modified: 2026-09-12T18:10:37.278Z
 ---
 
 **POINTER FILE. The detail lives in three documents — open them, do not work from this summary.**
@@ -42,8 +42,13 @@ DRIFTS AT STANDSTILL** (~0.38 m/min at 0 rpm, the camera-gyro term), so corrobor
 🔴 **A HAND TEST CANNOT MEASURE THIS BRAKE.** It is regenerative (`CONTROL_MODE_CURRENT_BRAKE`), so
 torque scales with back-EMF — at hand-turn speed full stick and low stick are both ≈ nothing.
 🔴 **`set_param.py` CANNOT WRITE INT32 PARAMS** — it always sends REAL32, PX4 refuses the type
-mismatch and writes **nothing**, silently. Use `bldc_can/diag/set_param_int.py`. Save =
-`diag/param_save.py`; FC reboot over DDS = `diag/fc_reboot.py`.
+mismatch and writes **nothing**, silently. Use `bldc_can/diag/set_param_int.py`.
+FC reboot over DDS = `diag/fc_reboot.py`.
+✅✅ **09-12: `diag/param_save.py` IS NOT NEEDED — MAVLink PARAM_SET PERSISTS BY ITSELF.** `param_set`
+calls `param_autosave()` (`parameters.cpp:450`); `autosave.cpp:60` writes after **300 ms**,
+rate-limited to 2 s. **Proven: `RO_MAX_THR_SPEED` = 4.93 survived an FC reboot.** ⛔ **Both tools
+print "this is a RAM write" — that NOTE IS WRONG, ignore it.** ⚠️ Only trap: don't reboot within
+~2 s of the write.
 🔴 **A QGC RC CALIBRATION REWRITES TRIM** ⇒ `RC3_TRIM` can land back on `RC3_MIN` = 1001, which
 commands **50 % brake** the instant the stick leaves the stop. **Re-check it after every calibration.**
 ⚠️ **`rc_configuration.md` §2.1 ("TRIM==MIN is a QGC artefact, don't fix it") IS THROTTLE-ONLY** —
@@ -112,3 +117,178 @@ unsoldered; ⛔ **do not suggest fitting it.**
 ✅ **Consequence worth having: the permanent UART on PC11/PC12 is therefore FREE and already started
 as a comm port** — if those pads are reachable it is a second wired way into each ESC, possibly
 easier than the USB connector depending on the chassis.
+
+## ✅✅ 2026-09-12 — **RPM MODE IS LIVE ON REAR LEFT (addr 13). WORKING CONFIG + THE CEILING**
+
+Set over **USB + VESC Tool** by the operator (⛔ still impossible over CAN — the GetSet table is 8
+params). **Final RL config, and the template for the other three:**
+
+| param | value | where in VESC Tool | meaning |
+|---|---|---|---|
+| `uavcan_raw_mode` | **3** (RPM) | App Settings → General, UAVCAN | closed-loop speed |
+| `uavcan_raw_rpm_max` | **9000** | same page | **ERPM** at full stick ⇒ 1273 rpm = 4.96 m/s = 17.9 km/h |
+| `s_pid_min_erpm` | **200** | Motor Settings → PID Controllers → Speed PID | loop RELEASES below (29 rpm ≈ 0.11 m/s) |
+| `s_pid_ramp_erpms_s` | **20000** | same page | setpoint slew ⇒ 2857 rpm/s ≈ **11 m/s² (1.1 g)** |
+
+⚠️ `s_pid_min_erpm` and the ramp are **mcconf** ⇒ **"Write Motor Configuration"**, a DIFFERENT button
+from the app-config write. A write to the wrong one silently no-ops — that is exactly how the first
+ramp change was lost, caught only by measuring 4956 ERPM/s (= the stock 5000) off a step.
+
+### 🔴🔴 THE MOTOR CEILING IS ~10500 ERPM — A CAP ABOVE IT IS NOT A CAP
+`l_max_duty` = **0.95** (mcconf), so full duty is 94.9% and the no-load ceiling is **1504 rpm =
+5.87 m/s = 21 km/h**. ⛔ **`uavcan_raw_rpm_max` above ~10500 does NOTHING** — duty pins at 0.95, the
+loop goes open, and 11000 / 12000 / 20000 all give the same speed. Verified: at 20000 the operator
+read 94.9% duty; at 10000, >90%; at 9000, ~90% with reserve. 🔑 **Duty is an OUTPUT, not a tuning
+metric** — 13% duty at the 1400 cap was correct, not "under-tuned" (0.13 × 1504 ≈ 194 ✓).
+
+### 🔑 HOW TO TELL WHICH MODE IS LIVE — THERE IS NO READBACK OVER CAN
+- **CURRENT (0):** wheels-up speed **FLAT ~1505 rpm** from ~1/7 stick to full, ~2.0 A.
+- **DUTY (2):** speed **LINEAR in stick** (0.18→235, 0.34→511, 0.50→744, 1.00→1504), regen on release.
+- **RPM (3):** **clips at `rpm_max`/7**, holds it on **0.15–0.8 A**, and **resists a hand-turn at
+  centre stick** (2.8 A observed) because zero is a SETPOINT, not a release.
+⛔ Full stick alone cannot separate DUTY from RPM when the cap is near the ceiling — use a mid-stick
+rung or the hand-turn test.
+
+### 🔑 THREE SYMPTOMS, ONE CAUSE — and the fix
+Green LED solid + residual current at rest + ~4% duty dither at zero stick = **the FOC loop stays
+ENGAGED at zero** (CURRENT/DUTY release instead; hall gives 60° steps so the speed estimate at 0 rpm
+is noise, and the PID chases it). **`s_pid_min_erpm` = 200 fixed it — duty settles to 0.** ⚠️ Cost:
+no active zero-hold below 0.11 m/s, so that wheel free-coasts there. ⚠️ Residual **−0.05 A is the
+current-sensor offset** (band is ±1 A) — not real current.
+
+### ⏭ Open
+✅ **NOT A FAULT — the operator had powered 10/11/12 OFF deliberately** while working on RL.
+`esc_online_flags` = 8 (`0b00001000`) with `timestamp == 0` on the other three is what a
+POWERED-DOWN ESC looks like, and it is indistinguishable from a broken CAN chain. 🔑 **ASK BEFORE
+DIAGNOSING: "are the other three powered?"** — I spent the session calling it an unexplained bus
+fault. 🔑 One driven wheel + three off = the "slow rotation" that was misread as a low speed cap.
+⏭ `configs_live/` and `backups/` are **STILL EMPTY** — RL's appconf+mcconf were never exported, and
+RL is now the reference. ⏭ Reverse plateau ran **−46…−49 vs +42** at the 300 cap (~10% asymmetric),
+untested at 9000. ⏭ `l_in_current_min`, `l_current_min`, `uavcan_status_current_mode` and the fw
+hash were asked for but never read back off live hardware.
+⚠️ **USB access is PHYSICALLY HARD** (path blocked, tightly packed) ⇒ finish one ESC completely per
+session. The **PC11/PC12 permanent UART** would avoid the cable fight if those pads are reachable.
+
+## ✅✅✅ 2026-09-12 (later) — **ALL FOUR WHEELS MIGRATED TO RPM MODE. G2 CLOSED AT THE ESC END.**
+
+Order done, one USB session each: **RL (13) → RR (12) → FR (10) → FL (11)**. Identical settings on
+all four: `uavcan_raw_mode` 3 · `uavcan_raw_rpm_max` 9000 · `s_pid_min_erpm` 200 ·
+`s_pid_ramp_erpms_s` 20000. ✅ **`RO_MAX_THR_SPEED` 0.60 → 4.93** (RAM, 09-12).
+
+**Per-stage bench proof (each wheel measured as it was done, not assumed):**
+| stage | evidence |
+|---|---|
+| RL alone | clips 1273 vs 1286 predicted; ramp 2898 rpm/s = 20285 ERPM/s |
+| + RR | RR 1274 vs RL 1275 — was 1550 in torque mode |
+| + FR | means 1051.8 / 1051.8 / 1052.3 — within 0.5 rpm |
+| + FL, all four | means **985.4 / 982.6 / 986.7 / 983.5**, 0.4% spread, 499/499 positive |
+
+🔑 **THE MIXED-MODE STATE IS THE DANGEROUS ONE — and it is VISIBLE:** with FL still on CURRENT while
+three were on RPM, one wheel read **598 rpm while the other three sat at 22–35** on the same command.
+⛔ **Never drive a partially-migrated set on the floor** — that is a hard yaw, not a drift.
+
+### 🔑 DIRECTION / SIGN — SETTLED 09-12, ⛔ DON'T RE-CHASE
+`m_invert_direction` is a **CLEAN MIRRORED PATTERN — both LEFT wheels 1 (FL 11, RL 13), both RIGHT
+wheels 0 (FR 10, RR 12)**, consistent for the first time. (The Aug set had RR = 1, breaking the
+symmetry; the Sep re-detection changed it 1→0 paired with a new `foc_hall_table`.) ✅ **The pair is net-neutral: the operator confirmed BY EYE that RR and
+RL turn the SAME direction**, and all four report POSITIVE ERPM driving forward. ⇒ **`wheel_signs` in
+`wheel_odometry_node` needs NO change.** 🔑 Reminder that cost a false alarm in July: **ERPM sign is
+NOT a reliable indicator of physical direction** on mirrored mounts — always get an eye check.
+
+### ⏭ Open after this
+⏭ **`RO_MAX_THR_SPEED` 4.93 is a RAM write** — needs `param_save.py` or it reverts on FC reboot.
+⏭ **FLOOR RUN: commanded vs measured speed under load.** Everything above is unloaded.
+⏭ **First turn: four independent speed loops do not share load** — watch for scrub and turn current.
+⏭ `foc_motor_r` on RL is **0.1988 Ω vs 0.44–0.56** on the other three — never re-detected.
+⏭ `si_battery_cells` = 3 on RF/RR/RL but **6 on LF** (LF is right, 6S). `si_wheel_diameter` 0.083 and
+`si_gear_ratio` 3 are wrong for a **6-inch direct-drive** tyre. ⛔ All cosmetic — ⛔ but do NOT
+"fix" `si_motor_poles`, which is NOT cosmetic (it sets the ÷7 telemetry divisor).
+
+## ✅✅✅ 2026-09-13 — **ALL FOUR TUNED AND FLOOR-VALIDATED. G2 CLOSED END TO END.**
+
+🔑🔑 **The companion can now do ESC config itself, headless, over USB — no laptop, no X.**
+→ **[[vesc-tool-cli]]**, and use **`~/codex-work/bldc_can/tune_esc.py`**, never raw `--setMcConf`.
+📂 Every wheel's as-found and final config is in `configs_live/` (was EMPTY since August) with a
+`README.md` naming the authoritative pair. ✅ **fw readback hashes finally recorded for all four**
+(V6.06 / 60_MK5 / `isTestFw` 0, per-wheel UUIDs) — closes the September open item.
+
+### The settled set — IDENTICAL on FR 10 / FL 11 / RR 12 / RL 13, each verified by readback
+| param | value | was | why |
+|---|---|---|---|
+| `s_pid_kp` | **0.008** | 0.004 | the loop was UNDER-ASKING for current, not limited by it |
+| `s_pid_min_erpm` | **50** | 200 | only replicated metric; see below |
+| `l_in_current_min` | **−10** | −5 | braking ceiling — but it turned out NOT to be binding |
+| `l_current_min` | **−25** | FL was −25.8 | squared up so all four brake alike |
+| `uavcan_raw_mode` 3 · `rpm_max` 9000 · ramp 20000 · `l_max_duty` 0.95 | unchanged | | operator wants the duty headroom for 360s |
+
+### 🔑🔑 THE Kp RESULT — why RPM mode felt slower than torque mode
+Bench, RL unloaded: **drive peak 12.0 A at Kp 0.004 → 20.7 A at 0.008**, against **21.1 A in
+CURRENT mode**. Regen 3.7 → 7.3 A. ⇒ **The mode was never the problem. With Kp 0.004 the speed PID
+simply never asked for the current.** Stick-to-wheel lag measured 60 ms (Kp 0.004) / 80 ms
+(current mode) / **40 ms (Kp 0.008 — the quickest of the three)**. ⛔ **Don't switch to current
+mode to "get response back"**: in CURRENT mode a centred stick is a FREE COAST, which makes the
+operator's actual complaint (late stops) worse.
+
+### 🔴🔴 FIRMWARE CORRECTION — our "free coast below `s_pid_min_erpm`" NOTE WAS WRONG
+`mcpwm_foc.c` ~3330: *"Brake when set ERPM is below min ERPM"* → `control_duty = true;
+duty_set = 0.0`, **gated on `CONTROL_MODE_SPEED`**. So below the threshold the ESC applies a
+**duty-zero SHORT BRAKE**, not a release. ⇒ **`s_pid_min_erpm` is what FINISHES a stop**, and
+taking it to 0 gives that away. Also `foc_math.c:504` — `s_pid_ramp_erpms_s` is applied by
+`utils_step_towards`, so **the ramp is SYMMETRIC**: it slews the setpoint down on release exactly
+as it slews up.
+
+### The `s_pid_min_erpm` bench test (200 / 100 / 50 / 10 / 0) — and what it proved about METHOD
+✅ **0 is measurably the worst** — rpm scatter at rest 0.69 and 0.63% of at-rest samples non-zero,
+vs 0.00 twice at 50. **50 and 100 are INDISTINGUISHABLE**; operator chose 100, then a repeat run
+at 50 replicated zero scatter twice and he settled on **50**.
+🔴 **Metric traps that produced nonsense before being fixed — don't repeat them:**
+- **Breakaway/dead-band is NOT measurable here.** Stiction exceeds the release band; spread WITHIN
+  one setting exceeded the spread BETWEEN settings. It also silently measures **how fast the
+  operator pushed the stick** — that artefact made min_erpm 10 read 18.4%, worse than 200.
+- **Standing current does not replicate** (0.072 / 0.112 / 0.130 A at the same setting) — it sits
+  inside the current sensor's own noise band. **Ignore it.**
+- **A run's single worst sample is not a statistic.** "rpm max" gave a non-monotonic mess; std and
+  "% of samples non-zero" gave a clean answer.
+- ⛔ **Unloaded runs CANNOT measure braking** — peak regen unloaded was −3.7 A, below even the old
+  −5 A cap, so the −10 A change was never exercised on the bench.
+
+### ✅✅ FLOOR RESULTS, all four, 2026-09-13 — **THE LATE STOP IS FIXED**
+**Straight stops, stick release only, n=5: median 0.52 s / 0.19 m / 1.28 m/s²** from 0.63–0.95 m/s.
+🔑 **That is roughly HALF the distance the dedicated RC brake channel achieved on 09-09**
+(0.30–0.50 m from ~0.8 m/s) — **without touching the brake lever.**
+⚠️ **The regen ceiling starts to bind just under 1 m/s**: the 0.95 m/s stop drew −9.8 A against the
+−10 A limit and was the worst of the five (0.93 m/s²); the four slower ones peaked −4.6…−8.6 A.
+**Spin (360) stops, n=3 usable: 0.24–0.54 s, 2.6–7.2 m/s²** — about **5× harder than straight**.
+Operator's words: *"regen is heavy"*, and it is real. 🔑 **NOT caused by the regen limit** — worst
+across 15 spin stops was −5.6 A vs the −10 A cap. It is tyre scrub plus low chassis rotational
+inertia plus the duty-zero brake.
+⚠️ **Spin stops under ~0.5 m/s entry are UNMEASURABLE** with a 15 rpm "stopped" threshold — the
+threshold is a large fraction of the entry speed. Only entries above ~1 m/s count.
+
+### 🔴🔴 TRAP THAT COST A WHOLE FLOOR RUN — **THE SPIN STICK IS ch1 → `roll`, NOT yaw**
+`RC_MAP_YAW` reads **4 and is a RED HERRING — nothing is on ch4** (it sat at 1500–1521 µs all run
+while the sides counter-rotated 2196 times). Probed live: the 360 stick is **ch1**, arriving as
+**`manual_control_setpoint.roll`**. `RC_MAP_THROTTLE`=2 → `.throttle` is correct.
+🔑 **`/fmu/out/vehicle_status` DOES NOT EXIST — it is `/fmu/out/vehicle_status_v1`.** Subscribing
+to the old name silently yields no arming data, and an "armed" display defaulting on `None`
+reported *disarmed* while the wheels were spinning. **Two runs' dead patches were auto-disarm
+(`COM_DISARM_PRFLT` 10 s) and could not be proven until this was fixed.**
+
+### 🔧 Tools added (`bldc_can/diag/`)
+`step_response_record.py` (DDS only — thr + roll + yaw + ch1/2/4/12 + 4×rpm/current + armed) ·
+`step_response_analyse.py` · `step_response_plot.py` · `response_curve_compare.py` ·
+`min_erpm_compare.py` · `stop_analyse.py` (straight vs spin stops, distance + decel + regen).
+
+### ⏭ Open after this
+⏭ **Operator asked to SOFTEN the brake later** — the targeted lever is **`l_current_min` −25 →
+about −15** (motor braking current). ⛔ Not the ramp: the ramp is symmetric and would cost the
+launch torque the hub motors need. ⛔ Not `l_in_current_min`: proven not binding in spins.
+⏭ **USB HUB PLAN (agreed as the right approach):** all four ESCs on one hub to the companion, so a
+change is one pass instead of four cable moves. 🔴 **Every VESC reports the SAME USB serial `304`**
+⇒ `/dev/serial/by-id/` COLLIDES; key on **`by-path`** (hub port). `tune_esc.py` verifies
+`controller_id` off the device regardless. ⚠️ **Ground loops are the real risk** — USB ground ties
+all four ESC grounds to the companion; isolators if it bites.
+⏭ **RL is the odd wheel, twice over:** `foc_motor_r` **0.1988** vs 0.4367 / 0.5215 / 0.557 — now
+confirmed against all three, its current loop is tuned to a resistance the others don't share;
+**re-detection is the fix**. And `l_temp_fet_start/end` **85/100 vs 75/90** on the other three, so
+it derates 10 °C later. ⚠️ `si_battery_cells` FL 6 vs 3 elsewhere — FL is correct, cosmetic.
