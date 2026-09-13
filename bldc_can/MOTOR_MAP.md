@@ -56,9 +56,15 @@ would destroy.
 | RR | 12 | `vesc_mcconf_Right_Rear__15_Aug_26.xml` | 0.4367 | 0.00048855 | 0.010385 |
 | RL | 13 | `vesc_mcconf_Left_Rear__15_Aug_26.xml` | **0.1988** | 0.00041032 | 0.011551 |
 
-⚠️ **RL's `foc_motor_r = 0.1988` is an outlier** — the other three sit in 0.44–0.56, and the same
-value appears in a historical `Left_Front` export. RL is the ESC currently on the bench, so **confirm
-it against a live USB export before treating it as the restore point.**
+✅ **RL's `foc_motor_r = 0.1988` is EXPECTED, NOT an outlier to chase — RL is a DIFFERENT MOTOR
+SERIES** (operator, 2026-09-13). ⛔ **Do not re-run detection on RL to "fix" it.** Confirmed by live
+USB export of all four the same day: the value reads 0.1988 off the hardware, and RL's
+`foc_motor_flux_linkage` 0.011551 sits in family with FR's 0.011419 ⇒ Kv and the torque constant
+match the set, so `erpm_to_ms = 0.003900` and the shared speed tune carry over unchanged.
+⚠️ Lower winding resistance ⇒ RL reaches a given current at less applied voltage, making it the
+wheel most likely to hit `l_current_max` (25 A, identical on all four) first under load.
+🔑 The same value also appears in a historical `Left_Front` export; that coincidence is now moot,
+not evidence of a cross-write.
 
 ---
 

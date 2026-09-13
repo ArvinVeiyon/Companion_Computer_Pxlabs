@@ -242,9 +242,21 @@ record it as verified.**
 - [ ] **The collision reflex still only ZEROES THE SETPOINT — it does not command the brake.** Wiring
       it up is a separate, unmade change, and it is the reason this work exists.
 - [ ] Decide regen vs handbrake vs hybrid at `canard_driver.c:747`.
-- [ ] Export live configs over USB into `configs_live/`, per wheel. CAN exposed only 8 params and no
-      motor tune, so USB is the only complete backup. RL's `foc_motor_r = 0.1988` is an outlier vs
-      0.44–0.56 on the other three and is worth confirming.
+- [x] ~~Export live configs over USB into `configs_live/`, per wheel~~ — all four, 2026-09-13, in
+      `vesc_{mc,app}conf_<wheel>_20260913_22*_pre.xml`. CAN exposed only 8 params and no motor tune,
+      so USB is the only complete backup.
+      ✅ **RL's `foc_motor_r = 0.1988` vs 0.4367–0.557 on the other three is EXPECTED, NOT a failed
+      detection — RL is a DIFFERENT MOTOR SERIES (operator, 2026-09-13). ⛔ Do not re-run detection
+      on RL to "fix" it.** Confirmed off live hardware: `foc_motor_flux_linkage` is 0.011551 on RL
+      against 0.011419 on FR, i.e. in family, so Kv and the torque constant match the set — the
+      `erpm_to_ms` 0.003900 odometry scale and the shared speed tune carry over unchanged.
+      ⚠️ Lower winding resistance means RL reaches a given current at less applied voltage, so it is
+      the wheel most likely to hit `l_current_max` (25 A, identical on all four) first under load.
+      🔑 Cross-check of all four live mcconfs, 2026-09-13: tuning identical everywhere
+      (`s_pid_kp` 0.008 · `s_pid_min_erpm` 50 · `l_current_min` −25 · `l_in_current_min` −10 ·
+      `si_motor_poles` 14 · `l_current_max` 25 · `l_max_duty` 0.95 · `s_pid_ramp_erpms_s` 20000);
+      `m_invert_direction` correctly mirrored (FR/RR 0, FL/RL 1); every wheel's detection results
+      distinct ⇒ positive evidence no config was ever cross-written.
 - [ ] Correct `Testing_Bin/README.md` upstream — it still recommends the DroneCAN path.
 - [x] ~~Fix `RC3_TRIM == RC3_MIN`~~ — done 2026-09-07 with `RC_MAP_AUX1` and `UAVCAN_EC_FUNC5`, saved.
 - [x] ~~Flash one ESC over USB, verify, then the rest~~ — all four, 2026-09-09.

@@ -191,9 +191,11 @@ currently loaded in the ESCs.** Provenance is stamped in `configs_from_repo/PROV
 - **The genuine per-wheel difference is `foc_motor_r`, `foc_motor_l`, `foc_motor_flux_linkage`** —
   measured per motor by detection. **That is exactly what a wipe would destroy**, and it is
   unreachable from CAN.
-- ⚠️ **RL's `r = 0.1988` is an outlier** against the other three (0.44–0.56) and is duplicated in
-  `Left_Front_tested_04_may_26.xml`. Since RL is the first ESC on the bench, **verify it against the
-  live export before trusting it as the restore point.**
+- ✅ **RL's `r = 0.1988` is EXPECTED — RL is a DIFFERENT MOTOR SERIES** (operator, 2026-09-13), not a
+  failed detection. ⛔ **Do not re-run detection on RL to "fix" it.** Verified against the live USB
+  export of all four, 2026-09-13. Its `foc_motor_flux_linkage` 0.011551 is in family with FR's
+  0.011419, so Kv matches the set and `erpm_to_ms = 0.003900` carries over. The duplicate of the same
+  value in `Left_Front_tested_04_may_26.xml` is a coincidence, not evidence of a cross-write.
 - ⛔ `vesc_mcconf_Right_Front.xml` has `foc_motor_flux_linkage = 1.46287`, ~130× the family
   (0.0104–0.0116) — a failed detection. **Never restore from that file.**
 
@@ -218,15 +220,21 @@ The earlier `uavcan_esc_index = 7` anomaly on front-left is gone; it reads `1` i
 ### Therefore
 
 The repo set is now a complete and coherent restore point, and §4 says a flash should not wipe
-anything. **Two gaps remain that only a live export closes:**
+anything. ✅✅ **BOTH GAPS ARE CLOSED — all four exported over USB, 2026-09-13**, into `configs_live/`
+as `vesc_{mc,app}conf_<wheel>_20260913_22*_pre.xml`:
 
-1. **It is unverified against the hardware.** These are the configs the operator states are loaded;
-   nobody has read them back off an ESC. A live export is the only thing that proves it.
-2. **RL's `foc_motor_r = 0.1988` is an outlier** and RL is the ESC on the bench right now.
+1. ~~Unverified against the hardware~~ — **verified.** Every wheel's `foc_motor_r` /
+   `foc_motor_flux_linkage` read back off the ESC matches the `__15_Aug_26` table above exactly.
+2. ~~RL's `foc_motor_r = 0.1988` is an outlier~~ — **expected: RL is a different motor series.**
 
-**So still export over USB into `configs_live/`**, per ESC, named by physical wheel
-(`live_RL_mcconf.xml`, `live_RL_appconf.xml`, …) — cheap, and it turns "should be fine" into
-"verified". It also independently confirms the node-ID map while each ESC is on the bench alone.
+🔑 The export also confirmed the node-ID map off live hardware (10=FR · 11=FL · 12=RR · 13=RL),
+that `m_invert_direction` is correctly mirrored (FR/RR 0, FL/RL 1), and that every wheel's detection
+results are distinct ⇒ **positive evidence no config was ever cross-written.**
+
+⛔ **`/dev/serial/by-id/` CANNOT identify a VESC — all four report `SerialNumber: 304`**, so the
+by-id directory holds ONE ambiguous symlink for however many are plugged in, pointing at whichever
+enumerated last. `ttyACM` numbering is assignment-order, not port-order. **Always identify an ESC by
+reading its `controller_id` off the device** (`tune_esc.py --dry-run --port …`), never by port name.
 
 ## 7. Procedure
 
@@ -287,9 +295,10 @@ of the transfer. Never flash with the FC armed.
       **⛔ It is 524 280 bytes and CANNOT go over DroneCAN — see §5. Flash it over USB.**
 - [ ] **Correct `Testing_Bin/README.md` upstream** — it currently offers the DroneCAN path for an
       image that would overwrite the bootloader.
-- [ ] **Export live configs over USB** into `configs_live/`, per wheel.
-- [ ] Map wheel → node ID empirically, one ESC at a time — **rear left is on the bench now, expect
-      node 13**. Record in `MOTOR_MAP.md`.
+- [x] ~~**Export live configs over USB** into `configs_live/`, per wheel~~ — all four, 2026-09-13,
+      as `vesc_{mc,app}conf_<wheel>_20260913_22*_pre.xml`. See §"Therefore".
+- [x] ~~Map wheel → node ID empirically, one ESC at a time~~ — confirmed off live hardware
+      2026-09-13: **10=FR · 11=FL · 12=RR · 13=RL**, matching `MOTOR_MAP.md`.
 - [x] ~~Fix `RC3_TRIM`~~ — done 2026-09-07. `RC3_TRIM 1487.5`, `RC_MAP_AUX1 3`, `UAVCAN_EC_FUNC5 407`,
       saved to flash. **The PX4 side of the brake is complete**; details and traps in `RESUME.md`.
 
