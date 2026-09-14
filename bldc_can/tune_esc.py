@@ -189,12 +189,20 @@ def main():
     ap.add_argument('--port', default='/dev/ttyACM0')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--min-erpm', help='override s_pid_min_erpm (experiment: 200 / 50 / 0)')
+    ap.add_argument('--allow-braking', choices=['0', '1'],
+                    help='set s_pid_allow_braking (experiment, 2026-09-14). NOT in TARGET_MC: '
+                         '0 is a temporary discriminator, 1 is the standing value. ALL FOUR '
+                         'WHEELS OR NONE -- a mixed set yaws under braking.')
     a = ap.parse_args()
 
     if a.min_erpm is not None:
         TARGET_MC['s_pid_min_erpm'] = a.min_erpm
         EXPECT_MC.pop('s_pid_min_erpm', None)
         print(f'\n*** s_pid_min_erpm overridden to {a.min_erpm} for this run ***')
+
+    if a.allow_braking is not None:
+        TARGET_MC['s_pid_allow_braking'] = a.allow_braking
+        print(f'\n*** s_pid_allow_braking set to {a.allow_braking} for this run ***')
 
     if not pathlib.Path(VESC_TOOL).exists():
         sys.exit(f'vesc_tool not built at {VESC_TOOL}')

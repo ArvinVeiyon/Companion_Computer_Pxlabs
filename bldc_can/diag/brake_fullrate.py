@@ -22,6 +22,9 @@ WHEEL = {10: 'FR', 11: 'FL', 12: 'RR', 13: 'RL'}
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--seconds', type=float, default=60.0)
+ap.add_argument('--csv', help='also write every sample here. Without this the raw series is '
+                              'DISCARDED at exit and only the summary survives -- which cannot '
+                              'distinguish loop hunting from mode chatter (2026-09-14).')
 a = ap.parse_args()
 
 qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -59,6 +62,18 @@ if not samples:
 
 span = samples[-1][0] - samples[0][0]
 print(f"\n{len(samples)} samples over {span:.1f}s = {len(samples)/span:.1f} Hz")
+
+if a.csv:
+    t_zero = samples[0][0]
+    with open(a.csv, 'w') as fh:
+        fh.write('t,' + ','.join(f'{w}_rpm,{w}_amp' for w in ('FR', 'FL', 'RR', 'RL')) + '\n')
+        for t, d in samples:
+            row = [f'{t - t_zero:.4f}']
+            for w in ('FR', 'FL', 'RR', 'RL'):
+                rpm, amp = d.get(w, ('', ''))
+                row += [f'{rpm}', f'{amp}']
+            fh.write(','.join(row) + '\n')
+    print(f"raw series written to {a.csv}")
 
 W = ('FR', 'FL', 'RR', 'RL')
 moved = [s for s in samples if any(abs(s[1].get(w, (0, 0))[0]) > 5 for w in W)]
