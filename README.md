@@ -7,16 +7,63 @@
 
 Companion computer configuration, service files, and living documentation for the **Vind-Roz** platform — a Raspberry Pi 5 companion running PX4-based drone and rover builds.
 
-## Contents
+## Contents — the document index
 
-| Path | Description |
+⚠️ **Rover and DroneCAN docs live HERE, at this root — not in `ros2_ws`.** `ros2_ws/docs/README.md`
+is the separate index for the ROS 2 / autonomy side; this table covers the companion repo only.
+
+### Platform reference
+
+| Path | What it is | Read it when |
+|---|---|---|
+| [`system_companion.md`](system_companion.md) | **Main reference** — hardware, software stack, ROS 2 nodes, WFB-NG, services, topics | Anything about how this box is put together |
+| [`COORDINATION.md`](COORDINATION.md) | Companion ↔ QGC-PC handoff log: versions, standing rules, open items | Another agent is working the other side; append here |
+| [`rc_configuration.md`](rc_configuration.md) | RC input and UAVCAN ESC output, as measured | Channel mapping, kill switch, brake channel. §6 is the RC procedure |
+| [`pxlabs_release_note_v1.17.0-r2.1.md`](pxlabs_release_note_v1.17.0-r2.1.md) | Release note for the flashed PX4 build | Confirming what firmware is on the FC |
+
+### Rover motion — ESCs, DroneCAN, config
+
+| Path | What it is | Read it when |
+|---|---|---|
+| [`esc_px4_config_audit_20260914.md`](esc_px4_config_audit_20260914.md) | **Latest full audit**: the RR hall-table fault and its fix, four-way ESC comparison, outstanding candidate faults, PX4 rover-param findings | Rover drives oddly; before changing any ESC or `RO_*` value |
+| [`px4_vesc_dronecan_implementation.md`](px4_vesc_dronecan_implementation.md) | PX4 ↔ VESC DroneCAN diagnosis and implementation spec | Wiring PX4 outputs to the ESCs |
+| [`bldc_can/README.md`](bldc_can/README.md) | VESC flashing over CAN/USB — **§5 has the brick derivation** | Before touching ESC firmware |
+| [`bldc_can/RESUME.md`](bldc_can/RESUME.md) | Where the RC-brake work stands; firmware hashes per wheel | Picking the brake work back up |
+| [`bldc_can/MOTOR_MAP.md`](bldc_can/MOTOR_MAP.md) | Motor ↔ node ID map (FR 10 · FL 11 · RR 12 · RL 13) | Any per-wheel work. ⛔ Never index ESCs by position |
+| [`bldc_can/configs_live/README.md`](bldc_can/configs_live/README.md) | What the captured-off-hardware configs are and are not | Before trusting any config XML |
+| [`companion_can_driver_status.md`](companion_can_driver_status.md) | The dropped MCP2515 CAN-HAT work and how to finish reverting it | ⛔ Only to revert. Do not reopen the debugging |
+
+### Evidence — measured runs
+
+| Path | What it is |
 |---|---|
-| [`system_companion.md`](system_companion.md) | **Main reference doc** — hardware, software stack, ROS2 nodes, WFB-NG, services, topics |
-| `System_files/` | Tracked backups of live system config files (mirrors `/etc/`, `/boot/`, etc.) |
-| `System_files_list.txt` | List of files synced by the auto-backup script |
-| `scripts/system_files_sync.sh` | Auto-backup script (rsync → git commit → annotated tag) |
-| `logs/system_files_sync.log` | Sync run log |
-| `Setup_Procedure_for_Relay_Station.docx` | Relay station (vind-rly) setup guide |
+| [`bldc_can/evidence/brake_floor_test_20260909.md`](bldc_can/evidence/brake_floor_test_20260909.md) | RC brake, loaded, on the floor |
+| [`bldc_can/evidence/brake_bench_test_20260909.md`](bldc_can/evidence/brake_bench_test_20260909.md) | RC brake, bench |
+| `bldc_can/evidence/*.csv` | Full-rate ESC logs. 2026-09-14 set: straight-line stops before/after the hall fix, sustained crawl, stand comparison |
+| `px4_param_backups/` | Full PX4 parameter dumps, QGC-loadable `.params` |
+
+### Sensors and payload
+
+| Path | What it is |
+|---|---|
+| [`vision_multicam_companion.md`](vision_multicam_companion.md) | Multi-camera vision, companion side |
+| [`ldlidar_stl19_install_guide.md`](ldlidar_stl19_install_guide.md) | STL-19 LiDAR install (outdoor O1) |
+
+### Relay station
+
+| Path | What it is |
+|---|---|
+| [`relay/RELAY_STATION_SETUP.md`](relay/RELAY_STATION_SETUP.md) | Relay station setup and operations |
+| [`relay/NETWORK_SETUP_PROCEDURE.md`](relay/NETWORK_SETUP_PROCEDURE.md) | Relay network bring-up runbook |
+
+### Not documentation
+
+| Path | What it is |
+|---|---|
+| `System_files/` | Tracked backups of live system config (mirrors `/etc/`, `/boot/`) |
+| `System_files_list.txt` · `scripts/system_files_sync.sh` · `logs/` | Auto-backup file list, script, run log |
+| `memory/` | **Manual mirror** of the agent memory at `~/.claude/projects/-home-roz/memory/`. ⛔ Never `rsync --delete` — it is a union of two scopes |
+| `Setup_Procedure_for_Relay_Station.docx` | Relay setup guide (Word) |
 
 ## Quick Reference
 

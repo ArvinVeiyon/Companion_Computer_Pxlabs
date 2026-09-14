@@ -1,11 +1,11 @@
 ---
 name: reference-esc-telemetry
-description: "ESC/DroneCAN telemetry on the rover — what esc_status actually means, the two brake slots (5 = RC, 6 = software), the UAVCAN_EC scaling, that the ESCs run in CURRENT/torque mode, and why zero throttle is not braking. Read before diagnosing any ESC or quoting a stopping figure."
+description: "ESC/DroneCAN telemetry on the rover — what esc_status actually means, that esc_rpm is MECHANICAL rpm (÷7 from ERPM), the two brake slots (5 = RC, 6 = software), the UAVCAN_EC scaling, the per-address mode split (13 = RPM, 10/11/12 = CURRENT), and why zero throttle is not braking. Read before diagnosing any ESC, setting uavcan_raw_rpm_max, or quoting a stopping figure."
 metadata: 
   node_type: memory
   type: reference
   originSessionId: 3d6fddee-7330-454a-a767-3665b8dfbebf
-  modified: 2026-09-12T06:07:38.813Z
+  modified: 2026-09-12T18:05:18.893Z
 ---
 
 # ESC / DroneCAN telemetry — how to read it, and what it does NOT mean
@@ -99,7 +99,45 @@ turns. **Re-measure against `esc_current` when S1 is re-run.**
 **`/scan` reads SHORT** (scale 0.9845) ⇒ the reflex fires **early**, which is the safe direction.
 ⚠️ Read `autonav_reference` §5 / §12 / §13 before quoting any of these.
 
-## 🔴🔴 THE ESCs RUN IN CURRENT (TORQUE) MODE — PX4'S THROTTLE IS NOT A SPEED COMMAND (2026-09-12)
+## 🔑🔑 `esc_rpm` IS **MECHANICAL** RPM — THE FACTOR AGAINST ERPM IS **7** (MEASURED 2026-09-12)
+
+⛔ **`uavcan_raw_rpm_max` is ELECTRICAL RPM (`set_pid_speed` takes ERPM); `esc_rpm` on DDS is
+MECHANICAL.** The ESC divides by pole pairs = `si_motor_poles`/2 = **7**. Measured twice on addr 13,
+at two caps 4.67× apart:
+
+| `uavcan_raw_rpm_max` | predicted ÷7 | measured plateau | n |
+|---|---|---|---|
+| 300 | 42.9 | **42** (40–43) | ~20 |
+| 1400 | 200 | **194** (192–197) | ~25 |
+| 8000 | 1143 | **1136** | 672 |
+| 9000 | 1286 | **1273** | 729 |
+
+⛔ **DO NOT compute a cap as `target_m_s / 0.0039` and write it to `uavcan_raw_rpm_max`** — that
+gives the MECH number; multiply by 7. 🔑 Tracking is 97–99% of setpoint (loop sits just under).
+🔑 **Geometry cross-check, NOT a reason to re-open the scale:** the tyre is **6 inch** (0.1524 m,
+NOT the `si_wheel_diameter` 0.083 in the mcconf), which predicts 0.0080 m/s per reported rpm vs the
+tape-validated 0.0039 — almost exactly 2×. That is the known `si_motor_poles` 14-vs-28 pairing; the
+two errors cancel. ⛔ **`erpm_to_ms` 0.0039 STAYS — fixing poles silently halves `/odom`.**
+
+## ✅✅ ALL FOUR ESCs ARE IN RPM MODE AS OF 2026-09-12 — THE TORQUE-MODE ERA IS OVER
+
+⛔⛔ **THE SECTION BELOW IS HISTORY. Do NOT quote "the ESCs run in CURRENT/torque mode" — it was
+true until 2026-09-12 and is now FALSE on all four.** Every wheel: `uavcan_raw_mode` 3 ·
+`uavcan_raw_rpm_max` 9000 · `s_pid_min_erpm` 200 · `s_pid_ramp_erpms_s` 20000.
+✅ **VERIFIED ON STANDS, all four at once:** forward means **985.4 / 982.6 / 986.7 / 983.5** (FR/FL/
+RR/RL) — **4 rpm spread, 0.4%** — peaks 1261–1272 against the 1286 cap, 499/499 samples POSITIVE on
+every address, reverse −932…−941. 🔑 **Cap = 1265 rpm ≈ 4.93 m/s ≈ 17.8 km/h**, and
+**`RO_MAX_THR_SPEED` was set 0.60 → 4.93** to match (RAM write 09-12).
+⚠️ **ALL OF IT IS UNLOADED.** Stands cannot show sag, slip or turn scrub. ⏭ the floor run is what
+validates commanded-vs-measured.
+⚠️ **NEW BEHAVIOUR TO WATCH: four INDEPENDENT speed loops do not share load.** In torque mode the
+wheels slipped and shared during a turn; now each one forces its own number ⇒ expect scrub and
+higher current in turns. Unverified.
+📂 **The live configs are in git:** `PXLABS_BLDC_VESC6_MK5`, branch **`pxlabs-6.06-rover-uavcan_main`**,
+`Motor_Config_Bldc/*_12_Sep_Rc.xml` — verified against the files, and the `controller_id` →
+`uavcan_esc_index` map is correct (10→0, 12→2, 13→3). ⇒ `configs_live/` in codex-work is SUPERSEDED.
+
+### ⛔ HISTORY — the CURRENT-mode finding, TRUE ONLY BEFORE 2026-09-12
 
 All four `configs_from_repo/vesc_appconf_*.xml` carry **`uavcan_raw_mode = 0` =
 `UAVCAN_RAW_MODE_CURRENT`**, and a wheels-up ladder confirmed it behaviourally: **speed was FLAT at

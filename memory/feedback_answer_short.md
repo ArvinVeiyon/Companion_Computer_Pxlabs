@@ -15,3 +15,13 @@ metadata:
 **How to apply:** status/progress question ⇒ one line, lead with the measurement. Expand ONLY when asked, when something FAILED, or when a new decision is actually needed. Long-form is still right for deliverables (handoffs, release notes, [[defer_memory_updates]] batches) — this rule is about conversational replies, not documents.
 
 Distinct from [[defer_memory_updates]] (when to write memory) — this is about reply LENGTH.
+
+## 2026-09-12 — SAID TWICE IN ONE SESSION, AND IT WAS FAIR
+
+Verbatim: **"you always speak a lot it hard to read all"** and **"you are over thinking it seems you wasting my time lot"**. Both came during the VESC RPM-mode migration, while the operator was at the bench with a USB cable in hand and wanted the next action.
+
+**What I was actually doing wrong:** answering a one-line question with a structured essay — restating the safety case he had already heard, re-deriving arithmetic he could do himself, and hedging a decision that was his to make. When he set `rpm_max` to 11000 I had already given the m/s conversion once; repeating the warning read as obstruction, not care.
+
+**How to apply — the bench mode:** while the operator is physically working on hardware, replies are **one short paragraph or a 3-line list**. Give the number, the verdict, and the next action. Save the reasoning for when he asks "why" (he does ask — `why i need headroom for what purpose`, `can you revisit how vesc rpm setting work` — and *those* deserve a full answer). 🔑 **A safety point is made ONCE, with the number; if he restates his choice, do it and stop.**
+
+⚠️ Long-form is still right for: a config review he asked for, a from-source finding, a memory write-up. The rule is about conversational turns during hands-on work.

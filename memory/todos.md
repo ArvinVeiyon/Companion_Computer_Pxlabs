@@ -580,8 +580,16 @@ for step 2; read as-was it invites someone to restore the crash configuration.
 🔑 **The `param save` question (old item (c)) is CLOSED.** The FC hardfaulted and rebooted **≥9
 times on 08-16**; RAM-only values cannot survive that, so the revert is provably **in flash**.
 The reboot loop accidentally performed the verification nobody had run.
-⛔ **Keep `RO_ACCEL_LIM`/`RO_DECEL_LIM` at −1** — they slew the MANUAL stick, and with them set
-centring the stick no longer stops the rover (~1.2 s powered ramp-down). → [[scope_px4_params_by_control_flags]]
+🔴 **SUPERSEDED 2026-09-14 — `RO_DECEL_LIM` IS NOW 5, DELIBERATELY. `RO_ACCEL_LIM` STAYS −1.**
+⛔ Do NOT "restore" −1 on the strength of the paragraph above. The 08-14 crash was decel **0.5**
+with `RO_MAX_THR_SPEED` **0.60** — a 1.2 s powered ramp-down. That divisor is now **4.93**, so
+📏 **ramp = decel ÷ `RO_MAX_THR_SPEED`**: decel 5 ÷ 4.93 = **0.99 s** at FULL throttle, and only
+0.05-0.5 s at the 3-30% stick actually used. ⛔ **Never reuse an August decel figure without
+redoing that division.**
+🔴 They still slew the MANUAL stick **and the collision reflex** (which publishes a fake
+`ManualControlSetpoint`), so ⚠️ **re-verify the 0.69 m reflex standoff after any decel change** —
+it was sized against a 0.19 m stop. 🔴 And `RO_SPEED_LIM` **does not limit Manual at all**: full
+stick is 4.93 m/s, not 0.70. → [[px4_rover_control_scope]], [[scope_px4_params_by_control_flags]]
 
 ⏭ **STILL OPEN: ramp-tracking is NOT verified on the vehicle** — nothing has been driven since.
 Moot while both limiters are −1 (no ramp to track); it becomes live again only if they are ever

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-09-12T12:24:35.326Z
+  modified: 2026-09-12T18:16:04.435Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
@@ -99,7 +99,14 @@ carry **`uavcan_raw_mode = 0` = `UAVCAN_RAW_MODE_CURRENT`**, and the behaviour m
 ESC. In torque mode speed is whatever the load allows, so the "right" value of `RO_MAX_THR_SPEED`
 differs on every surface. ⇒ **the 5.5× overspeed is structural.** ⛔ Do not set the parameter from
 one floor run and call it fixed.
-⏭ **TWO WAYS OUT, OPERATOR'S CALL — both now scoped (09-12):**
+✅✅✅ **RESOLVED LATER THE SAME DAY (09-12): PATH (A) WAS TAKEN AND IS DONE ON ALL FOUR ESCs.**
+`uavcan_raw_mode` 3 · `rpm_max` 9000 · `s_pid_min_erpm` 200 · ramp 20000, one USB session per wheel;
+`RO_MAX_THR_SPEED` 0.60 → 4.93. Bench-matched to 0.4% across the four. ⇒ **the section below is the
+reasoning that led to the decision, NOT an open question.** Path (B) (companion-side throttle loop)
+was NOT needed. ⚠️ still bench-only — the floor run under load is the open item.
+→ [[project_vesc_can_flashing]] + [[reference_esc_telemetry]] 09-12.
+
+⏭ **THE ORIGINAL FRAMING — TWO WAYS OUT, OPERATOR'S CALL (kept for the reasoning):**
 **(A) `uavcan_raw_mode` = 3 (`UAVCAN_RAW_MODE_RPM`)** — the VESC closes its OWN speed loop
 (`mc_interface_set_pid_speed`), so PX4's assumption becomes true, and **`uavcan_raw_rpm_max` IS the
 speed cap the operator wanted.** Then set `RO_MAX_THR_SPEED` to that cap in m/s. ⛔ **Not settable
