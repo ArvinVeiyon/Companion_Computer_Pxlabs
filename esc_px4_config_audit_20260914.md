@@ -145,26 +145,84 @@ appears. Verified: 952/952.
 
 ---
 
-## 4. Parked — the crawl jerk
+## 4. The crawl catch — investigated, narrowed, still open
 
-A residual jerk at the end of a stop, and an audible on-off at ~3% throttle. The wheel speed
-estimate is very noisy at crawl: FR's reported speed swings 0–39 rpm while the rover rolls steadily,
-and current pulses to 8–14 A in response, on all four wheels equally.
+A catch you can feel and hear at low throttle, and a residual jerk at the end of a stop.
 
-Hypothesis, untested: `foc_hall_interp_erpm` = 250 is ~36 mechanical rpm, and 3% throttle is
-270 ERPM — right on it. Below that threshold the firmware snaps the rotor angle to the nearest hall
-sensor instead of interpolating (`foc_math.c:646`), and the switch has **no hysteresis**, so a noisy
-speed estimate crossing it repeatedly steps the angle and therefore the torque.
+### 🔑 IT DOES NOT HAPPEN IN CURRENT MODE (operator, 2026-09-14)
 
-⛔ **Tested on RL on the stand and it was inconclusive, because the stand does not reproduce the
-symptom at all** — 0–5 rpm of jitter there against 0–39 on the floor, and current spread ~1–2 A
-against 8–14. With the wheels unloaded the speed loop barely works. RL has been reverted to 250.
-**If this is revisited it needs a floor run. Do not re-test it on the stand and conclude anything.**
+This is the most informative fact we have, and it points at the **speed loop itself**, not the
+motors and not the mechanics.
 
-⛔ Not the answer: lowering `s_pid_kp` back to 0.004 would mask it and give back the drive authority
-the September tuning established.
+In current mode (`uavcan_raw_mode` 0) the throttle becomes a current demand directly — there is no
+speed loop, so nothing compares a commanded speed against a measured one. In RPM mode
+(`uavcan_raw_mode` 3, what we run) the speed PID does exactly that comparison, and **the measured
+speed at crawl is very noisy**: a wheel's reported speed swings between 0 and 39 rpm while it is
+turning steadily. The PID reads those dips as real error and answers with current pulses of 8-14 A.
+Current mode has no loop to do that, which is why the symptom is absent there.
 
----
+⛔ **This is not an argument for going back to current mode.** RPM mode is what makes PX4's speed
+controller work against the hardware, and the whole September migration and `RO_MAX_THR_SPEED`
+calibration depend on it. The observation is diagnostic, not a proposed fix.
+
+⇒ The real levers are: make the low-speed estimate better (hall resolution is the ceiling; HFI is
+the proper answer and is not enabled), or make the loop react less to it (gain — but that costs the
+drive authority the September tuning established), or stay out of that speed band.
+
+### ✅ Hall interpolation threshold is ONE cause — confirmed, then shown to be partial
+
+`foc_hall_interp_erpm` decides where the ESC stops interpolating rotor angle between hall pulses and
+snaps to the nearest sensor instead (`foc_math.c:646`). **The switch has no hysteresis.**
+
+The catch **tracked the threshold**, which is what confirms the mechanism:
+
+| threshold | nominal boundary | catch felt at |
+|---|---|---|
+| 250 (original) | 2.8% throttle | 3-4% |
+| 500 | 5.6% | **8%** |
+| 100 | 1.1% | **still ~4%** |
+
+🔑 Both moves landed at roughly **1.4× the nominal** figure, consistently — expected, because the
+firmware compares against a speed derived from hall-edge timing, and that estimate dips early.
+
+🔴 **But 100 did not push it below ~4%, so there is a SECOND cause sitting at ~4% that does not move
+with this parameter.** Unidentified. ⇒ **All four reverted to 250** (the known value; firmware
+default is 500). 100 gave no benefit and carries the reversal risk the threshold exists to prevent.
+
+### ✅ Mechanical causes RULED OUT
+
+**With the rover powered off, all four wheels spin freely** (operator-checked). So no binding
+bearing, no rubbing brake, no tyre or weight effect.
+
+🔑 **The stiffness you feel when turning a wheel by hand with the rover POWERED ON is the ESC, and
+it is by design.** In speed mode a centred stick means "hold zero speed", and below
+`s_pid_min_erpm` (50) the ESC shorts the motor windings — a duty-zero short brake. A shorted motor
+resists being turned. Measured standing current at rest: −0.07 / 0.12 / 0.02 / 0.13 A.
+⚠️ **Any hand-spin drag comparison is meaningless unless the rover is powered down.**
+
+### ⬜ Unexplained: per-wheel current asymmetry at no load
+
+Current per unit speed, unloaded, consistent across forward, reverse and both turn directions:
+
+| | FR | FL | RR | RL |
+|---|---|---|---|---|
+| right turn | 0.0214 | 0.0156 | 0.0134 | 0.0088 |
+| left turn | 0.0235 | 0.0102 | 0.0184 | 0.0061 |
+
+FR needs 2.4-3.9× what RL needs. Mechanics are equal, so FR is producing torque less efficiently —
+which points back at the angle estimate. There is a rough correlation with detected `foc_motor_r`
+(FR 0.557 highest, RL 0.199 lowest) but **not clean enough to claim**.
+⚠️ **May not matter**: these are 0.4-1.5 A on an unloaded stand, against 8-20 A under load on the
+floor. Needs a floor comparison before anyone spends time on it.
+
+### ⚠️ Test-condition caveat
+
+Late in the session it emerged that much of this was run **on the stand**, not the floor. The
+interpolation effect was visible there, but the stand has already misled us once today (it could not
+reproduce the brake-current behaviour at all). **Treat the 3/8/4% figures as stand observations and
+re-confirm on the floor before building on them.**
+
+⛔ Not the answer: lowering `s_pid_kp` to 0.004 masks it and gives back drive authority.
 
 ## 5. Recommended next actions
 

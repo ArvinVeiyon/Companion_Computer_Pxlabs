@@ -65,22 +65,45 @@ FL kept full regen to 25.5 V** — three wheels stop regen-braking and one does 
 brake on a charged pack. No effect at the 24.8 V pack of that day. All four now 25.2/25.4.
 ⛔ Do not raise the thresholds themselves (4.2 V/cell).
 
-## ⏸ PARKED — the crawl jerk, and why the stand was useless
+## ⏸ PARKED — the crawl catch. NARROWED, not solved
 
-Residual jerk at the end of a stop plus an audible on-off at ~3% throttle. **The speed estimate is
-very noisy at crawl: FR's reported speed swings 0-39 rpm while the rover rolls steadily, and current
-pulses to 8-14 A, on all four wheels equally.**
+Catch you can feel/hear at low throttle, plus a residual jerk at the end of a stop.
 
-Suspect (UNTESTED): `foc_hall_interp_erpm` = 250 ≈ 36 mechanical rpm, and 3% throttle is 270 ERPM —
-right on it. Below the threshold the firmware snaps rotor angle to the nearest hall sensor instead
-of interpolating (`foc_math.c:646`) and **the switch has no hysteresis**.
+🔑🔑 **IT DOES NOT HAPPEN IN CURRENT MODE (operator, 09-14) ⇒ THE SPEED LOOP IS THE MECHANISM.**
+In current mode nothing compares commanded against measured speed. In RPM mode the PID does, and
+**the crawl speed estimate is garbage** — a wheel reports 0-39 rpm while turning steadily — so the
+loop reads the dips as error and answers with **8-14 A current pulses**. ⛔ **NOT an argument for
+current mode**: RPM mode is what makes PX4's speed controller work, and the whole Sept migration +
+`RO_MAX_THR_SPEED` rest on it. ⇒ real levers = better low-speed estimate (hall resolution is the
+ceiling; **HFI is the proper answer, `foc_sl_erpm_hfi`=0, not enabled**) · less loop reaction (gain,
+⛔ costs authority) · stay out of the band.
 
-🔴🔴 **TESTED ON RL ON THE STAND AND IT PROVED NOTHING, BECAUSE THE STAND DOES NOT REPRODUCE THE
-SYMPTOM AT ALL** — 0-5 rpm of jitter there against 0-39 on the floor, current spread ~1-2 A against
-8-14. Unloaded, the speed loop barely works. RL reverted to 250. **This needs a FLOOR run.
-⛔ Do not re-test it on the stand and conclude anything.** Same lesson as the brake-current work:
-no mass ⇒ no kinetic energy ⇒ the loop never has to do the thing you are trying to observe.
-⛔ **Lowering `s_pid_kp` to 0.004 is not the answer** — it masks it and gives back drive authority.
+✅ **`foc_hall_interp_erpm` IS ONE CAUSE — the catch TRACKED it.** Below it the ESC snaps rotor angle
+to the nearest hall instead of interpolating (`foc_math.c:646`), **no hysteresis**.
+**250 → felt 3-4% · 500 → felt 8% · 100 → STILL ~4%.** 🔑 both moves landed at ~**1.4× the nominal**
+boundary (it compares a hall-edge-timing speed, which dips early).
+🔴 **So a SECOND cause sits at ~4% and does not move with it. Unidentified.**
+⇒ **ALL FOUR REVERTED TO 250.** 100 bought nothing and carries the reversal risk the threshold exists
+to prevent (angle can stick 60° off on a direction change). Firmware default is 500.
+
+✅✅ **MECHANICAL RULED OUT — powered OFF, all four spin freely** (operator-checked). No binding, no
+tyre, no weight effect.
+🔑🔑 **THE STIFFNESS WHEN TURNING A WHEEL BY HAND WITH POWER ON IS THE ESC, BY DESIGN** — centred
+stick = "hold 0 speed", and below `s_pid_min_erpm` (50) the ESC SHORTS THE WINDINGS (duty-0 short
+brake); a shorted motor resists turning. Standing current at rest −0.07/0.12/0.02/0.13 A.
+⚠️⚠️ **ANY HAND-SPIN DRAG TEST IS MEANINGLESS UNLESS THE ROVER IS POWERED DOWN.**
+
+⬜ **UNEXPLAINED: current-per-rpm at NO LOAD is FR 0.0214-0.0235 vs RL 0.0061-0.0088 — FR needs
+2.4-3.9× RL**, consistent across forward, reverse and both turn directions. Mechanics equal ⇒ FR
+makes torque less efficiently ⇒ points back at the angle estimate. Rough correlation with detected
+`foc_motor_r` (FR 0.557 high, RL 0.199 low) but ⛔ **not clean enough to claim**.
+⚠️ **May be irrelevant**: 0.4-1.5 A unloaded vs 8-20 A loaded. **Needs a FLOOR comparison first.**
+
+⚠️⚠️ **TEST-CONDITION CAVEAT: much of the 09-14 catch work was ON THE STAND, discovered late.** The
+interp effect was visible there, but 🔴 **the stand already misled us once the same day** (it could
+not reproduce the brake-current behaviour at all — no mass ⇒ the loop never has to do the thing you
+are trying to observe). **Treat 3/8/4% as STAND numbers; re-confirm on the floor before building on
+them.** ⛔ Lowering `s_pid_kp` to 0.004 is not the answer — masks it, costs authority.
 
 ## 🔧 USB — refined 2026-09-14
 
