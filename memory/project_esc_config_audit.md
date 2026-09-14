@@ -105,6 +105,32 @@ not reproduce the brake-current behaviour at all — no mass ⇒ the loop never 
 are trying to observe). **Treat 3/8/4% as STAND numbers; re-confirm on the floor before building on
 them.** ⛔ Lowering `s_pid_kp` to 0.004 is not the answer — masks it, costs authority.
 
+## ⛔ HFI — CONSIDERED AND REJECTED 2026-09-14. Do not re-propose without reading this.
+
+Raised as the proper fix for the noisy low-speed estimate. **Two reasons it is not the next step.**
+
+🔴 **WE CANNOT CALIBRATE IT HEADLESS.** `vesc_tool_7.01 --help` has **no detection/measure routines
+at all** — reading and writing config is scriptable, detection is not. The stored `foc_hfi_*` values
+are firmware DEFAULTS never measured against these motors (`voltage_start` 20 / `_run` 4 / `_max` 6 /
+`gain` 0.3). Enabling it would be a guess. Doing it properly needs VESC Tool **with a display**, over
+USB, per ESC.
+
+🔴 **HFI REPLACES THE HALL SENSORS, IT DOES NOT SUPPLEMENT THEM.** `foc_sensor_mode` is a single
+choice and `mcpwm_foc.c:3442/3488` are separate `switch` branches — selecting HFI means the hall
+branch never runs. 🔑 **HFI solves "where is the rotor at standstill", which is the SENSORLESS
+problem; halls already give absolute position at rest.** What halls lack is RESOLUTION between their
+42 steps/rev. HFI would help that, but the trade is giving up a working reliable sensor for an
+uncalibrated technique, to fix roughness at 4% throttle on a vehicle that drives fine.
+⚠️ Saliency is adequate if it is ever revisited: `foc_motor_ld_lq_diff / foc_motor_l` = 24-45%.
+
+⏭ **THE CHEAPER LEAD IS THE DETECTION SCATTER.** `foc_motor_r` runs 0.199 (RL) to 0.557 (FR) across
+four IDENTICAL motors, and saliency 24-45%, and **that scatter tracks the unexplained current
+asymmetry** (FR highest on both, RL lowest on both) ⇒ the detections were likely run under different
+conditions and some are poor. Re-detecting consistently is far less invasive than changing the
+sensing architecture. 🔴🔴 **BUT RE-DETECTION IS ALMOST CERTAINLY WHAT CORRUPTED RR'S HALL TABLE** —
+so: one wheel at a time, backup safe (`*_FINAL_20260914.xml`), and **diff the hall table against the
+others afterwards**, which is the check that caught it.
+
 ## 🔧 USB — refined 2026-09-14
 
 ⛔ **A targeted `USBDEVFS_RESET` on a single wedged VESC made it WORSE** — the device dropped off the

@@ -87,7 +87,13 @@ scale and sign; `si_motor_poles` (h); the R5.4 stopping numbers; **(b)** gate on
 VESC reflash) · the zero-dropout floor figure (a) · **T1 re-examined, not re-ticked**.
 ⛔ Gate every moving test on MEASURED speed, never the command — and on DURATION, not stick position.
 → the START HERE block above · `project_rover_autonav` 09-12.
-**G3 — VENUE DECISION → M2 PROVEN.** ⏭ **OPERATOR CALL, still open:** corridor (recommended) ·
+**G3 — VENUE DECISION → M2 PROVEN.** ✅✅ **DECIDED 2026-09-14: CORRIDOR.** Open since 09-04, now
+closed — run T2 there. 🔴🔴 **FIRST MEASURE THE STOP AT `RO_DECEL_LIM` 5:** the reflex's 0.69 m
+clearance was sized against a 0.19 m stop, and since 09-14 the reflex rides the SAME throttle ramp
+as the manual stick (it publishes a fake `ManualControlSetpoint`), so its stop is no longer the fast
+one. ⚠️ `RO_SPEED_LIM` does NOT cap Manual — full stick is 4.93 m/s, which a corridor makes
+reachable. Preflight = `tools/preflight_scan_check.py` (passive, mirrors the reflex sector/thresholds).
+🗄 superseded options were: corridor (recommended) ·
 re-scope T2 to 0.8 m · or drop this room as the M3 target. Then **T2 → T3 → T4 → T5** = M2 done.
 ⚠️ T3+ need turning, so **S3 (yaw open/closed) gates them.**
 **G4 — 3D PERCEPTION (R2/A5) + N7.** Wire `/scan_3d` into a Nav2 `voxel_layer` and flip the reflex's
