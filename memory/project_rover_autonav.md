@@ -5,10 +5,68 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-09-12T18:16:04.435Z
+  modified: 2026-09-15T18:51:12.007Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## ✅✅✅ 2026-09-15/16 (corridor, floor) — **G3 CLOSED. T2 PASSED n=3, TAPE-ADJUDICATED, ACROSS A 5× SPEED RANGE**
+
+First autonomous drives since 09-12. Armed AutoNav, `nav_state=23`, `tools/t2_straight_goal_test.py`.
+
+| speed | goal | **TAPED** | error | lateral | yaw | reflex |
+|---|---|---|---|---|---|---|
+| 0.15 m/s | 2.0 m | **2.130 m** | +0.130 m | +0.033 m | +2.08° | silent |
+| 0.25 m/s | 2.0 m | **2.025 m** | +0.025 m | +0.036 m | +2.02° | silent |
+| 0.75 m/s | 2.0 m | **2.000 m** | 0.000 m | +0.023 m | +1.56° | silent |
+
+✅ **Both T2 criteria, three times.** Tolerance ±0.20 m. 🔑 **ACCURACY IMPROVES WITH SPEED** — and so
+does tracking. Runs `t2_20260915_233204` (aborted) / `_234300` / `_235442` / `t2_20260916_000848`.
+
+### 🔑🔑 THE ODOM SCALE IS SPEED-DEPENDENT — THREE TAPE POINTS, MONOTONIC, CROSSOVER AT ~0.25 m/s
+| speed | odom/real | |
+|---|---|---|
+| 0.15 m/s | **0.946** | under-reads 5.4% — ESC zero-dropout loses counts |
+| 0.25 m/s | **1.000** | exact — this is where `erpm_to_ms` 0.003900 is effectively calibrated |
+| 0.75 m/s | **1.030** | over-reads 3.0% — wheel slip, wheels turn further than the ground moves |
+
+**Two mechanisms pulling opposite ways, each already documented, crossing near 0.25 m/s.**
+⛔ **NOT grounds to retune `erpm_to_ms` — the constant is fine, the error is physical.** ⇒ **every
+odom distance needs a SPEED caveat.** 🔴 **This RETIRES the T2 tool's `ODOM_WORST_CASE = 1.35`**
+(a 24% under-read from 08-13): measured 0.97–1.06, wrong at every speed tested, though wrong in the
+SAFE direction (it oversizes the corridor). ⚠️ n=1 per speed. → [[rover-odometry]]
+
+### 🔴 TRAPS THAT COST TIME TONIGHT — ALL THREE WILL RECUR
+🔴🔴 **`arming_check_request` IS A ONE-SHOT AT REGISTRATION, NOT A HEARTBEAT.** I measured 0 messages
+over 30 s against a live 2.0 Hz `vehicle_status_v1` control and called the mode UNREGISTERED. **Wrong
+— it was registered the whole time.** ⇒ 🔑 **PROOF OF REGISTRATION IS THE LOG LINE** `Registering
+'AutoNav'` + `Got RegisterExtComponentReply` + `Arming check request (id=N, only printed once)`,
+**NEVER a message rate on that topic.** (Registration id=47, then 251 after a restart.)
+🔴🔴 **IT IS `/fmu/out/vehicle_local_position_v1`** — the unversioned name returns NOTHING and I read
+that as "the EKF bridge is not feeding". Same trap as `vehicle_status_v1`. **`eph` lives on the `_v1`
+topic.** The bridge was fine: `/odom` 87 Hz in → `/fmu/in/vehicle_visual_odometry` 31 Hz out.
+🔴 **THE MEASURED-SPEED GUARD FALSE-TRIPS AT CRAWL.** Run 1 at 0.08 m/s aborted at 0.575 m on
+`max_measured_speed` 0.20 while two independent rulers put the rover at **0.105 m/s** (travel/dt max
+0.127). The instantaneous ESC estimate spiked to 0.234 m/s. ⇒ **the guard gates on a signal that is
+garbage in the crawl band.** Fix = drive out of the band, not raise the guard.
+
+### ⬜ OPEN — carried out of this session
+- 🔴 **`RO_DECEL_LIM`=5 stop distance STILL UNMEASURED**, and wheel rpm **cannot** measure it
+  (autonav_reference §13b). Needs `/scan`-against-a-wall or tape.
+- 🔴 **The ≥300 mm standoff is unmeasured above ~0.11 m/s** and the 0.75 m/s run **exceeded the
+  §13 speed permission** without re-running `collision_standoff_test.py`. **T2 does not test the
+  reflex** — it drives at nothing; the reflex was silent because there was nothing to see.
+- 🟡 Speed tracking is **exact at 0.25 m/s but ~8% short at 0.75** (0.688–0.706 vs 0.750 commanded),
+  after an initial overshoot to **0.902 m/s** in the first 0.5 s.
+- 🟡 `COM_DISARM_PRFLT`=10 s **never auto-disarmed** an idle armed rover across repeated observation.
+- 📏 `eph` drifted **0.758 → 2.618 m** over the session against the 5.0 m `COM_POS_FS_EPH` gate
+  (~0.0013 m/s) ⇒ **~45-60 min of armed budget per bridge restart.** Restarting the bridge resets it.
+
+## ⚠️ SUPERSEDED BY THE RPM-MODE MIGRATION (2026-09-13) — the section below is HISTORY
+⛔ **"The ESCs take throttle as TORQUE", "the overspeed is an INTEGRAL", "don't calibrate
+`RO_MAX_THR_SPEED`", "duration is the control" — ALL FOUR ARE DEAD.** All four wheels are in RPM
+mode; `RO_MAX_THR_SPEED` is **4.93** and speed commands ARE honoured (0.150 commanded → 0.149
+measured, 2026-09-15). Kept for the odometry and coast/brake numbers, which still stand.
 
 ## ✅✅ 2026-09-12 (floor) — **THE FLOOR RUNS. SCALE VALIDATED · COAST CLOSED · BRAKE RATIO REAL · G2 ANSWERED**
 

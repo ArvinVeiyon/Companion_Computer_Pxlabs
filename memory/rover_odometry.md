@@ -5,10 +5,39 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 2d8c9512-eb8c-4b27-b518-3de2ce63ad22
-  modified: 2026-08-12T19:39:20.169Z
+  modified: 2026-09-15T18:51:53.173Z
 ---
 
 # Rover Wheel Odometry — Implementation Plan
+
+## 🔑🔑 2026-09-15/16 — **THE SCALE ERROR IS SPEED-DEPENDENT. THREE TAPE POINTS, MONOTONIC.**
+
+Measured against **tape** (not `/scan`, not itself) on three T2 runs down the corridor, 2 m each:
+
+| speed | taped real | `/odom` | **odom/real** | mechanism |
+|---|---|---|---|---|
+| 0.15 m/s | 2.130 m | 2.015 m | **0.946** | under-reads 5.4% — **ESC zero-dropout** loses counts |
+| 0.25 m/s | 2.025 m | 2.025 m | **1.000** | exact |
+| 0.75 m/s | 2.000 m | 2.059 m | **1.030** | over-reads 3.0% — **wheel slip**, wheels outrun the ground |
+
+🔑 **TWO mechanisms pulling OPPOSITE ways, crossing near 0.25 m/s** — each already documented here
+and in [[project-rover-autonav]]. `erpm_to_ms` **0.003900 is effectively calibrated at ~0.25 m/s**,
+which is why it has looked both "8% over" (09-12, fast burst) and "21-24% under" (08-13, crawl)
+depending entirely on the run. **Those two findings were never in conflict — they are the two ends of
+one curve.**
+
+⛔⛔ **STILL NOT GROUNDS TO RETUNE `erpm_to_ms`.** The constant is fine; the error is physical and no
+single constant can cancel it. ⇒ 🔑 **QUOTE EVERY ODOM DISTANCE WITH THE SPEED IT WAS TAKEN AT.**
+⚠️ **n=1 per speed**, one corridor, one floor. Three points are a trend, not a calibration curve.
+
+🔴 **RETIRES `ODOM_WORST_CASE = 1.35`** in `tools/t2_straight_goal_test.py` (a 24% under-read from
+08-13). Measured **0.97–1.06** across the whole range — wrong at every speed tested, though wrong in
+the SAFE direction, since it oversizes the required corridor. ⚠️ Fixing it **reduces** safety margin;
+leave it unless someone needs the corridor length back.
+
+🔴 **BELOW ~0.15 m/s THE SPEED SIGNAL IS UNUSABLE, NOT MERELY INACCURATE** — it spiked to 0.234 m/s
+on a rover doing 0.105 m/s and false-tripped T2's `max_measured_speed` guard. Distance integrates
+tolerably; **instantaneous speed does not.** → `autonav_reference.md` §13b
 
 ## Hardware
 - 4x VESC 6 Mk5 (one per motor, all on UAVCAN)

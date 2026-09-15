@@ -1,9 +1,11 @@
 ---
 name: esc_config_audit
 description: "The 2026-09-14 rear-right hall-table fault, the four-way config-diff method that found it, and the candidate faults still outstanding on FL and RL. Read before blaming ESC tuning for a motion problem."
-metadata:
+metadata: 
   node_type: memory
   type: project
+  originSessionId: c34e9fca-714e-4f33-9c82-fe6e0b6b0fb2
+  modified: 2026-09-15T18:51:33.893Z
 ---
 
 # ESC config audit — the method that finds faults tuning cannot
@@ -64,6 +66,49 @@ correct an error that did not exist.** A torque kick on one corner, several time
 FL kept full regen to 25.5 V** — three wheels stop regen-braking and one does not, i.e. a yaw under
 brake on a charged pack. No effect at the 24.8 V pack of that day. All four now 25.2/25.4.
 ⛔ Do not raise the thresholds themselves (4.2 V/cell).
+
+## 🔴🔴 2026-09-16 — **THE FAULT SIGNATURE CAUGHT ON THE FLOOR, FULL RATE, FOR THE FIRST TIME**
+
+Captured during T2 at **0.75 m/s** (the first run fast enough to trigger it — three slower runs that
+night showed nothing). 98 Hz, `codex-work/bldc_can/evidence/t2_run4_075ms_20260916.csv`.
+
+```
+  t        FR            FL            RR            RL          (rpm | amp)
+23.546   167|+3.09    172|+4.61     87|+2.14    164|-2.96   <- RR at HALF, others steady
+23.644   107|+19.69   114|+18.69    63|+17.00    23|+11.16
+23.687     0|+14.78    39|+21.34    14|+14.20    29|+14.05
+23.706     0|+13.38     1|+12.13    55|+10.54    87|+6.31   <- RL 29 -> 87 rpm in 30 ms
+```
+
+🔑 **This is the 09-14 signature exactly**: one corner's reported speed collapsing while the others
+read steady, the ESC believing it, and answering with **+14 to +22 A**. ⇒ **the RR hall-table fix
+reduced this but did not remove it** — as this file already predicted ("the main cause, not the whole
+cause"). RR leads the collapse; RL follows; both fronts then go non-monotonic to zero.
+🔑 **Almost certainly the HARD NEUTRAL STOP and the residual end-of-stop jerk** — the thing the stand
+could never reproduce (no mass ⇒ the loop never has to do it). ⚠️ **n=1, and not yet explained.**
+
+⛔⛔ **DO NOT DERIVE A DECELERATION FROM THIS DATA.** Wheels do not go 8 → 93 rpm in 30 ms. A fit
+moved between **0.30 and 4.97 m/s²** on the choice of start threshold alone. The speed signal is
+non-physical exactly where the stop happens ⇒ **`RO_DECEL_LIM`=5 remains UNMEASURED** and needs an
+independent ruler. → `autonav_reference.md` §13b
+
+⚠️ **`brake_fullrate.py` ARMS ON MEAN WHEEL SPEED >300 rpm** and 0.75 m/s only reaches ~270 ⇒ it
+reported **0 stop events** on a run that plainly contained one. **Lower the threshold or score the
+CSV directly.** Three runs, ~26,000 samples, 0 events scored — twice for want of speed, once for this.
+
+### ✅ CROSS-WHEEL AGREEMENT, MEASURED AT TWO SPEEDS (same metric as the 09-14 table)
+| | FR | FL | RR | RL | spread |
+|---|---|---|---|---|---|
+| 0.25 m/s | −1.19% | −0.76% | **+1.35%** | +0.60% | ±1.35% |
+| 0.75 m/s | +1.54% | **+3.60%** | **−3.53%** | −1.62% | ±3.60% |
+
+✅ **RR is now the CLEANEST of the four at 0.25 m/s** (0.5% by the >20 rpm metric vs FR 2.6%) — the
+hall fix has held. 🔑 **But disagreement TRIPLES from 0.25 to 0.75 m/s**, FL fastest / RR slowest,
+7.1% between extremes. ⚠️ **The 09-14 ">100 rpm from the median" metric reads 0.0% on all four at
+0.25 m/s and that is an ARTIFACT** — wheels only turn ~63 rpm there, so a wheel would have to read
+>163 to trip it. **Use >20 rpm at low speed.** Always state the speed with the metric.
+⬜ **NEW, unexplained:** at identical rpm the **front pair draws +1.17 A vs the rear pair's +0.84 A**
+(~39% more). Front/rear, so it does not yaw the rover. Possibly weight distribution. Log, don't chase.
 
 ## ⏸ PARKED — the crawl catch. NARROWED, not solved
 

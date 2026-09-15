@@ -87,8 +87,17 @@ scale and sign; `si_motor_poles` (h); the R5.4 stopping numbers; **(b)** gate on
 VESC reflash) · the zero-dropout floor figure (a) · **T1 re-examined, not re-ticked**.
 ⛔ Gate every moving test on MEASURED speed, never the command — and on DURATION, not stick position.
 → the START HERE block above · `project_rover_autonav` 09-12.
-**G3 — VENUE DECISION → M2 PROVEN.** ✅✅ **DECIDED 2026-09-14: CORRIDOR.** Open since 09-04, now
-closed — run T2 there. 🔴🔴 **FIRST MEASURE THE STOP AT `RO_DECEL_LIM` 5:** the reflex's 0.69 m
+**G3 — VENUE DECISION → M2 PROVEN.** ✅✅✅ **CLOSED 2026-09-16 — T2 PASSED n=3 IN THE CORRIDOR,
+TAPE-ADJUDICATED.** Taped 2.130 / 2.025 / 2.000 m against a 2.0 m goal at 0.15 / 0.25 / 0.75 m/s
+⇒ error +0.130 / +0.025 / 0.000 m, all inside ±0.20 m, **reflex silent on all three.**
+→ `bldc_can/evidence/t2_autonav_floor_20260916.md` · `project_rover_autonav` 09-15/16.
+🔴🔴 **BUT THE STOP WARNING BELOW WAS NOT CLEARED — IT WAS BYPASSED.** The stop at `RO_DECEL_LIM` 5
+is **still unmeasured**, and the 0.75 m/s run **exceeded the `autonav_reference.md` §13 speed
+permission** without re-running `collision_standoff_test.py` (operator-directed, after the constraint
+was stated). 🔑 **T2 DOES NOT TEST THE REFLEX — it drives at NOTHING**; a silent reflex is the pass
+criterion, not evidence the reflex works at speed. ⛔ **AND WHEEL RPM CANNOT MEASURE THE STOP** — the
+signal is non-physical through it (`autonav_reference.md` §13b); needs `/scan`-at-a-wall or tape.
+🔴🔴 **ORIGINAL WARNING, STILL LIVE — MEASURE THE STOP AT `RO_DECEL_LIM` 5:** the reflex's 0.69 m
 clearance was sized against a 0.19 m stop, and since 09-14 the reflex rides the SAME throttle ramp
 as the manual stick (it publishes a fake `ManualControlSetpoint`), so its stop is no longer the fast
 one. ⚠️ `RO_SPEED_LIM` does NOT cap Manual — full stick is 4.93 m/s, which a corridor makes

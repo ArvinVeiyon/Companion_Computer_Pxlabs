@@ -39,7 +39,8 @@ is the separate index for the ROS 2 / autonomy side; this table covers the compa
 |---|---|
 | [`bldc_can/evidence/brake_floor_test_20260909.md`](bldc_can/evidence/brake_floor_test_20260909.md) | RC brake, loaded, on the floor |
 | [`bldc_can/evidence/brake_bench_test_20260909.md`](bldc_can/evidence/brake_bench_test_20260909.md) | RC brake, bench |
-| `bldc_can/evidence/*.csv` | Full-rate ESC logs. 2026-09-14 set: straight-line stops before/after the hall fix, sustained crawl, stand comparison |
+| [`bldc_can/evidence/t2_autonav_floor_20260916.md`](bldc_can/evidence/t2_autonav_floor_20260916.md) | **T2 PASSED n=3, G3 closed.** The speed-dependent odom scale curve (3 tape points), and the 09-14 fault signature caught on the floor at full rate |
+| `bldc_can/evidence/*.csv` | Full-rate ESC logs. 2026-09-14 set: straight-line stops before/after the hall fix, sustained crawl, stand comparison. 2026-09-15/16 set (`t2_*`): the four T2 runs, incl. the end-of-stop current spike |
 | `px4_param_backups/` | Full PX4 parameter dumps, QGC-loadable `.params` |
 
 ### Sensors and payload
