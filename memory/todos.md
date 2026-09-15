@@ -138,7 +138,68 @@ blocking AutoNav:
 
 ⚠️ `MEMORY.md` is **19.8 kB against its own 17 kB cap** — needs a compression pass.
 
-## ⏭⏭ START HERE — 2026-09-12 (floor). **G2 IS MEASURED OUT. THE BLOCKER IS NOW A DECISION.**
+## ⏭⏭ START HERE — 2026-09-16. **G3 CLOSED. NEXT IS T3, AND T3 IS A FIRST NAV2 BRINGUP.**
+
+🔑🔑 **TONIGHT ALREADY PROVED HALF THE NAV2 CHAIN.** `t2_straight_goal_test.py` drives by publishing
+**`/cmd_vel`** (Twist), and `autonav_mode/mode.hpp:154` subscribes to exactly that, with the R5.3
+staleness watchdog and the reflex downstream. ⇒ **`/cmd_vel` → AutoNav → `RoverSpeedSetpoint` → PX4 →
+ESCs is PROVEN 4× under load on the floor.** ⛔ **What has NEVER RUN is Nav2 itself** — the planner,
+controller and costmap that *produce* `/cmd_vel`. `rover_nav2` written 2026-08-01, never launched.
+⇒ **T3's risk is ALL UPSTREAM of a link that already works.**
+
+### 📋 THE TWO-SESSION PLAN (agreed with the operator 2026-09-16)
+
+**SESSION A — one sitting, no teardown between steps:**
+1. **Phase 0 — Nav2 bringup DISARMED, no motion.** ⛔ NON-NEGOTIABLE FIRST. Launch
+   `nav2_forward.launch.py` disarmed; verify in order: lifecycle nodes reach `active` → costmap
+   populates from `/scan` → planner returns a path → controller emits `cmd_vel_nav` → smoother emits
+   `/cmd_vel`. **Eyeball `/cmd_vel` magnitudes BEFORE arming** — 🔴 **AutoNav holds zero until
+   `/cmd_vel` arrives, so a bad first `/cmd_vel` on an ARMED rover MOVES IT.** Costs nothing, needs
+   no vehicle motion, can be done at a desk.
+   ⚠️ **WATCH FOR THE COSTMAP SELF-MARKING** — with a 92° FOV the rover can mark its OWN footprint
+   lethal and then refuse to plan. `footprint_clearing_enabled` is set on both layers; Phase 0 is
+   where we find out if that is enough. (`nav2_forward.yaml` comments, corrected 2026-08-01.)
+2. **Phase 1 — armed, Nav2 drives a STRAIGHT goal, NO obstacle.** Same corridor, same 2 m. Isolates
+   "can Nav2 drive" from "can Nav2 avoid". 🔑 **Compare directly against 09-15/16**: expect ~2.0 m
+   arrival, lateral ~0.03 m. If it wanders, the fault is NAV2, and we know that before an obstacle
+   is involved.
+3. **Phase 2 = T3.** Walk out, place ONE offset obstacle, send the goal again. Nav2 routes around it
+   keeping inflation clearance.
+
+**SESSION B — block the corridor, then in this order:**
+4. **`collision_standoff_test.py` as a SPEED LADDER (0.25 / 0.45 / 0.75), tape-adjudicated.**
+5. **T4** — same obstacle, same sitting.
+🔑 **WHY THEY PAIR: T4 is a FULLY BLOCKED corridor, which is physically the same rig the standoff
+test needs.** The standoff data then arrives exactly when T4 needs it, instead of as a detour.
+
+⛔⛔ **THE STANDOFF TEST CANNOT BE FOLDED INTO T3 — STRUCTURALLY, NOT FOR CONVENIENCE.**
+**T3 passes only if the reflex STAYS SILENT** (Nav2 routes around; a firing reflex = the planner
+failed). **Standoff passes only if the reflex FIRES.** Same opposition as T2's two criteria; the
+tool's own docstring says it: *"the standoff test wants an obstacle and fails without one; this one
+wants a clear corridor and fails WITH one."* **One run cannot satisfy both.** Everything else in the
+plan CAN be folded — Phases 0/1/2 are one session with no teardown.
+
+### 🔧 SETTINGS AND TOOLING — decided, do not re-derive
+- ✅ **USE `nav2_forward.yaml`, ⛔ NOT `nav2_mapped.yaml`.** Localization is DEAD (0 accepted of 20 on
+  the map's own bag) ⇒ the mapped config would plan against a pose that does not exist. Odom frame only.
+- ✅ **0.25 m/s throughout — ALREADY THE CONFIG DEFAULT** (`max_vel_x: 0.25`, `max_vel_theta: 0.5`).
+  No tuning needed, **and it is the speed where the 09-15/16 data was cleanest** (odom scale exact,
+  wheels matched ±1.35%, guard well clear of the noise).
+- ✅ **NO NEW TOOL NEEDED.** T3 is a Nav2 goal — `ros2 action send_goal /navigate_to_pose` — not
+  another `t*_test.py`.
+- ⚠️ **Phase 2 is the FIRST TIME THE FOUR SPEED LOOPS MUST DISAGREE ON PURPOSE.** Every 09-15/16 run
+  was a straight line. This vehicle **scrubs hard in a spin** (2.6-7.2 m/s², 4 independent loops that
+  do not share load). **Read `bldc_can/evidence/turn_asym_20260914.csv` / `turn_lr_20260914.csv`
+  before setting yaw rate.**
+
+### ⚠️ STANDING GATES EVERY ARMED SESSION
+`tools/preflight_scan_check.py` at the start position · `eph` vs the 5.0 m `COM_POS_FS_EPH` bar
+(**~45-60 min of budget per bridge restart**; restarting `rover-ekf-bridge` resets the drift) ·
+**start the bridge before, STOP IT AFTER** · hand on **ch12** · ⛔ registration dies on an FC reboot
+and the node does not notice — **prove it by the LOG LINE, never by a message rate** (→
+`project_rover_autonav` 09-15/16).
+
+## 🗄 (previous) START HERE — 2026-09-12 (floor). **G2 IS MEASURED OUT. THE BLOCKER IS NOW A DECISION.**
 
 🔴🔴 **WHAT STOPS US: PX4'S SPEED CONTROLLER CANNOT WORK AGAINST A TORQUE ACTUATOR, AND NO AMOUNT OF
 MEASURING CHANGES THAT.** Proven on the floor: at a constant stick the rover accelerates for as long
