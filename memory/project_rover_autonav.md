@@ -2152,3 +2152,36 @@ balanced. ⛔ Then THREE runs with nothing changed between them.
 the obstacle sits ~1.97 m from `base_link`; +0.55 m inflation ⇒ **everything inside 2.52 m is
 unreachable**, so a 2.2 m goal made the PLANNER fail instantly (BT aborted 30 ms in, before the
 controller ever ran). 🔑 **A goal inside inflation looks like a controller failure and is not one.**
+
+## 🔑 2026-09-19 — **ch12 KILL PRESSED IN ARMED AUTONAV FOR THE FIRST TIME. THE ROVER STOPPED.**
+The operator hit **ch12** during a misbehaving T3 run (it was pivoting and crawling). **The rover
+stopped**, the goal cancelled, and `arming_state` read **1** afterwards.
+🔑 **S1 has been "INCONCLUSIVE, NOT FAILED" since 09-12 for exactly one reason — ch12 was never
+pressed.** It has now been pressed, in AutoNav, armed, and it worked.
+⚠️ **NOT a formal S1 pass:** no latency measured, no tape, and "stopped" is the operator's
+observation rather than an instrumented stop distance. ⛔ Do not tick S1 off this.
+⏭ **To close S1 properly:** deliberate run at a known speed, hit ch12, and measure the stop with
+TAPE or `/scan` (⛔ wheel rpm cannot measure a stop). Also settle what S1 means first — **PX4 KILL ≠
+DISARM** — which was the other half of why it stayed open.
+
+## ⛔⛔ RETRACTED SAME NIGHT — **"THE T3 PASS WAS ACCIDENTAL" IS WITHDRAWN. I COMPARED THE WRONG NUMBERS.**
+🔴🔴 **UNITS ERROR: `t3r.py` logs the RAW scan range; `preflight_scan_check.py` reports BUMPER
+clearance. They differ by the 0.337 m front overhang.** I read the pass's **1.680 raw** as bumper
+clearance and had the operator park **0.3 m FURTHER BACK than the pass**. ⇒ **the "matched geometry"
+repeats were never matched.**
+
+| run | raw | bumper | heading | result |
+|---|---|---|---|---|
+| **PASS** | 1.680 | 1.343 | **24.9°** | ✅ SUCCEEDED |
+| repeat 1 | 1.683 | 1.346 | **34.8°** | ABORTED |
+| repeat 2 | 1.686 | 1.349 | 33.3° | ABORTED |
+| repeat 3 | 2.520 | 2.183 | 20.9° | ABORTED |
+| repeat 4 | 1.952 | 1.615 | 17.1° | DISARMED (operator hit ch12) |
+
+🔑 **Repeats 1-2 matched the pass distance to 6 mm and still failed — the difference was HEADING
+(~34° vs 24.9°).** Repeat 1 also ran the pass configuration ⇒ **the closest controlled comparison we
+have points at HEADING SENSITIVITY, not luck.** ⛔ **NO run has ever matched BOTH distance and
+heading.** ⇒ **T3 is UNREPRODUCED, NOT DISPROVEN.** The operator pushed back on the "accidental"
+call and was right.
+⏭ **THE REPEAT THAT STILL NEEDS RUNNING: raw 1.68 m (= BUMPER 1.34 m) AND heading ~25°, goal ≥3.0 m,
+three runs, no config changes.** ⚠️ **State which ruler you mean — RAW or BUMPER — every single time.**
