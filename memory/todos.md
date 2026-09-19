@@ -184,7 +184,19 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
-## ✅✅✅ 2026-09-19 — **T3 PASSED (operator-adjudicated, n=1). FIX = `ObstacleFootprint` CRITIC.**
+## ✅✅ 2026-09-19 (night) — **T3 AVOIDANCE REPRODUCED. ONE NUMBER LEFT: `ObstacleFootprint`.**
+
+✅ **Controlled run (config + distance 1.360 m bumper + scene + CLEARED costmaps all pinned): drove
+2.815 m of a 3.0 m goal, deviated 0.419 m right, CLEARED THE BAG — no contact.** ⛔ the earlier
+"accidental pass" verdict is WITHDRAWN.
+🔑🔑 **REMAINING GAP = THE REJOIN, and it is ONE NUMBER:** `ObstacleFootprint.scale` **0.02 ⇒ rejoins
+but HITS the bag** · **32 ⇒ avoids cleanly but NEVER rejoins** (returning means moving back toward
+the obstacle while alongside it). ⏭ **TRY 10-15, THEN THREE RUNS UNCHANGED.**
+🔑 **CLEAR BOTH COSTMAPS BEFORE EVERY RUN** (`clear_entirely_*_costmap`) — they retain old marks.
+🔑 **SAY WHICH RULER:** `t3r.py` logs **RAW**, preflight reports **BUMPER** (0.337 m apart).
+⛔ absolute odom heading is a RED HERRING — the SCENE is what matters.
+
+## ✅ 2026-09-19 — **T3 PASSED ONCE (operator-adjudicated). FIX = `ObstacleFootprint` CRITIC.**
 
 🔴🔴 **THE RUN BEFORE IT "SUCCEEDED" AND STILL HIT THE OBSTACLE** — Nav2 said `GOAL SUCCEEDED`, the
 reflex was silent, and the **LEFT FLANK struck the bag** on the rejoin. ⛔⛔ **"REFLEX SILENT" = no
