@@ -184,6 +184,30 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
+## 🔴 2026-09-19 (evening) — **T3 FAILED 3×. THE BLOCKER IS DWB, NOT YAW.**
+
+⛔ **T3 DID NOT PASS — goal never reached.** All three armed runs ended `GOAL ABORTED`
+(`Failed to make progress`), stopping at 0.89-0.93 m. ⛔ **`angular.z` was EXACTLY 0.000 in all of
+them — the yaw axis was never commanded, so T3 tested nothing about yaw or the motors.**
+
+✅ **Ruled out by DISARMED probes (no motion, no eph cost):** obstacle IS in both costmaps (cost
+92-100) · the global planner DOES curve around it (0.80 m lateral) · that curve DOES reach DWB.
+🔴 **DWB chooses a DEAD-STRAIGHT trajectory and avoids the obstacle by SLOWING DOWN** (~0.14 m/s;
+armed runs: `linear.x` mean 0.116 vs max 0.250) until the reflex blocks it.
+
+🔴🔴 **REMEMBER THIS TRAP: DWB reads `sim_time` and every critic `scale` AT INITIALISE.** A runtime
+`ros2 param set` says "successful" and reads back the new value while the critic keeps the old one.
+⛔ **Only YAML + restart applies them — two of my experiments were meaningless because of this.**
+
+⏭ **NEXT, IN ORDER:** ① 🔑 **try Regulated Pure Pursuit instead of DWB** — it follows the path
+geometrically instead of sampling, which removes the whole critic-weighting question ② re-test the
+critic weights PROPERLY (YAML + restart, one at a time) ③ ⚠️ note the geometry limit: min executable
+yaw ~0.67 rad/s ⇒ at 0.25 m/s the tightest arc is **0.37 m radius** — this rover cannot make gentle
+turns, so the controller must suit that.
+✅ Config REVERTED to the Phase-1-validated values and rebuilt. 📐 scan-derived plan view:
+`https://claude.ai/code/artifact/a715d45d-d10c-4958-8469-c2ce3c996842`
+→ full detail `project_rover_autonav` **2026-09-19 (evening)**
+
 ## ⏭⏭ START HERE — 2026-09-19 (FLOOR). **PHASE 1 PASSED. A SIGN BUG IS FIXED. YAW IS THE BLOCKER.**
 **Scope: finish M2 (T3·T4·T5), camera-only. ⛔ NO LIDAR — the STL-19 is assigned to the DRONE.**
 

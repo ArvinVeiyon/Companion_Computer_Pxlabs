@@ -350,3 +350,82 @@ turned, old stalled. ⚠️ **the rear sits LOWER (suspension variation) so the 
 stress** ⇒ ride height is its own item; new motors will still carry that load.
 🔑 **The RR hall-table A/B is therefore NOT the pending question it was** — the pivot evidence that
 pointed at it was an artifact. Re-open it only with an ARC capture.
+
+## 🔑🔑 2026-09-19 — **WHY THREE MOTORS OVERHEAT AND ONE DOES NOT: WINDING RESISTANCE, MEASURED**
+
+Operator's field report: *"all three will heat up quickly but not RL, and it is always responsive
+when I drive, not stall at start."* ✅ **CONFIRMED FROM THE ESCs' OWN DETECTION DATA** — no test
+needed, the numbers were already in `configs_live/vesc_mcconf_*_FINAL_20260914.xml`:
+
+| wheel | `foc_motor_r` | vs RL | `foc_motor_l` | flux linkage | poles | **I²R at 15 A** |
+|---|---|---|---|---|---|---|
+| FR | 0.5570 Ω | **2.8×** | 547 µH | 0.01142 | 14 | **125 W** |
+| FL | 0.5215 Ω | **2.6×** | 552 µH | 0.01093 | 14 | **117 W** |
+| RR | 0.4367 Ω | **2.2×** | 489 µH | 0.01039 | 14 | **98 W** |
+| **RL** | **0.1988 Ω** | 1.0× | 410 µH | 0.01155 | 14 | **45 W** |
+
+🔑 **RL's winding resistance is LESS THAN HALF the other three.** Heating is I²R, and at the 15 A
+measured during pivots the old three dissipate **98-125 W each against RL's 45 W**. That is the
+"heats up quickly" report, quantified.
+🔑 **It also explains STALL AT START:** higher R drops more volts across the winding instead of making
+torque, so breaking away from rest needs more current — and the wheel heats while it tries.
+✅✅ **SAME MOTOR, BETTER VERSION — NOT A DIFFERENT MOTOR.** Flux linkage is near-identical across all
+four (0.0104-0.0116) and **`si_motor_poles` is 14 on every wheel.** Same magnets, same electrical
+size, same pole count; the difference is the winding.
+⇒ 🔧 **BUY RL's VERSION ×3** (RL itself stays fitted — a matched set of four without replacing it).
+⇒ ✅ **`erpm_to_ms` = 0.003900 SURVIVES THE SWAP** because poles stay 14. ⚠️ still tape-check after.
+⇒ ⚠️ **Wattage is SECONDARY to winding resistance.** A 350 W unit with FR/FL-class windings would be
+worse than RL's version at 250 W. **Match RL's part number first.**
+⬜ **STILL NEEDED: RL's supplier / part number / revision.** Without it this table is the only way to
+tell the versions apart — by measuring R, not by looking at them.
+
+## 🔴🔴 2026-09-19 (late) — **RR IS DEMAGNETISED. FIVE INDEPENDENT SIGNS, ONE CAUSE.**
+
+| wheel | flux linkage | winding R | \|rpm\| while rotating | current mean | ESC temp |
+|---|---|---|---|---|---|
+| FR | 0.01142 | 0.557 Ω | 142 | 16.4 A | 44.9 °C |
+| FL | 0.01093 | 0.522 Ω | 197 | 14.5 A | 43.1 °C |
+| **RR** | **0.01039** | 0.437 Ω | **40** | **19.1 A** | **48.1 °C** |
+| RL | 0.01155 | 0.199 Ω | 182 | 18.4 A | 46.6 °C |
+
+🔑 **THE DECIDING OBSERVATION WAS THE OPERATOR'S HAND, POWER OFF: "RR is very less stiffer comparing
+other."** Freer by hand = **less cogging = weaker magnets**. ⚠️ **the test is only valid POWERED OFF**
+— powered, the duty-0 short brake makes every wheel feel stiff.
+**Flux linkage IS magnet strength, and torque/amp is proportional to it.** A demagnetised RR predicts,
+in order: freest by hand ✅ · least torque per amp ✅ · therefore **highest current** ✅ · therefore
+**hottest** ✅ · therefore **slowest** ✅. Five observations, one cause.
+🔑 **It also resolves why RR underperforms FR despite FR having WORSE winding resistance** (0.557 vs
+0.437): resistance is half the story; FR has healthy magnets, RR does not.
+⛔⛔ **DEMAGNETISATION IS PERMANENT — no config, hall table or tune recovers it. RR MUST BE REPLACED,
+and it should be FIRST.**
+🔴 **AND IT IS SELF-REINFORCING:** weak magnets → more current for the same torque → more heat → more
+demagnetisation. ⇒ **every further pivot-from-rest actively damages it.** That retires pivot testing
+permanently, not just for today.
+
+## ✅ THE CONFIG DIFF **CLEARS** RR — the hall-table A/B is NOT worth doing
+🔑 **Operator's method: "check config of RR against the front two, since those two are the same
+motor."** Only ONE field has FR=FL while RR differs: `foc_hall_table__2` = **132 vs 134**, with entry
+5 at 32 between FR's 30 and FL's 33. **That is ordinary hall-detection scatter, not a corrupted table.**
+Everything functional matches: `foc_sensor_mode` 2 · `foc_sl_erpm` 3000 · `foc_encoder_offset` 180 ·
+`m_invert_direction` correctly mirrored by side (0 right, 1 left).
+⇒ ⛔ **I WITHDRAW the "suspect 09-13 hall table" lead I raised earlier the same day.** RR's config is
+normal for its motor type. ⚠️ RL's table looks wildly different (65/198/31/131/98/165) — that is a
+**cyclic shift, expected** for a different motor version, not a fault.
+
+## 🔴 THE ESCs ARE CONFIGURED FOR **350 W** — ON **250 W** MOTORS
+```
+l_watt_max 350 · l_current_max 25 A · l_in_current_max 20 A · l_abs_current_max 35 A
+```
+**140% of the motors' rating, sustained**, identical on all four. Today's 15-19 A stalls sat well
+inside every limit, so **nothing ever intervened while RR cooked.** That is the most plausible
+mechanism for the demagnetisation.
+⚠️ **`l_watt_max` WOULD NOT HAVE SAVED IT.** It limits BATTERY power, and at stall the duty is low, so
+watts stay low while motor current — and therefore I²R heat — stays high. 🔑 **The levers that
+actually protect against stall cooking are `l_current_max` and a WORKING motor thermistor.**
+⚠️ **Motor temp protection is CONFIGURED but unverified:** `m_motor_temp_sens_type` **8 (NTCX, 10 kΩ,
+beta 3380)**, derating 85 → 100 °C. ⬜ **Nobody has confirmed the thermistor is physically wired** —
+if it is not, the only thermal sensing is the FET, which sits on the ESC, not in the magnets.
+⚠️ RL's FET limits differ: `l_temp_fet_start/end` **85/100** vs **75/90** on the other three.
+🔧 **DECISION 09-19: LEAVE THE LIMITS ALONE until the new motors are fitted**, then match them to what
+is bought. ⛔ **Dropping to 250 W values now would cap `l_current_max` at ~10-12 A — BELOW the 15-19 A
+the wheels need to break away in a turn** — making the stall worse, not better. Operator agreed.

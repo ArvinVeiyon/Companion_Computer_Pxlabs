@@ -1907,3 +1907,86 @@ position, so **eph does NOT converge back down — reboot and start the bridge t
 ±20° sector** — at 5 m that is ±3°. A cone without the corridor test reads objects BESIDE the path
 (3.2 m vs the true 4.9 m) and produced a bogus "3× odometry disagreement" this session.
 ⛔ `pkill -f <pattern>` self-kills (exit 144) — it is in the index and I did it anyway.
+
+## 📐 2026-09-19 (late) — **THE STEER→YAW PLANT CURVE, MEASURED IN MANUAL AND IN RPM MODE**
+
+Method: passive full-rate log (`yawplant.py`, commands nothing) while the operator drove **ARCS** in
+Manual, both directions plus reverse. 🔑 **Arcs, not pivots** — rolling wheels mean live hall feedback,
+so there are usable points at low steer instead of a stalled wheel and no measurement.
+Point = a window where `|steer|` is stable within 0.05 for ≥0.8 s; yaw averaged over the **settled
+half** (averaging the whole hold measures acceleration, not steady state). 10 holds survived.
+
+🔑 **yaw ≈ 2.9 rad/s per unit of steering setpoint**, consistent both ways — **LEFT 2.79, RIGHT 3.03**
+(⇒ no large left/right asymmetry in *output*, even though RR contributes almost nothing). Full steer
+≈ 3 rad/s, which matches the ±3.5 rad/s seen at full stick.
+📏 **IMPLIES `RO_YAW_RATE_CORR` ≈ 11 for 1:1 tracking** (FF steer = sp × track/2 × CORR /
+`RO_MAX_THR_SPEED`; 2.9 × 0.155 × CORR/4.93 = 1 ⇒ CORR ≈ 11). In force today: **7.4**.
+⛔⛔ **DO NOT APPLY 11 YET.** The curve was measured with **RR demagnetised and contributing almost
+nothing** — it describes a three-and-a-bit-wheel rover. **Fix the motors, re-measure, then set CORR**,
+or the tune bakes in a dead corner and has to be redone.
+
+🔑🔑 **THE PLANT IS STRONG — THE PROBLEM IS THE AUTONAV RATE PATH.** Manual reaches **±3.5 rad/s**;
+AutoNav could not reliably produce 1 rad/s minutes earlier, and its results were not reproducible at
+the same command. Motors, traction and ESCs are therefore NOT the limiter for yaw. ⇒ the hunt is in
+`RoverSpeedRateSetpoint` → `DifferentialRateControl` → allocation.
+🔴 **`/odom` YAW IS UNUSABLE AT SPEED** — read **−21.4 rad/s** where the FC gyro read **−3.5** (~6×).
+⇒ **use `sensor_combined` for yaw truth**, never `/odom`. (`yaw_response_log.py` already flags it.)
+⚠️ **`yaw_response_log.py` burst detection is too coarse for a curve** — 0.8 s of quiet ends a burst,
+so holds merge (one was 34.6 s spanning both directions). It gives per-burst peaks, not steady
+points. **Use the passive full-rate logger + `plantcurve.py` instead.**
+⚠️ Its hardcoded `RO_MAX_THR_SPEED` was **3.0**, stale twice over — corrected to **4.93** 09-19.
+
+# 🔴 2026-09-19 (evening) — **T3 FAILED, 3 ARMED ATTEMPTS. THE FAULT IS DWB, AND IT IS NOT YET FIXED.**
+
+⛔ **T3 DID NOT PASS. The goal was never reached.** Three armed runs, all ended `GOAL ABORTED by Nav2`
+(`Failed to make progress`), rover stopping at **0.89 / 0.93 / 0.93 m** every time.
+
+## ✅ WHAT IS PROVEN GOOD — ruled out one by one, all from DISARMED probes (no motion, no eph cost)
+1. **Perception → costmap WORKS.** The obstacle reads cost **92-100 in BOTH** costmaps at 1.5-2.2 m.
+2. **The global planner WORKS.** `/plan` = 104 poses with **0.80 m of lateral deviation — it curves
+   around the obstacle.**
+3. **The curve REACHES DWB.** `/transformed_global_plan` carries lateral −0.71 m.
+4. 🔴 **DWB CHOOSES A DEAD-STRAIGHT TRAJECTORY.** `/local_plan` lateral = **0.000**, and it avoids the
+   obstacle by **SLOWING DOWN instead of turning** — chosen speed falls to ~0.14 m/s. The armed runs
+   show the same: `linear.x` max 0.250 but **mean 0.116**.
+⇒ **The rover creeps straight until the reflex blocks it at 0.69 m raw, cannot progress, and the goal
+aborts ~20 s later.** ⛔ **The yaw axis was NEVER COMMANDED — `angular.z` was exactly 0.000 across all
+three runs (650+ messages). T3 told us nothing about yaw, the motors or the tune.**
+
+## 🔴🔴 THE GOTCHA THAT INVALIDATED TWO OF MY OWN EXPERIMENTS — REMEMBER THIS
+⛔⛔ **DWB READS `sim_time` AND EVERY CRITIC `scale` AT INITIALISE. A RUNTIME `ros2 param set` RETURNS
+"successful" AND READS BACK THE NEW VALUE WHILE THE RUNNING CRITIC KEEPS THE OLD ONE.**
+🔑 **Only a YAML edit + node restart actually applies them.** I "exonerated" `Twirling`/`PreferForward`
+by setting them live and seeing no change — **that test was meaningless.** They are NOT exonerated.
+⚠️ Same trap for `BaseObstacle.scale`. ⛔ **Never conclude anything from a live-set DWB param again.**
+
+## ⬜ WHAT WAS TRIED (config + restart, all disarmed)
+| change | result |
+|---|---|
+| `sim_time` 2.0 → 4.0 | horizon 0.46 → **0.88 m**, trajectory still **dead straight** |
+| `sim_time` → 6.0 | trajectory got **SHORTER (0.82 m)** — DWB picked a slower speed instead |
+| `BaseObstacle.scale` 0.02 → 1.0 | no change (⚠️ set live, so possibly never applied) |
+| softened critics in YAML + restart | **controller_server crashed / lifecycle failure** — reverted |
+✅ **CONFIG REVERTED to the Phase-1-validated values** (`sim_time` 2.0 · `BaseObstacle` 0.02 ·
+`PreferForward` 50 · `Twirling` 20) and rebuilt. The investigation notes are kept as comments in
+`nav2_forward_flat.yaml`. ⚠️ My repeated kill/relaunch cycles left the stack broken once — kill ALL
+of controller/planner/bt/smoother/lifecycle together, then relaunch.
+
+## ⏭ THE REAL CANDIDATES FOR NEXT SESSION, in order
+1. 🔑🔑 **REPLACE DWB WITH REGULATED PURE PURSUIT (`nav2_regulated_pure_pursuit_controller`).** DWB
+   *samples* velocities and scores them; RPP *follows the path geometrically* with a lookahead point.
+   For a differential rover tracking a known good plan it is the better-suited controller, it has no
+   sampling grid to mis-tune, and it removes every critic-weighting question at once. **This is the
+   one I would try first.**
+2. Re-test the critic weights **properly** (YAML + restart, one at a time) — they were never
+   actually tested.
+3. ⚠️ **A geometry limit worth knowing either way: this rover cannot make GENTLE turns.** Minimum
+   executable yaw is ~0.67 rad/s, so at 0.25 m/s the tightest arc it can hold is **r = v/ω = 0.37 m**.
+   Smooth path-following wants far gentler curvature than that. ⇒ either drive faster in turns, or
+   accept an arc-and-straight motion style, or the controller must be chosen to suit.
+
+## 📐 ARTIFACT — the scan-derived plan view of this setup
+`https://claude.ai/code/artifact/a715d45d-d10c-4958-8469-c2ce3c996842` — 473 live points, corridor,
+inflation circle, and which side is plannable. 🔴 **It also records a correction: POSITIVE scan
+angles are LEFT (REP-103). I had left/right inverted in several messages before the operator caught
+it.** ⚠️ Rebuild it from a fresh scan if the rover moves — it is a snapshot, not live.
