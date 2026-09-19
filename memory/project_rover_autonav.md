@@ -2185,3 +2185,27 @@ heading.** ⇒ **T3 is UNREPRODUCED, NOT DISPROVEN.** The operator pushed back o
 call and was right.
 ⏭ **THE REPEAT THAT STILL NEEDS RUNNING: raw 1.68 m (= BUMPER 1.34 m) AND heading ~25°, goal ≥3.0 m,
 three runs, no config changes.** ⚠️ **State which ruler you mean — RAW or BUMPER — every single time.**
+
+## ✅✅ 2026-09-19 (night) — **THE T3 AVOIDANCE REPRODUCED AT MATCHED CONDITIONS. THE PASS WAS REAL.**
+**Controlled run — first of the night with EVERYTHING pinned:** pass config untouched · bumper
+**1.360 m** (pass 1.343) · obstacle dead ahead, right side open 0.9-1.8 m lateral · **BOTH COSTMAPS
+CLEARED** · fresh `eph` 1.135 m.
+**Result: it drove 2.815 m of a 3.0 m goal, deviated −0.419 m RIGHT, AND CLEARED THE BAG — operator
+confirms no contact.** in-place rotation only **97/392** (the pivot-crawl failures were 177-237).
+⇒ ⛔ **"THE PASS WAS ACCIDENTAL" IS FULLY WITHDRAWN. The avoidance reproduces.**
+
+## 🔑🔑 THE REMAINING GAP IS THE REJOIN — AND IT IS THE SAME ONE NUMBER
+**Operator: "it avoided the bag but not rejoined to its track."** It finished **0.458 m** from the
+goal against a 0.30 m tolerance — it trailed right and never came back to the line, so Nav2 never
+registered arrival and aborted.
+🔑 **MECHANISM: `ObstacleFootprint.scale` 32 forbids the return.** Rejoining means moving back
+TOWARD the obstacle laterally while still alongside it ⇒ footprint cost ⇒ those trajectories lose.
+**The critic that prevents the flank collision also prevents the rejoin.**
+🔑🔑 **ONE COHERENT EXPLANATION FOR EVERYTHING TONIGHT:**
+- `ObstacleFootprint` **0.02** ⇒ rejoins, **HITS the bag** (the flank collision)
+- `ObstacleFootprint` **32** ⇒ **avoids cleanly, NEVER rejoins**
+⇒ ⏭ **THE ANSWER IS BETWEEN. Try 10-15, then THREE runs with nothing changed.** This is now a
+motivated experiment, not a guess.
+⚠️ Also note: absolute odom heading was a RED HERRING — the goal is defined along the current
+heading, so the rover-relative geometry is identical at 12° or 25°. **What matters is the SCENE**
+(obstacle ahead + which side is open). ⛔ Don't chase compass numbers again.
