@@ -1980,10 +1980,16 @@ of controller/planner/bt/smoother/lifecycle together, then relaunch.
    one I would try first.**
 2. Re-test the critic weights **properly** (YAML + restart, one at a time) — they were never
    actually tested.
-3. ⚠️ **A geometry limit worth knowing either way: this rover cannot make GENTLE turns.** Minimum
-   executable yaw is ~0.67 rad/s, so at 0.25 m/s the tightest arc it can hold is **r = v/ω = 0.37 m**.
-   Smooth path-following wants far gentler curvature than that. ⇒ either drive faster in turns, or
-   accept an arc-and-straight motion style, or the controller must be chosen to suit.
+3. ⛔⛔ **RETRACTED SAME DAY — "this rover cannot make GENTLE turns" WAS WRONG.** I took the
+   **0.67 rad/s STANDSTILL BREAKAWAY** and generalised it into a limit on curvature while moving.
+   It does not follow, and **this session's own arc captures refute it**: 0.25 m/s with 0.4 rad/s
+   commanded achieved **0.160 rad/s (r ≈ 1.56 m)** and **0.221 rad/s (r ≈ 1.14 m)** — both far below
+   0.67, both smooth. 🔑 **Rolling, yaw is only a small speed DIFFERENCE between the sides; there is
+   no breakaway to overcome.** The breakaway figure applies to PIVOTS FROM REST and nowhere else.
+   ⛔ **Do not derive a moving constraint from a standstill measurement.**
+   🔑 **And ask the operator before asserting a vehicle limit — he drives it and said so directly.**
+   ⇒ **Gentle path-following IS within this rover's capability**, which strengthens the case that
+   DWB's straight-line choice is a controller problem, not a vehicle one.
 
 ## 📐 ARTIFACT — the scan-derived plan view of this setup
 `https://claude.ai/code/artifact/a715d45d-d10c-4958-8469-c2ce3c996842` — 473 live points, corridor,

@@ -201,9 +201,10 @@ armed runs: `linear.x` mean 0.116 vs max 0.250) until the reflex blocks it.
 
 ⏭ **NEXT, IN ORDER:** ① 🔑 **try Regulated Pure Pursuit instead of DWB** — it follows the path
 geometrically instead of sampling, which removes the whole critic-weighting question ② re-test the
-critic weights PROPERLY (YAML + restart, one at a time) ③ ⚠️ note the geometry limit: min executable
-yaw ~0.67 rad/s ⇒ at 0.25 m/s the tightest arc is **0.37 m radius** — this rover cannot make gentle
-turns, so the controller must suit that.
+critic weights PROPERLY (YAML + restart, one at a time) ③ ⛔ **RETRACTED: the "cannot make gentle turns" claim was WRONG.** 0.67 rad/s
+is the STANDSTILL BREAKAWAY; while ROLLING the same day's arcs achieved **0.16 and 0.22 rad/s at
+0.25 m/s = 1.1-1.6 m radius**. Gentle arcs are demonstrated. ⛔ **Never derive a moving limit from a
+standstill measurement — and ASK THE OPERATOR, who drives it.**
 ✅ Config REVERTED to the Phase-1-validated values and rebuilt. 📐 scan-derived plan view:
 `https://claude.ai/code/artifact/a715d45d-d10c-4958-8469-c2ce3c996842`
 → full detail `project_rover_autonav` **2026-09-19 (evening)**
