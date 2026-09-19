@@ -320,3 +320,33 @@ control here is the neutral duty-0 short brake ⇒ **brake-path-only: it cannot 
 
 `esc_rpm` is **MECHANICAL — multiply by 7** for the ERPM that `rpm_max` expects.
 Ceiling is **~10500 ERPM** (`l_max_duty` 0.95) ⇒ **a cap set above that is not a cap.**
+
+## 🔑 2026-09-19 — YAW CAPTURES ON THE FLOOR, AND A "FAULT" THAT RETIRES
+
+⛔⛔ **ZERO RPM FROM A STATIONARY HUB MOTOR IS NOT A FAULT SIGNATURE — OPERATOR, 09-19.** These are
+hall-sensored hubs: if the rotor never breaks away there is nothing for the halls to count, so the
+speed loop servos a measurement that cannot change and just pushes current. ⇒ **low yaw commands are
+STRUCTURALLY UNSERVOABLE FROM REST on this drivetrain.**
+🔴 **This retires my 09-19 reading of the pivot capture.** RR sat at **0 rpm drawing up to 18.8 A for
+3.5 s** at a 0.4 rad/s in-place command, which I first read as the corner-collapse fault. It is a
+test-design artifact: **a pivot from rest is the one condition where this drivetrain cannot servo.**
+✅ **RR IS LIVE IN AN ARC** — 26 rpm, later 59→84 rpm at 12-15 A, rolling. ⛔ **NO MORE PIVOTS FROM
+REST**: they cannot work, and they bake heat into motors at 15-19 A with no airflow.
+
+**Captures (full rate, per-wheel rpm+current+gyro on one timeline), in the scratchpad as
+`yawesc_*.csv`:** 0.4 / 0.7 / 1.0 rad/s pivots, one arc, one sign-verification arc.
+🔴 **THE OPEN PUZZLE: yaw is NOT reproducible run-to-run at the same command.** Same `CORR` 7.4,
+single steps from rest: 0.4 weak · **0.7 STRONG (0.927 rad/s, all four live)** · 1.0 weak (0.156),
+with the 1.0 run drawing barely above idle (9.9→13 A vs 18.8 A at 0.4) ⇒ **the setpoint reaching the
+ESCs was small — they were NOT fighting a load.**
+⛔ **NOT thermal:** ESC temps **RF 44.4 · FL 43.1 · RR 47.1 · RL 45.9 °C**, pack 24.7-24.9 V. A VESC
+does not derate until ~85 °C. **UNEXPLAINED — do not tune on top of it.**
+⚠️ In the arc the RIGHT side (RF+RR, both OLD motors) under-ran its commanded speed (0.10 vs 0.19 m/s)
+while the LEFT side tracked. Distinct from the rear-load story.
+
+🔧 **OPERATOR DECISION 09-19: replace the three OLD motors (RF, FL, RR).** His evidence: **RL was
+recently replaced and outperforms the rest**, and RL/RR share an axle under the same load — new
+turned, old stalled. ⚠️ **the rear sits LOWER (suspension variation) so the rear axle carries more
+stress** ⇒ ride height is its own item; new motors will still carry that load.
+🔑 **The RR hall-table A/B is therefore NOT the pending question it was** — the pivot evidence that
+pointed at it was an artifact. Re-open it only with an ARC capture.

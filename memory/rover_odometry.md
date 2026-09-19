@@ -132,6 +132,23 @@ theta += v_angular * dt
 ~~**Idle noise VERIFIED 2026-07-19**: all ESCs jitter ±1..±35 ERPM at standstill (Hall noise) → node needs deadband param, default ±40 ERPM (≈0.015 m/s), else stationary drift.~~
 🔴 **SUPERSEDED — do not quote the line above.** ⛔ **The ±35 ERPM idle jitter DOES NOT REPRODUCE:** re-measured 08-01 over **2930 samples × 4 wheels — min 0, max 0**, and `/odom` held **0.0000 m over 10.0 s** stationary and disarmed on 09-17. `deadband_erpm` is **5**, not 40 — at the true `erpm_to_ms` scale, 40 ERPM means **0.185 m/s**, which would swallow most of Nav2's fine-positioning range. ⚠️ Still unchecked **ARMED** (dithering motors may differ from idle).
 
+## 📏 TAPE POINT 4 — 2026-09-19, and it extends the curve DOWNWARD
+
+**odom 1.277 m vs tape 1.380 m ⇒ ratio 0.925, under-reading 7.5%**, taken on a Nav2 Phase 1 goal.
+
+| mean speed | odom/tape |
+|---|---|
+| **0.060 m/s (09-19)** | **0.925** |
+| 0.15 m/s | 0.946 |
+| 0.25 m/s | 1.000 |
+| 0.75 m/s | 1.030 |
+
+🔑🔑 **QUOTE THE MEAN SPEED, NOT `max_vel_x`.** This run was capped at 0.25 m/s but its MEAN was
+0.060 m/s, because a Nav2 goal spends most of its time in the accel/decel ramp. Picking the ratio off
+the cap would have used 1.000 and mis-stated the distance by ~7%.
+⚠️ Dropout under-reads worse the slower you go; the trend continues cleanly below 0.15 m/s.
+→ `project_rover_autonav` 2026-09-19
+
 ## ROS2 Node Plan
 - **Package**: `rover_odometry` (new, Python, ament_python — follow rc_control pattern)
 - **Location**: `~/ros2_ws/src/rover_odometry/`

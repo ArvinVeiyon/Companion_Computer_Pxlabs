@@ -1727,3 +1727,183 @@ position is **accumulated from earlier sessions**, harmless with rolling windows
 3. Then Phase 2 = T3 (one offset obstacle).
 ⚠️ **`RO_DECEL_LIM` 5 stop is STILL UNMEASURED** and wheel RPM cannot measure it. At 0.25 m/s the
 margins are generous, but it is an open number, not a verified one.
+
+# 🔴🔴 2026-09-19 — **THE YAW AXIS IS DEAD IN AUTONAV, AND G2 IS WHY.** Desk session, nothing moved.
+
+Scope set with the operator: **finish M2 (T3 → T4 → T5), camera-only.** ⛔ **No LiDAR work** — see
+the verdict at the foot of this entry.
+
+## The finding, confirmed on the live FC (not from docs)
+`FF = sp × track/2 × RO_YAW_RATE_CORR / RO_MAX_THR_SPEED` ⇒ **the FF gain is the RATIO
+`CORR / RO_MAX_THR_SPEED`.** Read off the FC 09-19: `CORR` **1.8** · `RO_MAX_THR_SPEED` **4.93** ·
+`RO_YAW_RATE_P` **0.08** · `RO_YAW_RATE_I` **0.0** · `RO_YAW_RATE_LIM` **85.9 deg/s** ·
+`RD_WHEEL_TRACK` **0.31**.
+
+| | divisor | CORR | ratio | FF at 1.2 rad/s | rotates? |
+|---|---|---|---|---|---|
+| validated 08-02 | 0.60 | 1.8 | **3.0000** | 0.558 | ✅ clears the 0.45 breakaway |
+| **live today** | **4.93** | 1.8 | **0.3651** | **0.068** | ❌ **8.22× short** |
+
+🔑 **G2 moved the divisor on 09-13 and nothing touched `CORR`.** The plant has a **friction
+deadband** — `steer < ~0.45` ⇒ NO rotation; above it `yaw ≈ 7.6 × (steer − 0.40)` ⇒ **minimum
+achievable yaw ≈ 0.67 rad/s**. Even with P at full error the output reaches only ~0.20.
+⇒ **THE ROVER CANNOT ROTATE IN AUTONAV.** 🔑 **T2 never caught it because T2 drives in a straight
+line** — T3 is the first test that turns.
+
+⏭ **OPERATOR DECISION 09-19: `RO_YAW_RATE_CORR` 1.8 → 14.8, TO BE WRITTEN AT THE NEXT FLOOR SESSION**
+(not at the desk — operator's call, so the change and its first test share a sitting). 14.8/4.93 =
+**3.0020**, the 08-02 ratio restored to 0.07%; the param's max is **10000**, so it is well in bounds.
+⛔⛔ **NEVER "fix" this by restoring `RO_YAW_RATE_I`** — that is the windup path behind the 21×
+runaway. With I = 0 it is bounded: worst case at the executor's 1.0 rad/s clamp is 0.545 steer ⇒
+**~1.10 rad/s achieved.**
+🔑 **THE GENERAL RULE, worth more than this instance: when a SHARED DIVISOR moves, check every RATIO
+it appears in, not the gain next to it.** `RO_MAX_THR_SPEED` divides the speed loop AND the yaw loop.
+
+## Second consequence of the same root cause — ⚠️ turn-away-while-blocked is dead
+`autonav_mode` caps yaw to `collision.blocked_yaw_rate` = **0.3 rad/s** while blocked (mode.hpp
+kBlockedYawRate), which is **below the 0.67 rad/s floor** ⇒ "enough authority to turn away" is no
+longer true; it cannot turn at all while blocked. ✅ **Left as-is deliberately** — blind rotation is
+the manoeuvre this whole config forbids, so a dead turn-away is the safe failure. **Documented, not
+changed.** The node runs bare from systemd with compiled defaults (no yaml), so changing it means
+`--ros-args -p collision.blocked_yaw_rate:=…` or an edit.
+
+## ✅ SHIPPED THIS SESSION — `nav2_forward_flat.yaml`, the armed-run config
+`src/rover_nav2/config/nav2_forward_flat.yaml`, built and installed. Six functional changes vs
+`nav2_forward.yaml`, verified by a comment-stripped diff:
+1. **`voxel_layer` OUT of BOTH costmap plugin lists** (its param blocks are left in place so G4 can
+   re-enable by name). ⛔⛔ **NEVER ARM WITH IT ENABLED** — 09-17 it produced a sustained max-rate spin.
+2. **`PreferForward` + `Twirling` critics added** (scales 50.0 / 20.0, first-cut) — blocker 3. Both
+   are stock `dwb_critics` plugins, already built here; **no code change.**
+3. **`max_vel_theta` 0.5 → 1.0** and the velocity smoother's theta with it — **they must move
+   together.** 🔑 **1.0, not higher, because `autonav_mode` clamps |yaw| to `kMaxYawRate` = 1.0**;
+   anything above that is clipped downstream and the config would be lying.
+4. `nav2_forward.yaml` keeps a ⛔ header: it is the 3D/G4 config, **not for armed runs.**
+🔑 **No launch change needed** — `nav2_forward.launch.py` already takes `params_file:=`.
+⚠️ Also corrected in-file: the old comment claiming `RO_YAW_RATE_P` is 0.05 and the runaway is
+"still under investigation". Both stale — P reads 0.08 and the runaway was diagnosed as windup.
+
+## ⏭ RESUME HERE — next floor session, in this order
+1. **Write `RO_YAW_RATE_CORR` 14.8 DISARMED**, read it back. ⛔ leave `RO_YAW_RATE_I` at 0.
+2. **Reposition per the 09-18 fix** — matte surface **2.5-3.0 m**, goal **1.5 m** — and re-run
+   `tools/preflight_scan_check.py`. **Go only if the forward sector is populated**; an empty sector
+   in every scan is a refusal. 🔑 a silent reflex beyond ~3 m is **BLIND, not clear**.
+3. **Phase 1** — armed, Nav2 straight 1.5 m goal, launched with **`nav2_forward_flat.yaml`**.
+   Eyeball `/cmd_vel` **before arming**. Expect ~1.5 m arrival, lateral ~0.03 m, reflex silent,
+   `angular.z` ≈ 0 throughout.
+4. **T3** — one offset obstacle. Pass = routes around, **reflex stays silent**. ⚠️ first time the
+   four speed loops must disagree on purpose; read `turn_asym_20260914.csv` / `turn_lr_20260914.csv`
+   first. If yaw still will not break out, **stop and re-measure with `tools/yaw_response_log.py`** —
+   ⛔ do not raise gains on the floor.
+Standing gates unchanged: bridge before / **stop after** · `eph` vs 5.0 m, ~45-60 min · registration
+proved by the **LOG LINE** · hand on **ch12**.
+
+## 🔑 THE LIDAR VERDICT (operator asked 09-19) — **NOT REQUIRED, and not a blocker for M2 or M3**
+⛔ **Stay camera-only.** `autonomy_plan.md` §2: the sensors are **complementary, not redundant** — a
+2D slice passes UNDER table tops and OVER low boxes, cables and thresholds, and cannot see
+drop-offs; for the forward avoidance that IS M2, the depth camera is the better sensor. §2.2
+**withdrew** "mapping needs the STL-19" (true only for `slam_toolbox`, which needs wide FOV) ⇒ **M3
+is not hardware-blocked either** — config + CPU. `indoor_mapping_plan.md` §113: **the STL-19 is
+assigned to the DRONE; the rover is camera-only** — a decision on record, not waiting for parts.
+⚠️ It would not be quick anyway: `ldlidar_stl_ros2` is **no longer in `ros2_ws/src`** (patch at
+`codex-work/ldlidar_stl_local_edits_20260417.patch`) and **`slam_toolbox` is NOT installed here.**
+🔑 Accepted permanent costs: **no rear/side coverage · a spin can never be cleared from a scan ·
+~3 m usable range.** ⏭ The ONLY place a LiDAR would change the answer: **if M3 localization stays
+dead**, 2D lidar + `slam_toolbox` is the cheap CPU-light alternative to reviving RTAB-Map. M3
+decision, deferred.
+
+# 🟢🟢 2026-09-19 — **FLOOR SESSION: PHASE 1 PASSED (n=2, TAPE), AND A SIGN BUG THAT WOULD HAVE BROKEN T3**
+
+Scope: finish M2, **camera-only** (⛔ no LiDAR — verdict in the 09-19 desk entry above).
+
+## ✅✅ PHASE 1 PASSED — NAV2 DROVE AN ARMED ROVER, TWICE
+`nav_state=23`, goal completed, **reflex silent throughout** (the only BLOCK lines are node startup
+before `/scan` arrived). Config: **`nav2_forward_flat.yaml`** (voxel OFF + `PreferForward`/`Twirling`).
+
+| | run 1 | run 2 |
+|---|---|---|
+| along-track `/odom` | 1.293 m | 1.277 m |
+| lateral | +0.017 m | +0.013 m |
+| `angular.z` max | 0.053 | 0.053 |
+| in-place rotation samples | **0** | **0** |
+
+🔑 **TAPE-ADJUDICATED: 1.380 m against a 1.5 m goal ⇒ true error −0.120 m, INSIDE the ±0.20 criterion.**
+✅ **Blocker 3 (DWB spins when it cannot go forward) is CLOSED for straight-line work** — a *disarmed*
+probe with `/odom` frozen (the exact 09-17 condition) commanded **zero rotation for 21 s** and wound
+down to zero instead of spinning. The two stock critics do the job; no code was needed.
+📏 **NEW ODOM POINT: 0.925 at a MEAN speed of 0.060 m/s** (odom 1.277 vs tape 1.380 = under-read 7.5%).
+Extends the speed curve below every prior point (0.946@0.15 · 1.000@0.25 · 1.030@0.75).
+🔑 **A Nav2 goal spends most of its time in the ramp, so its MEAN speed is far below `max_vel_x`** —
+quote the mean, not the cap, when picking which odom ratio applies.
+
+## 🔴🔴 THE SIGN BUG — FOUND, FIXED, VERIFIED ON THE FLOOR
+**`mode.hpp:158` passed `/cmd_vel` `angular.z` STRAIGHT THROUGH to the PX4 setpoint.** ROS REP-103 is
+**FLU** (+z = CCW = **LEFT**); PX4 is **FRD** (+ = CW = **RIGHT**). The conversion is a negation and it
+was missing ⇒ **every commanded turn went the WRONG WAY.**
+🔑 **Caught by the operator's eye, not by a log:** commanded +0.4 rad/s, he reported "Right".
+⛔ **T3 WOULD HAVE STEERED INTO THE OBSTACLE IT WAS ROUTING AROUND** — and the reflex only looks
+straight ahead, so it would not reliably have saved it. It would have read as a planner failure.
+✅ **FIXED + BUILT + VERIFIED 09-19:** negate on ingest. Verification arc (+0.4 rad/s, 0.25 m/s, 2 s):
+FC gyro now **−0.102 → −0.221** where the same command previously gave **+0.106 → +0.160**, and the
+wheel differential inverted (right side fast = left turn). Operator confirmed visually.
+⚠️ **Straight-line results are unaffected** — Phase 1 never exercised the sign.
+
+## 🔑 YAW: THE 08-02 CURVE DID NOT SURVIVE THE RPM MIGRATION
+`RO_YAW_RATE_CORR` **1.8 → 14.8 → 7.4** this session. The 14.8 write restored the 08-02 FF *ratio*
+(`CORR/RO_MAX_THR_SPEED` = 3.00) — **correct arithmetic, dead premise**: the 08-02 plant (friction
+deadband below steer 0.45, min yaw 0.67 rad/s) was measured in **TORQUE mode**, and G2 moved all four
+ESCs to **RPM mode** on 09-13. At 14.8 the axis over-drove ~2× (0.4 cmd → 0.828 achieved; 1.0 → 1.93,
+tripping the 2.0 rad/s guard). **7.4 is in force.**
+⛔⛔ **`RO_YAW_RATE_I` STAYS 0** — the 21× windup path. Bounded by design with I=0.
+🔑🔑 **EVERY YAW NUMBER MEASURED BEFORE 09-13 IS SUSPECT. Re-measure the plant in MANUAL
+(`tools/yaw_response_log.py`) — it bypasses the rate controller AND costs no eph budget.**
+
+## 🔑 HALL FEEDBACK — OPERATOR'S CORRECTION, AND IT RETIRES A "FAULT"
+⛔ **ZERO RPM FROM A STATIONARY HUB MOTOR IS EXPECTED, NOT A FAULT SIGNATURE.** These are
+hall-sensored hubs: if the rotor never breaks away there is nothing for the halls to count, so the
+speed loop servos on a measurement that cannot change and simply pushes current. That is what the
+0.4 rad/s pivot captured (RR **0 rpm at up to 18.8 A for 3.5 s**) — a test-design artifact, not a
+diagnosis. 🔑 **LOW YAW COMMANDS ARE STRUCTURALLY UNSERVOABLE FROM REST ON THIS DRIVETRAIN.**
+⇒ ⛔ **NO MORE PIVOTS FROM REST.** Turn while ROLLING: in an arc the halls are already transitioning
+and yaw is a small *difference* between two live wheel speeds.
+✅ **PROVEN: RR is LIVE in an arc** (26 rpm, later 59→84 rpm at 12-15 A) where it was pinned at 0 in
+the pivot. ⇒ **T3 is not necessarily gated on the motors.**
+
+## 🔧 MOTORS — OPERATOR DECISION: REPLACE THE THREE OLD ONES (RF, FL, RR)
+His evidence, which beats mine: **RL was recently replaced and outperforms the rest**, and RL/RR sit
+on the SAME axle under the SAME load — new turned, old stalled. ⚠️ **The rear also carries more
+stress because the suspension sits LOWER at the rear (suspension variation).** ⇒ treat ride height as
+its own item: new motors will still carry the extra rear load, they will just cope.
+🔑 My "rear-vs-front load, so the motors are innocent" reading was half right and the wrong
+conclusion. ⛔ Not re-litigated.
+
+## ⬜ OPEN, AND THE REAL HEADLINE FOR NEXT SESSION
+🔴 **YAW RESPONSE IS NOT REPRODUCIBLE RUN-TO-RUN AT THE SAME COMMAND.** Same `CORR` 7.4, single steps
+from rest: **0.4 → weak · 0.7 → STRONG (0.927 rad/s, all four live) · 1.0 → weak (0.156)**. The 1.0
+run drew barely above idle (9.9→13 A vs 18.8 A in the 0.4 run) ⇒ **the setpoint reaching the ESCs was
+small, they were not fighting a load.** ⛔ NOT heat: ESC temps **RF 44.4 · FL 43.1 · RR 47.1 · RL 45.9 °C**,
+pack 24.7-24.9 V — a VESC does not derate until ~85 °C. **UNEXPLAINED. Do not tune on top of it.**
+⬜ Arc yaw also under-delivers: **0.16-0.22 rad/s achieved vs 0.4 commanded (~40-55%)**, with the
+RIGHT side (RF+RR, both old) under-running its commanded speed while the left side tracks.
+
+## ⏭ RESUME HERE (2026-09-19)
+1. ⛔ **No pivots from rest.** Arcs only.
+2. **Re-measure the yaw plant in MANUAL** (`yaw_response_log.py`) — no eph cost, bypasses the rate
+   controller, replaces every pre-09-13 yaw number.
+3. **Then T3** (the sign fix makes it meaningful) — or the straight-line work first: the **standoff
+   speed ladder closes the LAST open safety number** (≥300 mm above ~0.11 m/s) and needs no turning.
+4. ⚠️ **T4 would pass too easily today** — "does not spin" is trivially satisfied by an axis that
+   cannot pivot. **Mark it a WEAK PASS if run before yaw is sound.**
+
+## 🔑 OPERATIONS LEARNED TODAY — these cost us four runs
+🔴🔴 **AFTER `COM_DISARM_PRFLT` AUTO-DISARMS (10 s idle), ch5 STAYING UP WILL NOT RE-ARM. PX4 NEEDS A
+LOW→HIGH TRANSITION — CYCLE ch5 DOWN THEN UP.** The switch read 1988 (up) while the FC read disarmed.
+🔴 **`eph` LIVES ON `/fmu/out/vehicle_local_position_v1`** — the UNVERSIONED name does not exist here
+and reads as a dead topic. Same trap as `vehicle_status_v1`.
+🔑 **eph SEQUENCING IS EVERYTHING:** FC booted 11:41, bridge started 11:51 ⇒ **eph 238 m**. Rebooted
+and started the bridge immediately ⇒ **eph 0.202 m**. Velocity-only aiding bounds velocity error, NOT
+position, so **eph does NOT converge back down — reboot and start the bridge together.**
+⚠️ Budget observed: 0.202 m at 11:55 → 3.44 m by 13:15 (~80 min).
+🔑 **The reflex/preflight corridor test is `|y| <= 0.275 m` (mode.hpp `kCorridorHalfWidth`), NOT a bare
+±20° sector** — at 5 m that is ±3°. A cone without the corridor test reads objects BESIDE the path
+(3.2 m vs the true 4.9 m) and produced a bogus "3× odometry disagreement" this session.
+⛔ `pkill -f <pattern>` self-kills (exit 144) — it is in the index and I did it anyway.

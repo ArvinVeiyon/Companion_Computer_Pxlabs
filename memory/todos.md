@@ -184,6 +184,48 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
+## ⏭⏭ START HERE — 2026-09-19 (FLOOR). **PHASE 1 PASSED. A SIGN BUG IS FIXED. YAW IS THE BLOCKER.**
+**Scope: finish M2 (T3·T4·T5), camera-only. ⛔ NO LIDAR — the STL-19 is assigned to the DRONE.**
+
+✅✅ **PHASE 1 PASSED n=2, TAPE-ADJUDICATED — NAV2 DROVE AN ARMED ROVER.** 1.380 m tape vs a 1.5 m
+goal ⇒ **−0.120 m, inside ±0.20**; lateral +0.013/+0.017; **`angular.z` max 0.053, ZERO in-place
+rotation**; reflex silent. Config = **`nav2_forward_flat.yaml`** (voxel OFF + `PreferForward`/`Twirling`).
+✅ **Blocker 3 CLOSED for straight-line work** (a disarmed probe with `/odom` frozen commanded zero
+rotation for 21 s instead of spinning).
+
+🔴🔴 **SIGN BUG FOUND AND FIXED — `mode.hpp` passed `/cmd_vel` `angular.z` UNNEGATED.** ROS FLU (+ =
+LEFT) vs PX4 FRD (+ = RIGHT) ⇒ **every commanded turn went the WRONG WAY.** ⛔ **T3 would have steered
+INTO the obstacle.** Caught by the OPERATOR'S EYE, not a log. ✅ fixed, rebuilt, **verified on the
+floor** (gyro sign inverted; right-side-fast = left turn). ⚠️ straight-line results unaffected.
+
+🔴 **THE BLOCKER IS NOW YAW, AND IT IS NOT REPRODUCIBLE.** Same `RO_YAW_RATE_CORR` 7.4, single steps
+from rest: **0.4 weak · 0.7 STRONG (0.927 rad/s) · 1.0 weak (0.156)**, the 1.0 run drawing barely
+above idle ⇒ the setpoint reaching the ESCs was small. ⛔ **NOT heat** (ESC temps 43-47 °C, pack
+24.8 V; VESCs derate ~85 °C). **UNEXPLAINED — do not tune on top of it.**
+🔑🔑 **THE 08-02 YAW CURVE DIED WITH THE RPM MIGRATION.** `CORR` went 1.8 → 14.8 (restored the old FF
+*ratio* — right arithmetic, dead premise) → **7.4, in force**. ⛔⛔ `RO_YAW_RATE_I` STAYS 0.
+⏭ **Re-measure the plant in MANUAL (`tools/yaw_response_log.py`) — bypasses the rate controller and
+costs NO eph budget.**
+
+⛔⛔ **NO MORE PIVOTS FROM REST.** These are hall-sensored hubs: **zero rpm from a stationary rotor is
+EXPECTED, not a fault** — nothing for the halls to count, so the loop just pushes current (RR sat at
+0 rpm / 18.8 A for 3.5 s). ✅ **RR is LIVE in an ARC** (59→84 rpm) ⇒ **T3 may not be gated on motors.**
+🔧 **OPERATOR DECISION: replace the 3 old motors (RF, FL, RR).** RL was recently replaced and
+outperforms them on the same axle under the same load. ⚠️ **Rear suspension sits LOWER** ⇒ ride height
+is its own item; new motors will still carry that load.
+
+⏭ **NEXT, IN ORDER:** Manual yaw characterisation → **standoff speed ladder** (straight-line, closes
+the LAST open safety number: ≥300 mm above ~0.11 m/s) → T3 → T4 → T5.
+⚠️ **T4 would pass too easily today** — "does not spin" is trivial for an axis that cannot pivot.
+**Mark it a WEAK PASS if run before yaw is sound.**
+
+🔑 **OPS THAT COST US FOUR RUNS:** ⛔ **after `COM_DISARM_PRFLT` auto-disarms, ch5 STAYING UP WILL NOT
+RE-ARM — CYCLE IT DOWN THEN UP** · `eph` is on **`vehicle_local_position_v1`** (versioned, like
+`vehicle_status_v1`) · **eph sequencing: reboot the FC and start the bridge TOGETHER** (10 min apart
+gave eph 238 m; together gave 0.202 m — velocity aiding does not bound position, so it never
+converges back) · the reflex corridor test is **`|y| <= 0.275 m`, not a bare ±20° sector.**
+→ full detail: `project_rover_autonav` **2026-09-19**
+
 ## ⏭⏭ START HERE — 2026-09-16. **G3 CLOSED. NEXT IS T3, AND T3 IS A FIRST NAV2 BRINGUP.**
 
 🔑🔑 **TONIGHT ALREADY PROVED HALF THE NAV2 CHAIN.** `t2_straight_goal_test.py` drives by publishing
