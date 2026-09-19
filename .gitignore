@@ -3,3 +3,14 @@ logs/
 *.tmp
 install.sh
 bootstrap.sh
+
+# VESC tooling scratch dumps, 2026-09-19.
+# tune_esc.py writes its temporaries into configs_live with a LEADING UNDERSCORE
+# (see tune_esc.py:215, `_probe_app_<stamp>.xml`) -- _probe_, _chk_, _setfield_,
+# _m2_, _map_ttyACM*, _rrhall_. Those are throwaway.
+# DELIBERATELY NARROW: configs_live is the AUTHORITATIVE record of what was read
+# back off real ESCs (see its README), and the vesc_mcconf_* / vesc_appconf_*
+# pre/post/readback triplets ARE the audit trail for every write to a wheel.
+# Do NOT widen this to configs_live/*.xml -- that would silently stop tracking
+# the evidence of what each ESC is carrying.
+bldc_can/configs_live/_*.xml
