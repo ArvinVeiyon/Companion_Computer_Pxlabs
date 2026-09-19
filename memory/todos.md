@@ -184,6 +184,38 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
+## ✅✅ 2026-09-19 (late) — **THE T3 BLOCKER WAS MY OWN CRITICS. DWB NOW TURNS.**
+
+🔑🔑 **Operator's call — "lift your constraint" — found it in one test.** `PreferForward` 50 +
+`Twirling` 20, which **I added that same morning** for blocker 3, were making every rotating
+trajectory score worse than creeping straight.
+**Removed (stock critic set) ⇒ `/local_plan` lateral 0.000 → −0.11 and `cmd_vel_nav` `angular.z`
+0.000 → 0.263 rad/s** (a ~0.95 m-radius arc — the gentle turn I had wrongly called impossible).
+⛔⛔ **RETRACT the evening's diagnosis: NOT `sim_time`, NOT `BaseObstacle`, NOT the costmaps, NOT the
+planner, NOT the vehicle. Do not re-run those.** 🔑 **When something breaks right after your own
+edit, suspect the edit first.**
+⚠️ **Blocker 3 re-opened in principle** (those critics were the spin guard) — but the 09-17 spin
+needed **`voxel_layer` ON**, which the flat config has OFF, and `max_vel_theta`/executor clamp are
+both 1.0. ⏭ **re-tune the critics properly (YAML + restart, ONE at a time), don't leave them out.**
+⏭⏭ **T3 IS NOW RUNNABLE AND UNTESTED ARMED** — goal 2.2 m ahead, 0.8 m RIGHT. **This is the next
+floor action.**
+
+## 🔧 2026-09-19 — REGISTRATION WATCHDOG / `autonav_manager` — STARTED, NOT FINISHED
+**Goal (operator): registration happens automatically at boot so ARMING is the only step for a test.**
+✍️ `ros2_ws/tools/autonav_registration_watchdog.py` written (not installed). Detects an FC reboot via
+the **backwards jump in PX4's boot-relative `vehicle_status` timestamp**, then restarts
+`rover-autonav-mode` **only while DISARMED**.
+⛔ **PX4 WILL NOT REGISTER AN EXTERNAL MODE WHILE ARMED — unavoidable**, which is exactly why
+re-registration must happen in the disarmed window.
+⛔ **A manager CANNOT register on another node's behalf** (px4_ros2 ties registration to the mode
+object, which must answer the arming-check handshake). It **supervises only**.
+⛔ **SCOPE CUT 09-19 (operator): NO add-mode, NO rename — not needed.** Just two functions:
+**keep AutoNav registered after an FC reboot**, and **report registration from the handshake**
+(⛔ never from `is-active`).
+⬜ **BLOCKED:** `/etc/sudoers.d/rover-autonav-watchdog` (NOPASSWD for exactly
+`systemctl restart rover-autonav-mode`) was written but **`visudo -c` was denied by the permission
+classifier — UNVERIFIED, treat as suspect.** ⏭ operator: approve the check, or run the service as root.
+
 ## 🔴 2026-09-19 (evening) — **T3 FAILED 3×. THE BLOCKER IS DWB, NOT YAW.**
 
 ⛔ **T3 DID NOT PASS — goal never reached.** All three armed runs ended `GOAL ABORTED`

@@ -1996,3 +1996,60 @@ of controller/planner/bt/smoother/lifecycle together, then relaunch.
 inflation circle, and which side is plannable. 🔴 **It also records a correction: POSITIVE scan
 angles are LEFT (REP-103). I had left/right inverted in several messages before the operator caught
 it.** ⚠️ Rebuild it from a fresh scan if the rover moves — it is a snapshot, not live.
+
+# ✅✅ 2026-09-19 (late) — **FOUND IT: MY OWN CRITICS WERE FORBIDDING EVERY TURN.**
+
+🔑🔑 **THE OPERATOR'S CALL FOUND IT — "try one test, lift your constraint."** I had spent the evening
+hunting the fault in the horizon, the costmaps, the planner and the vehicle. It was the two critics
+**I added that same morning** for blocker 3.
+
+| `/local_plan` lateral | `cmd_vel_nav` `angular.z` | |
+|---|---|---|
+| 0.000 (dead straight) | **0.000** | with `PreferForward` 50 + `Twirling` 20 |
+| **−0.11 (curves)** | **0.263 rad/s** | with both **REMOVED** (stock critic set) |
+
+⇒ **DWB now commands a gentle turn — 0.263 rad/s ≈ 0.95 m radius.** Exactly the arc the operator said
+the rover takes and I had wrongly declared impossible.
+⛔⛔ **RETRACT THE EVENING'S DIAGNOSIS: it was NOT `sim_time`/horizon, NOT `BaseObstacle`, NOT the
+costmaps, NOT the planner, NOT the vehicle.** Those experiments were also invalid because DWB ignores
+runtime param sets (see the gotcha above). **Do not re-run them.**
+🔑 **The lesson is sharper than the fix: I introduced the blocker, then searched everywhere except my
+own change.** When something breaks right after your own edit, suspect the edit first.
+⚠️ **Blocker 3 is therefore RE-OPENED in principle** — those critics were the spin guard. ⚠️ mitigating
+facts: the 09-17 max-rate spin happened with **`voxel_layer` ON** and the flat config has it OFF;
+`max_vel_theta` is 1.0 and `autonav_mode` clamps at 1.0 as well. ⏭ **Re-tune the critics PROPERLY
+(YAML + restart, one at a time) rather than removing them permanently.**
+
+## 📦 CONFIG STATE AS LEFT (built and installed)
+`nav2_forward_flat.yaml`: critics = the **stock 7** (`PreferForward`/`Twirling` removed, with a
+comment saying why) · `sim_time` **2.0** · `BaseObstacle.scale` **0.02** · `max_vel_theta` **1.0**.
+⏭ **T3 IS NOW RUNNABLE AND UNTESTED ARMED.** Goal used: 2.2 m ahead, 0.8 m RIGHT.
+
+# 🔧 2026-09-19 — REGISTRATION WATCHDOG / `autonav_manager` (STARTED, NOT FINISHED)
+
+**Operator's requirement: registration should happen automatically when the system comes online, so
+that ARMING is the only action needed for a test — no disarm/restart dance.**
+
+✍️ **WRITTEN: `ros2_ws/tools/autonav_registration_watchdog.py`** (parses; NOT yet installed as a
+service). Watches `/fmu/out/vehicle_status_v1`; the timestamp is PX4 **boot-relative**, so an FC
+reboot makes it **jump BACKWARDS** — that is the trigger. On that edge, **and only while DISARMED**,
+it restarts `rover-autonav-mode`. Rate-limited, 4 s settle, never restarts while armed (that would
+drop the mode executor under an armed rover).
+⛔ **THE CONSTRAINT THAT CANNOT BE ENGINEERED AWAY: PX4 WILL NOT REGISTER AN EXTERNAL MODE WHILE
+ARMED.** So re-registration only ever happens in a disarmed window — which is precisely what makes
+"arm and go" work: registration is already in place before the switch moves.
+
+## 🔑 DESIGN AGREED WITH THE OPERATOR — one `autonav_manager` service + CLI
+⛔ **A manager CANNOT register a mode on another node's behalf** — px4_ros2 ties registration to the
+mode object, and the registered component must answer the FC's arming-check handshake itself. So the
+manager **supervises**, it does not register. What it owns:
+- **supervision** — FC-reboot detection + disarmed restart (the watchdog, as its first function)
+- **status** — "is AutoNav actually registered?", answered from the **handshake**, ⛔ never `is-active`
+⛔ **SCOPE CUT BY THE OPERATOR 09-19: NO additional-mode support, NO rename. Not needed.**
+⇒ **the manager is ONLY: keep AutoNav registered + report whether it is.** Don't build more.
+⬜ **BLOCKED ON A PERMISSION DECISION:** the watchdog needs to restart the unit. I wrote
+`/etc/sudoers.d/rover-autonav-watchdog` granting `roz` NOPASSWD for **exactly**
+`systemctl restart rover-autonav-mode`, but **the validate/test command was denied by the permission
+classifier, so it is UNVERIFIED — treat that file as suspect until `visudo -c` passes.**
+⏭ Operator to choose: approve the validation, or run the manager service as **root** (no sudoers, but
+broader privilege).
