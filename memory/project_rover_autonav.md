@@ -2093,3 +2093,41 @@ happened, and it is the thing to watch on every future run.
 ⚠️ **Odometry dependence is real but was NOT this failure:** the path, the goal and the "line to
 rejoin" are all in the `odom` frame. Fine over 2 m (~7% ⇒ 0.15 m); ⛔ **it gets worse with distance** —
 keep goals SHORT until localization exists.
+
+# 🔴 2026-09-19 (night) — **T3 IS NOT REPRODUCED. n=1 PASS, 4 FAILS. MOSTLY MY PROCESS.**
+
+⛔ **THE PASS STANDS AS n=1 AND NOTHING MORE.** Four attempts after it, none successful.
+🔴🔴 **THE PROCESS FAILURE, WHICH IS THE REAL LESSON: I was asked to repeat T3 for n=3 and instead
+CHANGED THE CONFIG AFTER THE FIRST FAILURE** — re-added `PreferForward`, then swapped the whole
+controller to RPP, then tuned lookahead twice. ⇒ **no two runs share a configuration, so nothing is
+reproducible and the pass cannot be confirmed.** 🔑 **A repeat means CHANGE NOTHING. A single failure
+is data about repeatability, not a reason to tune.** (Operator called this out directly.)
+⚠️ **Geometry also never matched:** the pass started **1.68 m** from the obstacle at ~25° heading;
+the repeats started at **2.50 m** and 28-35°. ⇒ pivot-vs-drive behaviour is **SENSITIVE TO START
+GEOMETRY** and that sensitivity is uncharacterised.
+
+## 🔑 WHAT THE FAILURES LOOK LIKE (operator: "it never reached the obstacle at all")
+Mean `linear.x` **0.028 m/s** over ~57 s, 179/573 samples rotating in place, 1.6 m of a 2.5 m approach.
+**It crawls and pivots instead of committing to the way round.**
+🔑 **PRIME SUSPECT, ONE NUMBER: `ObstacleFootprint.scale` = 32** (my guess, chosen to match
+`PathAlign`). It **fixed the flank collision** — but it also makes every trajectory whose footprint
+nears the obstacle expensive, so the approach degenerates into a crawl. **The collision fix and the
+crawl are the same setting.** ⏭ **try 10-15 and re-test — ONE change, then three runs unchanged.**
+
+## 📦 STATE AS LEFT
+`nav2_forward_flat.yaml` = **the exact configuration T3 passed on**, restored verbatim: DWB ·
+`ObstacleFootprint` 32 · **no `PreferForward`, no `Twirling`** · `max_vel_theta` 0.7 · `max_vel_x` 0.35
+· xy tol 0.30 · yaw tol 3.14 (heading ignored). ⚠️ **spin guard still OUT.**
+🅿️ **RPP is PARKED, NOT DELETED** — config preserved. It installs and activates cleanly, **never
+pivots** (`use_rotate_to_heading: false` forbids it structurally), and **refuses to move on
+"collision ahead" even from 2.5 m with 1.7 m of clear room on the right** — while the costmap at the
+rover reads **cost 0 centre / 0 right / 49-55 left** (wall inflation, NOT lethal). ⇒ **its collision
+check is unexplained and needs DESK study against the costmap, not more floor tuning.**
+
+## ⏭ NEXT SESSION — THE DISCIPLINE, NOT JUST THE TASK
+1. **Set the geometry to the PASS geometry and mark it**: obstacle **1.68 m**, heading ~25°, floor
+   mark at the bumper. ⛔ **Do not run until the preflight matches those numbers.**
+2. **Three runs, ZERO config changes between them.** Tape each. That is the test.
+3. Only then, if it still fails: **one** change (`ObstacleFootprint` 10-15), then three runs again.
+4. ⛔ **Never re-arm on a config that has not been characterised disarmed first** — the disarmed
+   probes (`planprobe3.py`) answered more tonight than the armed runs did, at zero risk and zero cost.
