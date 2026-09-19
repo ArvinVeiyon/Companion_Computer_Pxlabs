@@ -2131,3 +2131,24 @@ check is unexplained and needs DESK study against the costmap, not more floor tu
 3. Only then, if it still fails: **one** change (`ObstacleFootprint` 10-15), then three runs again.
 4. ⛔ **Never re-arm on a config that has not been characterised disarmed first** — the disarmed
    probes (`planprobe3.py`) answered more tonight than the armed runs did, at zero risk and zero cost.
+
+## 🔴🔴 VERDICT 2026-09-19 (night) — **THE T3 PASS WAS ACCIDENTAL. 1 SUCCESS IN 6.**
+**Repeated at MATCHED configuration AND matched geometry (1.62 m vs the pass's 1.68 m, heading 17.8°
+vs ~25°, goal moved to 3.0 m so it was actually reachable) ⇒ SAME FAILURE:** 177/303 samples rotating
+in place, `angular.z` pinned at the 0.7 cap on 284/303, mean `linear.x` **0.021 m/s**, and it turned
+AWAY from the obstacle (clearance 1.907 → 2.795). Operator disarmed it.
+⛔ **DO NOT TREAT T3 AS PASSED.** The operator called it: *"otherwise passed one is accidental."*
+
+🔑🔑 **MECHANISM — IT IS THE COMBINATION I LEFT IN PLACE, AND IT WAS NEVER TESTED BALANCED:**
+- **nothing penalises pivoting** (`PreferForward` AND `Twirling` both removed) ⇒ rotating is FREE
+- **`ObstacleFootprint` 32 makes forward motion near the obstacle EXPENSIVE** ⇒ driving is costly
+⇒ **DWB's cheapest option is to turn instead of drive.** The one pass needed a lucky start alignment
+where almost no turning was required.
+⏭ **THE UNTESTED COMBINATION, AND THE FIRST THING TO TRY: `PreferForward` ≈15 *TOGETHER WITH*
+`ObstacleFootprint` ≈12.** Every configuration tried tonight had one or the other, never both
+balanced. ⛔ Then THREE runs with nothing changed between them.
+
+⚠️ **ANOTHER TEST-DESIGN TRAP FOUND: the GOAL MUST CLEAR obstacle + `inflation_radius`.** At 1.62 m
+the obstacle sits ~1.97 m from `base_link`; +0.55 m inflation ⇒ **everything inside 2.52 m is
+unreachable**, so a 2.2 m goal made the PLANNER fail instantly (BT aborted 30 ms in, before the
+controller ever ran). 🔑 **A goal inside inflation looks like a controller failure and is not one.**
