@@ -184,6 +184,25 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
+## ✅✅✅ 2026-09-19 — **T3 PASSED (operator-adjudicated, n=1). FIX = `ObstacleFootprint` CRITIC.**
+
+🔴🔴 **THE RUN BEFORE IT "SUCCEEDED" AND STILL HIT THE OBSTACLE** — Nav2 said `GOAL SUCCEEDED`, the
+reflex was silent, and the **LEFT FLANK struck the bag** on the rejoin. ⛔⛔ **"REFLEX SILENT" = no
+contact IN THE FORWARD CORRIDOR ONLY. NO SIDE SENSING ⇒ a flank/rear strike is INVISIBLE. NEVER CALL
+T3/T4 FROM TELEMETRY — EYES OR TAPE.**
+🔑🔑 **ROOT CAUSE: `BaseObstacle` scores only the robot's CENTRE POINT — DWB was planning as a POINT
+ROBOT.** The centre cleared; the 0.73 m body did not (`base_link` is 0.385 m from the REAR, so a yaw
+swings the tail). **The operator spotted the geometry first.**
+✅ **FIX: `ObstacleFootprint` critic, scale 32** — scores the real footprint polygon swept along each
+trajectory. Stock plugin, no code.
+📋 **Conditions of the pass:** `ObstacleFootprint` 32 · `max_vel_theta` **0.7** · `max_vel_x` 0.35 ·
+`xy_goal_tolerance` 0.30 · **`yaw_goal_tolerance` 3.14 (heading IGNORED)** · progress 0.15 m/25 s ·
+⚠️ **`PreferForward`+`Twirling` still REMOVED — spin guard OUT.**
+📏 goal 2.2 m **STRAIGHT AHEAD** (⛔ don't set lateral goals — mine steered it into a wall; let Nav2
+pick the side): along-track 2.136 m, lateral −0.183 m, `angular.z` max 0.626, **no contact**.
+⏭ **n=1 only, distance odom-adjudicated, clearance eye-adjudicated — REPEAT n=3 + TAPE before
+closing T3.** ⏭ then T4, T5, and re-tune the removed critics.
+
 ## ✅✅ 2026-09-19 (late) — **THE T3 BLOCKER WAS MY OWN CRITICS. DWB NOW TURNS.**
 
 🔑🔑 **Operator's call — "lift your constraint" — found it in one test.** `PreferForward` 50 +

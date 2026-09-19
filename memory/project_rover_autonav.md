@@ -2053,3 +2053,43 @@ manager **supervises**, it does not register. What it owns:
 classifier, so it is UNVERIFIED — treat that file as suspect until `visudo -c` passes.**
 ⏭ Operator to choose: approve the validation, or run the manager service as **root** (no sudoers, but
 broader privilege).
+
+# ✅✅✅ 2026-09-19 — **T3 PASSED (operator-adjudicated). THE FIX WAS `ObstacleFootprint`.**
+
+⚠️ **THE RUN BEFORE THIS ONE "SUCCEEDED" AND STILL HIT THE OBSTACLE.** Nav2 reported
+`GOAL SUCCEEDED`, the reflex stayed silent — and the rover's **LEFT FLANK struck the bag** as it
+turned back toward the goal line. 🔴🔴 **"REFLEX SILENT" MEANS NO CONTACT *IN THE FORWARD CORRIDOR*
+(|y|≤0.275 m, ±20°) AND NOTHING MORE. THIS ROVER HAS NO SIDE SENSING — a flank or rear strike is
+STRUCTURALLY INVISIBLE to it.** ⛔⛔ **NEVER CALL T3/T4 FROM TELEMETRY. EYES OR TAPE ONLY.** I called
+that run a pass and was wrong.
+
+## 🔑🔑 ROOT CAUSE — DWB WAS PLANNING AS A POINT ROBOT
+**`BaseObstacle` scores only the robot's CENTRE POINT against the costmap** — no length, no width.
+The centre cleared the bag; **the 0.73 m body did not.** 🔑 `base_link` sits 0.345 m from the front
+but **0.385 m from the REAR**, so a yaw swings the tail sideways — the operator identified this
+("it collided with left side not front") before I did.
+✅ **FIX: add the `ObstacleFootprint` critic (scale 32, weighted with the path critics 32/24).** It
+scores the **actual footprint polygon swept along each trajectory**. Stock `dwb_critics`, no code.
+⚠️ `BaseObstacle` was left at 0.02 — it is near-useless at that weight and is NOT the protection.
+
+## 📋 THE CONDITIONS OF THE PASS — reproduce with these, they are not all settled
+`nav2_forward_flat.yaml`: **`ObstacleFootprint` 32** · `max_vel_theta` **0.7** (it slammed the 1.0
+clamp on 121/133 samples the run before and cut the corner) · `max_vel_x` **0.35** · `xy_goal_tolerance`
+**0.30** · `yaw_goal_tolerance` **3.14 = final heading IGNORED** · progress checker **0.15 m / 25 s**
+· ⚠️ **`PreferForward` + `Twirling` still REMOVED** (the blocker-3 spin guard is OUT).
+**Result:** goal 2.2 m STRAIGHT AHEAD, obstacle in the path. along-track **2.136 m**, lateral
+**−0.183 m** (right, tighter than the −0.270 of the colliding run), `angular.z` max **0.626**,
+reflex silent, **no contact (operator)**.
+⚠️ **n=1 · distance is ODOM-adjudicated (mean 0.159 m/s, where odom under-reads ~7%) · clearance is
+EYE-adjudicated.** ⏭ repeat for n=3 and tape it before treating T3 as closed.
+
+## 🔑 WHY "GOAL STRAIGHT AHEAD" IS THE RIGHT T3 SETUP
+⛔ My earlier lateral goals (0.8 m right) **steered the rover into a wall** — I was making the routing
+decision instead of the planner. **Goal straight ahead + obstacle in the path ⇒ Nav2 chooses the side
+with room.** That is both a truer test and safer.
+🔑 **Operator's framing, which is the behaviour to aim for:** drive the line → find the obstacle →
+deviate only as much as needed → **rejoin the line** → continue. The rejoin is where the collision
+happened, and it is the thing to watch on every future run.
+⚠️ **Odometry dependence is real but was NOT this failure:** the path, the goal and the "line to
+rejoin" are all in the `odom` frame. Fine over 2 m (~7% ⇒ 0.15 m); ⛔ **it gets worse with distance** —
+keep goals SHORT until localization exists.
