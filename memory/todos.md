@@ -28,15 +28,19 @@ is NOT a duplication.** Appendix A = *what to build*, Appendix B = *definition o
 layer-for-layer (L0 ✅ · L1 🔧 · L2-L5 ❌). Nothing to resolve, nothing to delete.
 
 ## 1. WHERE WE ACTUALLY ARE AGAINST THE REQUIREMENTS
+⚠️ **Table re-stated 2026-09-19. It had been frozen at its 09-04 wording for two weeks while G0, G2
+and G3 all closed underneath it** — R4 still read "not honoured", R7 still read "launch file stale".
+🔑 **If you close a gate, come back and edit this table. It is the first thing a fresh session trusts.**
+
 | Req | State | The one thing blocking it |
 |---|---|---|
-| **R1** localization | 🔴 **DEAD** — 1213 rejected / **0 accepted** (08-16) | live `camera_info` vs the calibration inside `house_map_v4.db` → **G1** |
-| **R2** perception | ✅ `/scan` · 🔧 `/scan_3d` exists but **nothing consumes it** | voxel layer + reflex `scan_topic` → **G4** |
-| **R3** planning | 🔧 `nav2_forward.yaml`/`nav2_mapped.yaml` written, **never run** | the ROOM (~2 m² free vs 0.41 m² rover) → **G3** |
-| **R4** control bridge | ✅ built · 🔴 **speed commands not honoured** (0.05→0.140, 0.25→~0.9) | open-loop `RO_MAX_THR_SPEED` sweep → **G2** |
-| **R5** safety | ✅ 1,2,3 proven · ❌ **R5.4 stopping buffer unverified** · ❌ **R5.5 companion-crash disarm NEVER TESTED** | **G2** / **G6** |
+| **R1** localization | 🔴 **DEAD** — **0 accepted of 20 on the map's OWN bag** (09-12) ⇒ fails at **GEOMETRY, not appearance** | ⛔ the `camera_info`-vs-DB-calibration lead is **DEAD** — do not re-run it. Needs a fresh pipeline diagnosis → **G1** |
+| **R2** perception | ✅ `/scan` · 🔧 `/scan_3d` exists but **nothing consumes it** | voxel layer + reflex `scan_topic` (#27) → **G4** |
+| **R3** planning | ✅✅ **Nav2 RAN 09-17/18 — Phase 0 passed DISARMED**, full chain to `/cmd_vel`. **Never run ARMED.** | cap DWB in-place rotation + a preflight-clean start position → Phase 1 |
+| **R4** control bridge | ✅✅ **CLOSED 09-13 — speed commands ARE honoured, all four in RPM mode** (`RO_MAX_THR_SPEED` 4.93) | nothing. ⛔ Every torque-mode rule is history; don't quote them |
+| **R5** safety | ✅ 1,2,3 proven · 🔧 **R5.4 has NUMBERS** (09-13: 0.52 s / 0.19 m / 1.28 m/s²) but the **≥300 mm standoff above ~0.11 m/s is UNMEASURED** · ❌ **R5.5 companion-crash disarm NEVER TESTED** | `collision_standoff_test.py` as a speed ladder (Session B) / **G6** |
 | **R6** compute ≤2.0 cores | ❌ **never measured as a total** — and RTAB-Map + voxel go on top | **G4** gate |
-| **R7** frames | ⚠️ **the MOUNT IS FINE — the LAUNCH FILE is stale** | update `cam_pitch`/`cam_roll` → **G0** |
+| **R7** frames | ✅✅ **CLOSED 09-11** — measured, corrected, verified at a wall | nothing. ⛔ don't re-derive |
 
 🔑 **R1's stated acceptance ("<0.3 m over a 20 m loop") CANNOT BE RUN HERE** — same room constraint
 that blocks T2. It needs a corridor or a re-scope; that is an operator decision, see **G3**.
@@ -77,31 +81,44 @@ WALL 09-11:** 5 parkings, fit RMS 0.3-3.4 mm, **inlier fraction 1.00 at every ra
 the scan**, coverage 0.80 vs the 0.35 threshold, and on operator tape at 1.12 m `/scan` read
 **1.4390 vs 1.4344 predicted (4.6 mm)** ⇒ **`front_overhang` 0.337 and scale 0.9845 BOTH STAND.**
 Full method, numbers and limits → `project_rover_autonav` 2026-09-11.
-**G1 — LOCALIZATION ALIVE (R1).** Live `camera_info` vs `house_map_v4.db`'s calibration. 🔑 **Adjudicate
-on the ACCEPTED-FIX COUNT — a changing `map→odom` with 0 accepted is drift, not health.** ⛔ Do not
-re-map the house first.
-**G2 — MOTION TRUTH (R4, R5.4, T1).** 🔴 **MEASURED OUT 2026-09-12 — IT IS NOW A DECISION, NOT A
-TEST.** ✅ closed: the sweep (d), answered in the negative — the constant does not exist; the odometry
-scale and sign; `si_motor_poles` (h); the R5.4 stopping numbers; **(b)** gate on `/scan` not `/odom`.
-⬜ open: **the duty-vs-torque control decision (blocks R4)** · the brake reflex wiring (R5.4, needs the
-VESC reflash) · the zero-dropout floor figure (a) · **T1 re-examined, not re-ticked**.
-⛔ Gate every moving test on MEASURED speed, never the command — and on DURATION, not stick position.
-→ the START HERE block above · `project_rover_autonav` 09-12.
-**G3 — VENUE DECISION → M2 PROVEN.** ✅✅✅ **CLOSED 2026-09-16 — T2 PASSED n=3 IN THE CORRIDOR,
+**G1 — LOCALIZATION ALIVE (R1).** 🔑 **Adjudicate on the ACCEPTED-FIX COUNT — a changing `map→odom`
+with 0 accepted is drift, not health.** ⛔ Do not re-map the house first. ⚠️ **Corrected 09-19: this
+used to name "live `camera_info` vs `house_map_v4.db`'s calibration" as the thing to do. That lead is
+DEAD** — 0 accepted of 20 on the map's OWN bag means it fails at **GEOMETRY, not appearance.**
+⛔ never lower `Vis/MinInliers`. → `indoor_mapping_slam` §17.
+**G2 — MOTION TRUTH (R4, R5.4, T1).** ✅✅ **CLOSED END TO END 2026-09-13 — rewritten 09-19; it used
+to read "IT IS NOW A DECISION, NOT A TEST", which was the dead torque-vs-duty framing.** All four
+ESCs are in **RPM mode**, tuned and floor-validated under load; `RO_MAX_THR_SPEED` **4.93**; odometry
+scale and sign settled; `si_motor_poles` settled; R5.4 has its numbers.
+⬜ **What is left is NOT part of the gate:** the brake reflex wiring (R5.4 — the reflex still only
+zeroes the setpoint; the durable fix needs a VESC **firmware** change) · the zero-dropout floor
+figure · **T1 re-examined, not re-ticked**.
+⛔ Gate every moving test on MEASURED speed, never the command. *(The old tail "— and on DURATION,
+not stick position" was a TORQUE-MODE rule and is deleted.)* → `project_rover_autonav` 09-13.
+**G3 — VENUE DECISION → T2 PROVEN** *(title corrected 09-19: the gate closed on the venue + T2, **not**
+on M2 — T3/T4/T5 are still ahead).* ✅✅✅ **CLOSED 2026-09-16 — T2 PASSED n=3 IN THE CORRIDOR,
 TAPE-ADJUDICATED.** Taped 2.130 / 2.025 / 2.000 m against a 2.0 m goal at 0.15 / 0.25 / 0.75 m/s
 ⇒ error +0.130 / +0.025 / 0.000 m, all inside ±0.20 m, **reflex silent on all three.**
 → `bldc_can/evidence/t2_autonav_floor_20260916.md` · `project_rover_autonav` 09-15/16.
-🔴🔴 **BUT THE STOP WARNING BELOW WAS NOT CLEARED — IT WAS BYPASSED.** The stop at `RO_DECEL_LIM` 5
-is **still unmeasured**, and the 0.75 m/s run **exceeded the `autonav_reference.md` §13 speed
-permission** without re-running `collision_standoff_test.py` (operator-directed, after the constraint
-was stated). 🔑 **T2 DOES NOT TEST THE REFLEX — it drives at NOTHING**; a silent reflex is the pass
-criterion, not evidence the reflex works at speed. ⛔ **AND WHEEL RPM CANNOT MEASURE THE STOP** — the
-signal is non-physical through it (`autonav_reference.md` §13b); needs `/scan`-at-a-wall or tape.
-🔴🔴 **ORIGINAL WARNING, STILL LIVE — MEASURE THE STOP AT `RO_DECEL_LIM` 5:** the reflex's 0.69 m
-clearance was sized against a 0.19 m stop, and since 09-14 the reflex rides the SAME throttle ramp
-as the manual stick (it publishes a fake `ManualControlSetpoint`), so its stop is no longer the fast
-one. ⚠️ `RO_SPEED_LIM` does NOT cap Manual — full stick is 4.93 m/s, which a corridor makes
-reachable. Preflight = `tools/preflight_scan_check.py` (passive, mirrors the reflex sector/thresholds).
+🔴 **THE SPEED PERMISSION WAS BYPASSED, AND THAT PART STANDS:** the 0.75 m/s run **exceeded the
+`autonav_reference.md` §13 permission** without re-running `collision_standoff_test.py`
+(operator-directed, after the constraint was stated). 🔑 **T2 DOES NOT TEST THE REFLEX — it drives at
+NOTHING**; a silent reflex is the pass criterion, not evidence the reflex works at speed.
+⇒ **THE ≥300 mm STANDOFF IS STILL UNMEASURED ABOVE ~0.11 m/s. That is the live item.**
+⛔ **AND WHEEL RPM CANNOT MEASURE A STOP** — the signal is non-physical through it
+(`autonav_reference.md` §13b); needs `/scan`-at-a-wall or tape.
+
+✅✅ **THE `RO_DECEL_LIM`=5 STOP IS CLOSED — 2026-09-18, BY ARITHMETIC. ⛔ DO NOT BOOK FLOOR TIME.**
+The concern was real: since 09-14 the reflex rides the SAME throttle ramp as the manual stick (it
+publishes a fake `ManualControlSetpoint`), so its stop is no longer the fast one, and the 0.69 m
+clearance was sized against a 0.19 m stop taken at `RO_DECEL_LIM` **−1**. **The arithmetic covers
+exactly that path:** slew = `RO_DECEL_LIM ÷ RO_MAX_THR_SPEED` = 5 ÷ 4.93 = **1.01 /s** ⇒ at 0.75 m/s
+the rover sits at 0.152 throttle, drains in **0.15 s**, and adds **0.057 m** (at 0.25 m/s: 6 mm).
+Worst case **~0.25 m against 0.69 m.** The 08-14 half-metre came from the OLD divisor **0.60**, not
+from the decel value. → `autonav_reference.md` §13 (09-18) · `px4_rover_control_scope` §RAMP ARITHMETIC.
+⚠️ **STILL LIVE AND UNRELATED: `RO_SPEED_LIM` does NOT cap Manual** — full stick is 4.93 m/s, which
+a corridor makes reachable.
+Preflight = `tools/preflight_scan_check.py` (passive, mirrors the reflex sector/thresholds).
 🗄 superseded options were: corridor (recommended) ·
 re-scope T2 to 0.8 m · or drop this room as the M3 target. Then **T2 → T3 → T4 → T5** = M2 done.
 ⚠️ T3+ need turning, so **S3 (yaw open/closed) gates them.**
@@ -113,30 +130,59 @@ re-scope T2 to 0.8 m · or drop this room as the M3 target. Then **T2 → T3 →
 Nav2; decide it consciously **before** building, it sets whether RTL is PX4's or ours).
 
 ## 4. ⏸ PARKED — real, but NOT on the requirements critical path. Do not let these set the agenda.
-WFB block (**only action left is HW: reseat drone NIC-A ant0**) · vision_streaming node fixes (8b,
-07-30 item 3) · camera bitrate / v2.3.0 · multicam Phase D · doc-fix items (#5 ch157→ch161, P5
-kill-switch doc) · #7 aide.db · #17 delete `camera_sw_node_obsolute.py` · #14 PAT rotation
+WFB block (**only action left is HW: reseat drone NIC-A ant0 = #22**) · vision_streaming node fixes
+(8b, 07-30 item 3) · camera bitrate / v2.3.0 · multicam Phase D · doc-fix #5 (ch157→ch161) ·
+#7 aide.db (⚠️ **still present, 117 MB, verified 09-19**) · #17 delete `camera_sw_node_obsolute.py`
+(⚠️ **still present, verified 09-19 — path corrected below**) · #14 PAT rotation
 (🔴 **except the operator browser-revoke, which stays live**).
+*(P5 kill-switch doc-fix was here — ✅ DONE 09-12, `ros2_ws` `6506bdb`. Removed 09-19.)*
 
 ---
 
 ## ⏸ PARKED 2026-09-09 BY THE OPERATOR — brake work, resume AFTER AutoNav
 
-The RC brake is DONE and measured (0.69 m/s², stops in 0.30–0.50 m from ~0.8 m/s, loaded, on the
-floor). → `codex-work/bldc_can/evidence/brake_floor_test_20260909.md`. Three loose ends, none
-blocking AutoNav:
+🔴 **THE 09-09 BRAKE FIGURES IN THIS BLOCK WERE SUPERSEDED TWICE — corrected 09-19.** The block used
+to read "0.69 m/s², stops in 0.30–0.50 m from ~0.8 m/s". **Current, floor-validated (09-13, all four,
+stick only): 0.52 s / 0.19 m / 1.28 m/s².** ⛔ Do not quote the 09-09 numbers.
+→ `codex-work/bldc_can/evidence/brake_floor_test_20260909.md` is the OLD run; the 09-13 numbers live
+in `esc_config_audit` §THE BRAKE PATH. Loose ends, none blocking AutoNav:
 
-1. **`codex-work` IS UNCOMMITTED** — 5 modified + 11 new files (both evidence docs,
-   `companion_can_driver_status.md`, `rc_configuration.md` §6, four `diag/` tools, three memory
-   files). **The PXLABS firmware session cannot pull any of it.** Commit + push when convenient.
-2. ✅ **MAVLINK IS BACK — 2026-09-10, came back on its own.** All params read; `UAVCAN_EC_FAIL5`
-   = 0, `RC3_MAX` = 1974.0, `RC3_REV` = 1.0, `RC3_TRIM` = 1487.5 (unchanged), `RO_MAX_THR_SPEED`
-   = 0.6. **G2 is no longer blocked.** ⚠️ Cause never identified — it may recur.
-3. **One clean coast-to-stop** — the coast baseline is n=2, neither segment ran to a stop, so the
-   "3.4× better than coasting" and "saves 1.4 m" figures are PROVISIONAL. The braked figures are not.
-   Two minutes: spin up, throttle to neutral with ch3 at the bottom stop, roll out untouched.
+1. **`codex-work` has unpushed/untracked work** — ⚠️ **re-checked 09-19: `master` is ahead of
+   `origin/master` by 1, plus ~20 untracked `bldc_can/configs_live/*.xml` ESC dumps from the 09-16/17
+   sessions.** (The old "5 modified + 11 new files" list was from 09-09 and no longer describes the
+   tree.) **The PXLABS firmware session cannot pull what is not pushed.** Commit + push when convenient.
+2. **One clean coast-to-stop** — still wanted, but the reason changed: the 09-12 floor run gave coast
+   **0.46 m/s²** (0.70 m from 0.8 m/s) to a full stop, so the baseline is **n=1, not n=2**, and every
+   brake-vs-coast ratio rests on it. Two minutes: spin up, throttle to neutral with ch3 at the bottom
+   stop, roll out untouched.
+   *(The old "3.4× / saves 1.4 m provisional" wording was superseded by that run — removed 09-19.)*
+*(Item "MAVLINK IS BACK" was here — ✅ closed 09-10, G2 has since closed entirely. Removed 09-19.
+⚠️ the one fact worth keeping: the MAVLink outage's cause was NEVER identified, so it may recur.)*
 
-⚠️ `MEMORY.md` is **19.8 kB against its own 17 kB cap** — needs a compression pass.
+*(A line here claimed `MEMORY.md` was "19.8 kB against its own 17 kB cap" — **WRONG, removed 09-19.**
+17.1 kB is the recompaction TARGET, not the ceiling; the real cap is **24.4 kB and it truncates the
+tail silently**. See the 09-18/19 desk block below.)*
+
+## 🗂 2026-09-18/19 — DESK SESSION, NO FLOOR TIME. **The AutoNav plan below is UNCHANGED — go to it.**
+
+Paper only; nothing on the vehicle moved and no param was written. Three things closed:
+
+1. ✅✅ **`RO_DECEL_LIM`=5 CLOSED BY ARITHMETIC — ⛔ DO NOT BOOK A FLOOR RUN FOR IT.**
+   slew = 5 ÷ 4.93 = 1.01/s ⇒ **0.057 m at 0.75 m/s**, worst case ~0.25 m vs the reflex's 0.69 m.
+   → `px4_rover_control_scope` §RAMP ARITHMETIC (which had already computed this on **09-14**).
+   ⚠️ **STILL OPEN AND OFTEN CONFUSED WITH IT: the ≥300 mm reflex standoff above ~0.11 m/s.**
+   That one is real, unmeasured, and needs `collision_standoff_test.py`.
+2. ✅ **MEMORY RECONCILED.** `#22/#25/#26/#27` now exist here (they were cited in `MEMORY.md` for
+   weeks while this file stopped at 21). Brake detail → `esc_config_audit` §THE BRAKE PATH; param
+   tooling → `px4_rover_control_scope`; boot-clock trap → `this_machine`.
+3. 🔴 **`MEMORY.md` HAS A HARD 24.4 KB CAP THAT TRUNCATES ITS TAIL SILENTLY** — no error, no marker.
+   17.1 KB was never a limit (it is 0.7 × cap, the recompaction target). Index is ~21.8 KB after
+   trimming; **⬜ still ~2 KB above the warn line.** Remaining fat: `[MOTION/SAFETY]`,
+   `[MEMORY_FILES]`, `[CURRENT STATE]`.
+
+⏭ **NEXT ON THE VEHICLE IS UNCHANGED: Phase 1 of the plan below.** ⛔⛔ **NEVER ARM WITH `voxel_layer`
+ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
+🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
 ## ⏭⏭ START HERE — 2026-09-16. **G3 CLOSED. NEXT IS T3, AND T3 IS A FIRST NAV2 BRINGUP.**
 
@@ -199,109 +245,71 @@ plan CAN be folded — Phases 0/1/2 are one session with no teardown.
 and the node does not notice — **prove it by the LOG LINE, never by a message rate** (→
 `project_rover_autonav` 09-15/16).
 
-## 🗄 (previous) START HERE — 2026-09-12 (floor). **G2 IS MEASURED OUT. THE BLOCKER IS NOW A DECISION.**
+## 🗄 REMOVED 2026-09-19 — THE TWO 09-12 "START HERE" BLOCKS. **THEIR PREMISE IS DEAD.**
 
-🔴🔴 **WHAT STOPS US: PX4'S SPEED CONTROLLER CANNOT WORK AGAINST A TORQUE ACTUATOR, AND NO AMOUNT OF
-MEASURING CHANGES THAT.** Proven on the floor: at a constant stick the rover accelerates for as long
-as it is held, current flat. There is no throttle→speed mapping, so `RO_MAX_THR_SPEED` has no correct
-value. ⛔ **Nothing above M1 is safe until this is resolved** — a planner that commands m/s to a
-vehicle that integrates torque will overshoot every goal.
+⛔⛔ **They were built on "PX4's speed controller cannot work against a TORQUE actuator", and posed an
+operator decision between (A) duty mode and (B) rebuilding the loop in the companion. THAT WHOLE
+FRAME WAS OVERTAKEN ON 09-13:** all four ESCs were migrated to **RPM mode**, tuned and
+floor-validated under load, `RO_MAX_THR_SPEED` went 0.60 → **4.93**, and **G2 closed end to end.**
+🔑 **Every torque-mode rule those blocks taught is HISTORY — including "DURATION is the control, not
+stick position".** ⛔ Do not quote them; that is exactly what the deleted text invited.
+Historical detail, if ever needed: `project_rover_autonav` 09-12 and 09-13.
 
-### ⏭ THE DECISION (operator's, one of two — I can prepare either)
-**(A) MOVE THE ESCs TO DUTY MODE** so throttle means speed and PX4's model matches the hardware.
-⚠️ USB + VESC Tool per ESC, all four; VESC Tool over CAN is impossible. ⚠️ Re-validates nothing else —
-`erpm_to_ms`, the brake and the sign map all stand. 🔑 Cheapest path to a working `RO_MAX_THR_SPEED`.
-**(B) KEEP TORQUE MODE AND REBUILD THE LOOP** — stop leaning on the feedforward, close the loop on
-`/odom` velocity in the companion rather than trusting PX4's. ⚠️ More code, no reflash, and it keeps
-the ESC config that the brake work already depends on.
-
-### ✅ CLOSED BY THE FLOOR RUNS — do not re-run these
-- **(d) open-loop sweep** — answered in the NEGATIVE: the constant does not exist. ⛔ Don't calibrate it.
-- **odometry scale + sign** — `/scan` 3.188 m vs wheels 3.469 m = **8.1% over-read**; the addr-10 sign
-  fix is confirmed by the same run. ⇒ **(h) `si_motor_poles` is SETTLED — leave it alone.**
-- **R5.4 numbers** — coast **0.46 m/s²** (0.70 m from 0.8 m/s) · brake **1.44 m/s²** (0.22 m) ⇒ **3.1×**,
-  both runs to a full stop. The "3.4× provisional" is superseded.
-- **(b) gate on `/scan`, not `/odom`** — reinforced, with a new limit: **`/scan` does not track beyond
-  ~3 m in this corridor**, so park ~2.5 m out to measure anything.
-
-### ⬜ STILL OPEN IN G2 — the rest, in priority order
-1. 🔴 **R4 is DIAGNOSED, NOT FIXED.** Blocked on the decision above. **Nothing else in G2 matters
-   until it is made.**
-2. 🔴 **R5.4 has its numbers but not its capability — the reflex STILL cannot brake.** `UAVCAN_EC_FUNC6`
-   =301 is set and persisted, but **INERT until all four VESCs are reflashed to read RawCommand
-   idx 5** (`max(idx4, idx5)`, **bounds-check `cmd.len`**). ⚠️ Pair this with (A) if (A) is chosen —
-   both need the same USB session on the same four ESCs.
-3. ⬜ **ESC zero-dropout (a) — floor figure still missing.** Stands gave **54 ERPM ≈ 0.21 m/s**;
+### ⬜ WHAT SURVIVED THOSE BLOCKS — these are still open, and nothing else there was
+1. ⬜ **ESC zero-dropout — the FLOOR figure is still missing.** Stands gave **54 ERPM ≈ 0.21 m/s**;
    never measured under load. `field_measure.py dropout`.
-4. ⚠️ **T1 NEEDS RE-EXAMINING, NOT RE-TICKING.** Its recorded pass predates all of this, and what it
-   measures — sustained speed tracking within ±20% — is exactly what torque mode makes unstable.
-   ⛔ Do not treat that tick as evidence until after the decision.
-5. ⬜ **A second coast run** to make 0.46 m/s² n=2. Cheap, and every ratio quoted rests on it.
+2. 🔴 **R5.4: the reflex still only ZEROES the setpoint — it cannot COMMAND a brake.** In RPM mode
+   that zeroing is a real brake (and the duty-0 short brake finishes the stop), so this is no longer
+   urgent — but the durable fix is unbuilt. `UAVCAN_EC_FUNC6`=301 is set and persisted and stays
+   **INERT until all four VESCs read RawCommand idx 5** (`max(idx4, idx5)`, **bounds-check
+   `cmd.len`**) — that is a **firmware change, USB only, one session per ESC.**
+3. ⚠️ **T1 NEEDS RE-EXAMINING, NOT RE-TICKING.** Its recorded pass predates the RPM migration AND
+   the odometry scale/sign fixes, so it was adjudicated with a ruler we have since replaced.
+   ⛔ Do not treat that tick as evidence.
+4. ⬜ **S1 is INCONCLUSIVE, not failed — ch12 was never pressed.** Settle what S1 means first
+   (**PX4 kill ≠ disarm**), then run it and actually press **ch12**.
+5. ⬜ The second coast run — tracked in the PARKED brake block above, not duplicated here.
 
-### 🔑 MEASUREMENT RULES EARNED TODAY — read before the next floor session
-⛔ **DURATION is the control, not stick position.** 2.5 s at 0.11 gave 2.2 m/s, 3.2 m of travel, and a
-stop 0.185 m from a wall — inside the standoff.
+### 🔑 MEASUREMENT RULES THAT OUTLIVED THE TORQUE ERA — read before any floor session
 ⛔ **Park ~2.5 m from a FLAT, SQUARE surface.** Gate on **jitter < 0.05 m AND spread < 0.05 m** before
 driving. A sofa gave 0.074 m, then 2.069 m as the corridor flickered between two surfaces.
+⛔ **`/scan` does not track beyond ~3 m** (the 0.275 m corridor spans ±4° there) ⇒ **a silent reflex
+out there means BLIND, not clear.** Gate safety on `/scan` clearance, never on `/odom`.
 🔑 **A high NaN count is NOT blindness** — the corridor filter drops everything outside 0.275 m by
 design. Judge on whole-scan health plus the nearest in-corridor return.
+🔑 **Gate every moving test on MEASURED speed, never the commanded value.**
 🔧 **Tooling: `tools/field_measure.py` (nine routines, suggests and never writes) + `rover_diag.py`.**
 ⚠️ **Five analyser defects were found by checking output against runs readable by eye — all the same
 family, a confident number from data that did not support it. Distrust any unchecked analyser output.**
+⚠️ **`COM_DISARM_PRFLT` resets to 10 s on the FC — ASK before changing it.** Budget per bridge
+restart is **~45-60 min of `eph`**, not the "~35 min" the deleted block claimed.
 
-## 🗄 (previous) START HERE — 2026-09-12 (02:00). **RESUME G2.**
-✅ **Blocker SOLVED: armed AutoNav engaged (nav_state=23).** Cause was `eph` 307 m vs `COM_POS_FS_EPH`
-5 m, not the mode/bridge/registration. Full chain → `project_rover_autonav` 09-12.
-**TOMORROW, IN ORDER:**
-1. **Reboot the FC** → restart `rover-ekf-bridge` + `rover-autonav-mode` **together, DISARMED** →
-   verify 3 gates (`local_position_invalid` false · handshake non-zero both ways · runway).
-   ⚠️ `COM_DISARM_PRFLT` resets to 10 s — **ASK before changing it.** ~35 min of eph budget, no rush.
-2. **Decide what S1 means first** — PX4 kill ≠ disarm. Then run it and **actually press ch12**.
-3. **Then the G2 sweep — `speed_command_test.py`, NEVER RUN YET.** Needs ≥2.0 m corridor; the hall
-   gives 4.17 m from the start position. ⛔ Reposition the rover back first — each 3 s run eats ~1.7 m.
-4. ⏭ Wire the brake into the reflex (R5.4) — **two runs now show zeroing the setpoint leaves 100+ rpm.**
-⛔ **G2 IS NOT DONE. The sweep has not been run once.**
+## 🗄 COMPRESSED 2026-09-19 — the 09-10 "START HERE" block. **Its three action items are all CLOSED**
+(G0 09-11 · G2 09-13 · G3 venue 09-14 / T2 09-16), and its G0 evidence is duplicated in the
+WITHDRAWN section below. **Two things from it are still worth having:**
+🔴 **`fx` = 304.05 @ 640×360** — the real value; **409.85 @ 848×480 is stale everywhere it appears.**
+🔴 **`/scan_3d` read 0.00 Hz while `rover-scan-3d` read `active`** — the documented trap. ⛔ **`active`
+proves nothing; measure rates.** Needed for G4.
 
-## 🗄 (previous) START HERE — 2026-09-10. AUTONAV.
-
-**MEASURED THIS SESSION, not assumed:** `/scan` **25.8 Hz** · `/odom` **89 Hz** · `camera_info`
-**27.2 Hz, fx 304.05 @ 640×360** (the real value — 409.85 @ 848×480 is stale everywhere it appears)
-· 🔴 **`/scan_3d` 0.00 Hz while `rover-scan-3d` reads `active`** — the documented trap; the camera is
-fine, the node is not. Needed for G4, not for G0–G3. · `rover-ekf-bridge` correctly **inactive**.
-✅ **MAVLink came back on its own 2026-09-10** after being dead through 09-09; cause never found, so
-expect it to recur. **G2 is no longer blocked.**
-
-### 🔑 RUN THE GATES IN DEPENDENCY ORDER, NOT NUMERIC ORDER: **G0 → G2 → G3**, and let **G1 wait**.
+### 🔑 THE DOCTRINE THAT STILL STANDS: RUN THE GATES IN DEPENDENCY ORDER, NOT NUMERIC ORDER — **G0 → G2 → G3**, and let **G1 wait**.
 `autonomy_plan.md` §5 is explicit that **M2 needs NO map and NO localization**, and warns in its own
 words that *"anything that defers M2 behind mapping work is deferring the only autonomy currently
 within reach."* G1 (localization) is the deadest item on the board — **0 accepted fixes out of 20** —
 and it gates **only M3**. Nothing in M2 touches it. ⇒ **Do not put localization in front of M2.**
 
-1. ✅✅ **G0 camera geometry — CLOSED 2026-09-11. Nothing left to do here.** The mount is correct
-   (measured; see the WITHDRAWN section below), `depth_to_scan.launch.py` carries the measured
-   `cam_pitch` **0.0251** / `cam_roll` **−0.0078**, the 09-11 boot made them live, and they were
-   **verified at a wall the same night** — fit RMS 0.3-3.4 mm, **inlier fraction 1.00 at every range
-   (the real floor-in-scan test)**, coverage 0.80 vs 0.35, bearing +0.30° when squared, and on
-   operator tape at **1.12 m** `/scan` read **1.4390 against 1.4344 predicted — 4.6 mm**, so
-   `front_overhang` **0.337** and scale **0.9845** both survived the transform change.
-   🔑 **`cam_yaw` 0.0 is now CONFIRMED rather than assumed** — gravity cannot observe yaw, so
-   `cam_mount_probe.py` structurally cannot check it and only `wall_probe` can.
-   ⚠️ Limits, and the one unexplained reading, are recorded in `project_rover_autonav` 2026-09-11.
-2. **G2 motion truth.** Open-loop `RO_MAX_THR_SPEED` sweep (reads **0.6** today) · ESC zero-dropout ·
-   **(b) gate safety on `/scan` clearance, not `/odom`** — the operator's standing next item.
-   ⛔ **Gate every moving test on MEASURED speed, never the command.**
-   🔑 **The brake work feeds straight in:** the standoff pass is **speed-bound by the coast**, and at
-   ~0.9 m/s the rover contacted the wall with 0.020 m left. The brake now measures **0.69 m/s²,
-   stopping in 0.30–0.50 m from ~0.8 m/s**. **Wiring the reflex to command the brake instead of only
-   zeroing the setpoint is what lifts that speed bound** — and it now has a number behind it.
-3. **G3 venue decision — OPERATOR CALL, open since 09-04.** T2 needs ~3.05 m of clearance against
-   ~2 m² of open floor. **Corridor (recommended) · re-scope T2 to 0.8 m · or drop this room as the
-   M3 target.** Nothing in M2 can be proven until this is answered.
+*(The three gate items that stood here — G0 geometry, G2 motion truth, G3 venue — are **all closed**
+and were removed 09-19. G0 detail → the WITHDRAWN section below · G2 → `project_rover_autonav` 09-13
+· G3 → `bldc_can/evidence/t2_autonav_floor_20260916.md`. ⛔ **One claim in the deleted G2 item was
+already twice superseded** — "the brake measures 0.69 m/s², 0.30–0.50 m from ~0.8 m/s". Current:
+**1.28 m/s², 0.19 m.**)*
 
 ⛔ **Before any armed autonomous campaign: re-confirm S1 (kill switch)** — inviolable rule 4, and it
 is due anyway after the ESC firmware change. **Start `rover-ekf-bridge` first, FLOOR ONLY, stop after.**
 
-## 🔴🔴 [WFB-NG — HIGH PRIORITY] — added 2026-07-30, WORK THIS BLOCK FIRST
+## ⏸ [WFB-NG — PARKED, NOT HIGH PRIORITY] — added 2026-07-30
+> ⚠️ **Heading corrected 09-19: this block used to say "HIGH PRIORITY — WORK THIS BLOCK FIRST",
+> which contradicted §4 above, where the whole block is PARKED.** The radio work is DONE bar one
+> hardware action (**#22, reseat drone NIC-A ant0**). ⛔ Do not let this block set the agenda.
 > Measured, not theorised. Raw numbers: [[reference_wfb_ng]]. **Read W0 before touching anything.**
 
 ### ⚡⚡ 2026-07-31 RESOLUTION — most of this block is now CLOSED. Read this first.
@@ -312,15 +320,15 @@ It is ~20 dB deaf (−48.5 vs −28.3 dBm, steady over 224 samples / 20 min). Th
 antennas identical, so the defect is on the **drone's RX side** — exactly the direction that loses
 packets. Re-measure via 8102 immediately after.
 
-| CLOSED 07-31 | verdict |
-|---|---|
-| **W1** (GS EAGAIN socket overflow ⇒ 15% downlink) | ❌ **DEAD + DELETED.** Tested at 3.2 Mbit/s video + telemetry for 20 min: relay lost **4 video blocks of 341 057**, `wfb-server` PID 696 stable, `NRestarts=0`, zero EAGAIN. |
-| **W2.1** trim MAVLink rates | ❌ **DELETED as a fix.** Downlink already delivers ~100%. Buys airtime only; cannot touch the uplink loss or CPU. |
-| **W2.2** raise GS `rx_ring_size` (todo #3) | ❌ **DELETED** — nothing is overflowing. Leave at 2 MB. |
-| **W2.3** re-measure 176→26 kbit/s | ✅ **DONE — it does not reproduce.** Downlink is 99.86-99.99%. |
-| **W2.4 / #6** hardcoded peer `10.5.6.50` | ✅ **CORRECT.** QGC laptop on the relay's Wi-Fi Direct hotspot (`p2p-wlan0-0`, SSID `vind_rely`, ch149, relay 10.5.6.101/24). **Ping fails = Windows firewall, NOT a break.** |
-| **todo #4** GS TX power | ❌ **CLOSED — already maxed at 30 dBm** (`wifi_txpower=3000`, regdom BO permits 30). Nothing to turn up. |
-| **W3** antenna imbalance | 🔴 **PROMOTED TO ROOT CAUSE — and corrected: only NIC-A is bad. NIC-B is 3 dB, not 9 dB.** |
+⛔ **CLOSED 07-31, COMPRESSED 09-19 — these are the NEGATIVE results; do not re-propose any of them:**
+**W1** GS EAGAIN socket overflow (relay lost 4 video blocks of 341 057 in 20 min — dead) · **W2.1**
+trim MAVLink rates (downlink already ~100%; airtime only) · **W2.2** raise GS `rx_ring_size` (nothing
+overflows — leave at 2 MB) · **W2.3** the 176→26 kbit/s drop (does not reproduce; 99.86-99.99%) ·
+**todo #4** GS TX power (already maxed, 30 dBm, regdom BO permits 30 — nothing to turn up).
+✅ **W2.4 / #6** hardcoded peer `10.5.6.50` is **CORRECT** — QGC laptop on the relay's Wi-Fi Direct
+hotspot (`p2p-wlan0-0`, SSID `vind_rely`, ch149, relay 10.5.6.101/24). 🔑 **Ping fails = Windows
+firewall, NOT a break.**
+🔴 **W3** antenna imbalance = **ROOT CAUSE**, and only **NIC-A ant0** is bad (NIC-B is 3 dB, not 9).
 
 **Still open beyond the antenna:** (a) uplink GS→drone loses **13.57%** of MAVLink payload /
 **5.46%** tunnel, continuous not bursty — expected to improve when the antenna is fixed, re-measure
@@ -431,17 +439,22 @@ From `~/ros2_ws/docs/vision_streaming.md`; all three were agreed/designed but ne
   agreed, designed, NOT started). Companion half: optional `--bitrate` on `set-cam-params`
   (MUST stay optional — the shipped QGC build calls it without); `update_cam_params_config()`
   gains `bitrate=None`; `list --json` gains `active.settings.{primary,secondary}` so QGC can
-  prefill. QGC half is theirs. Constraint: video FEC is k=8/n=12 (50% overhead) and **radio
-  headroom has never been measured** — measure before recommending a value. Cheaper first
-  lever, also unmeasured: `-preset ultrafast` → `veryfast` (better quality at the SAME
-  bitrate, zero extra radio load). Test one lever at a time.
+  prefill. QGC half is theirs. Constraint: video FEC is k=8/n=12 (50% overhead). ⚠️ **"Radio headroom
+  has never been measured" — CORRECTED 09-19: W6 measured it at ~34% airtime of a 13 Mbit/s MCS1
+  PHY, so there IS room and the old "measure first" precondition is met.** The binding constraint is
+  **CPU** (software x264 ≈ 80-95% of a core). Cheaper first lever, still unmeasured:
+  `-preset ultrafast` → `veryfast` (better quality at the SAME bitrate, zero extra radio load).
+  Test one lever at a time.
   ⚠️ Do NOT hand-edit the conf as a workaround — [[feedback_camera_qgc_only]].
 
 ---
 
 ## [ROVER AUTONAV] — added 2026-07-20 (see project_rover_autonav.md)
 
-### 17. Delete camera_sw_node_obsolute.py (added 2026-07-21)
+### 17. Delete camera_sw_node_obsolute.py (added 2026-07-21) — ⚠️ **STILL PRESENT, verified 09-19**
+🔑 **Path corrected 09-19 — the one recorded here was wrong** (missing the inner package dir), which
+is why it may have looked done. It is at **`src/rc_control/rc_control/camera_sw_node_obsolute.py`**,
+with a stale build copy at `build/rc_control/build/lib/rc_control/`.
 `src/rc_control/camera_sw_node_obsolute.py` (node `camera_node_sw`) logged all 18 RC channels at INFO
 on every ~50 Hz callback — ~950 lines/s, which is where the 18 GB of `~/.ros/log` came from. It is not
 running (live `rc_control_node` is clean) but should be removed so it cannot be launched by accident.
@@ -460,17 +473,20 @@ commanded wheel differential (Δv = ω × track). The allocation they were impli
 has changed now that it is 0.31. The gyro-closed rate loop hides much of this in steady state, so
 expect the difference mainly in feedforward/transient response. Re-check after a real floor run.
 
-### 21. Use the camera IMU alongside the FC IMUs (user idea, 2026-07-21) — assess before building
+### 21. Use the camera IMU alongside the FC IMUs (user idea, 2026-07-21) — ✅ **ITEM 1 SHIPPED**
 The Gemini 336L has its own IMU (`/camera/accel/sample`, `/camera/gyro/sample`; enable with
 `enable_accel:=true enable_gyro:=true`, now on by default in `rover-camera.service`). Ranked by
 value, honestly:
-1. **HIGHEST VALUE, and it does not need the camera IMU at all: replace wheel-derived yaw with
-   GYRO yaw in `rover_odometry`.** Skid-steer yaw from wheel speeds is inherently bad — all four
-   wheels *must* slip laterally to turn, so `(v_right − v_left)/track` systematically misestimates
-   rotation no matter how perfect the track width is. The FC's gyro/EKF yaw is already on DDS
-   (`vehicle_attitude`, `vehicle_angular_velocity`) and is far better. Use wheels for forward
-   distance, gyro for heading. This is the standard fix for skid-steer odometry and is likely the
-   single biggest accuracy win available before SLAM.
+1. ✅✅ **SHIPPED 2026-08-09 AND VERIFIED — `yaw_source: camera_gyro` is LIVE in `rover_odometry`.**
+   ⚠️ **Corrected 09-19: this item was still filed as OPEN, and the "historical list" note below
+   asserted "#21 gyro-yaw remains OPEN". It is not.** Skid-steer yaw from wheel speeds is inherently
+   bad — all four wheels *must* slip laterally to turn — so wheels now carry forward distance only
+   and the **camera** gyro carries heading. 🔴 **It went to the CAMERA gyro, not the FC's, because
+   the FC heading is UNUSABLE** (it is the EKF's fused yaw, not the gyro; 2 untested suspects,
+   `bmm350` and GPS, and the DRONE shares that FC).
+   ⏭ **The one piece left is the QUEUED index item:** bridge `vehicle_angular_velocity` to DDS
+   (`dds_topics.yaml:60`) to decouple odometry from the camera — **needs an FC flash.**
+   ⛔ Verify any reflash by GIT HASH (our own build carries the hardfault fix).
 2. **Independent cross-check of FC IMU health.** The camera IMU is a genuinely independent gravity
    reference — it is what let the camera mount pitch/roll be measured tonight. Useful for sanity-
    checking accel calibration (cf. the "accel 0 inconsistency" episode), where the FC's own IMUs
@@ -529,10 +545,7 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
 ## OPEN ITEMS RAISED 2026-07-26 (the "closed today" log has been removed)
 
 ### Opened today
-1. ✅ **CLOSED 2026-09-10 — `dtoverlay=disable-wifi` verified.** `wlan0` does not exist and
-   `brcmfmac` is not loaded, on a boot many reboots after the 2026-07-26 fix. Nothing further.
-   *(This was the check the old "TODO #2" was waiting on; that item was itself verified 2026-08-01
-   and has been removed.)*
+*(Item 1 removed 09-19 — `dtoverlay=disable-wifi` was verified closed 09-10, nothing further.)*
 2. **Establish what NIC RELAY-STN actually has.** `wlx90de80d824d6` is on the companion now, so the
    relay's documented uplink is gone and `.221` does not answer. See [[project_relay2_relaystn]].
    🔴 **09-03: `wlx90de80d824d6` IS NOT ON THE COMPANION EITHER — `0bda:c811` is absent from
@@ -560,13 +573,14 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
    an unreliable backstop during work sessions (this is how the WFB_NICS mitigation was lost on 07-25).
 
 ## 2026-07-28 — camera bitrate control (OPEN, agreed, not started)
-Raising the camera to 1280x720 left `bitrate = 2000K`, dropping bits/pixel 0.129 → 0.072
-(soft picture). QGC has no bitrate control and the conf must not be hand-edited
-(QGC-only rule). Add it: companion = optional `--bitrate` on `set-cam-params` +
-`active.settings` in `list --json` (→ v2.3.0); QGC = `--bitrate` through
-pxlabs_cli/PXLABSApi/CompanionControl.qml. Full design + constraints (FEC k=8/n=12,
-radio headroom UNMEASURED, `-preset veryfast` as a zero-radio-cost alternative) in
-`~/ros2_ws/docs/vision_streaming.md`. Stopped here 2026-07-28: usage limit.
+⚠️ **Deduplicated 09-19 — this was a second copy of item 8b(c) above. Kept here, because this is the
+version with the SYMPTOM:** raising the camera to 1280x720 left `bitrate = 2000K`, dropping
+bits/pixel 0.129 → 0.072 (soft picture). Design + constraints are in 8b(c) and
+`~/ros2_ws/docs/vision_streaming.md`; ⛔ don't maintain two lists.
+✅ **One constraint there is now ANSWERED: "radio headroom UNMEASURED" is false** — W6 measured
+**~34% airtime of a 13 Mbit/s MCS1 PHY.** There is room. 🔑 The binding constraint is **CPU**, and
+the cheaper first lever is still `-preset ultrafast` → `veryfast` (better quality at the same
+bitrate, zero extra radio load). ⛔ Do NOT hand-edit the conf — [[feedback_camera_qgc_only]].
 
 ---
 
@@ -577,22 +591,14 @@ does a real **60 fps** at 720p MJPG over USB 2.0 — the 16 fps was auto-exposur
 **You do NOT need a blue USB3 port for full frame rate.** Correct this if it resurfaces anywhere.
 
 ### Opened today
-1. **Camera swap — PARTIAL SOAK PASSED, finish it after the mount is made.** See3CAM_CU135 fitted
-   07-30 23:14 on port 6-2 and selected from QGC (conf `usbcam-2560c1d1-241D8306-i00`, `fps = 60`).
-   **Ran 11 min 49 s continuous: 0 errors, 0 stalls, steady ~200 pkt/s / ~250 kB/s, 0 drops.**
-   That **beats the LG's best-ever clean window (9.5 min)** and its 448 s from the same night.
-   **Ended by a clean PHYSICAL unplug at 23:50:41, not a fault** — user removed it because it was
-   dangling on its cable and is building a proper mount for it.
-   **REMAINING: refit on the mount, then 20-30 min untouched + a reboot** to finish the verdict.
-   ⚠️ **A packet-flow check is NOT sufficient proof** — see opened-item 9.
-   ✅ **2026-07-31 — SOAK PASSED.** Refitted on 6-2 and streamed 1280x720 for a **continuous 41.8 min**
-   (21:30:01 → 22:11:48, incl. a 19.8 min instrumented window; ended by a **clean service restart, not
-   a fault** — `Deactivated successfully`, the usual QGC-camera-change signature):
-   `vision_streaming` PID **38192** unchanged across all 40
-   health samples, `NRestarts=0`, ffmpeg alive throughout, **0 errors / 0 stalls / 0 dup-padding**,
-   62.6-65.3 °C, `throttled=0x0` on every sample. Downlink delivered **234 331 of 234 362** video
-   packets (99.99%) end-to-end at the relay — so the picture genuinely moved, not just RTP.
-   **ONLY THE REBOOT CHECK REMAINS.** (Load avg 4-7 on 4 cores from software x264 — high but stable.)
+1. ✅ **Camera swap — SOAK PASSED 07-31 (compressed 09-19).** See3CAM_CU135 on port 6-2 streamed
+   1280x720 for a **continuous 41.8 min**: PID unchanged across 40 health samples, `NRestarts=0`,
+   **0 errors / 0 stalls / 0 dup-padding**, 62.6-65.3 °C, `throttled=0x0`, and the relay delivered
+   **234 331 of 234 362** video packets (99.99%) — so the picture genuinely moved, not just RTP.
+   ⏭ **ONLY THE REBOOT CHECK REMAINS.** ⚠️ Load avg 4-7 on 4 cores from software x264 — stable, but
+   it is why **CPU, not radio, is the real video constraint.**
+   ⚠️ **A packet-flow check is NOT sufficient proof on its own** — see opened-item 9.
+   ⚠️ **Since superseded in practice: the LG Smart Cam is the CURRENT FPV camera**, swapped from QGC.
 2. **Discriminate LG-faulty vs connector-6-2-bad-under-load.** The swap confounds them: See3CAM
    100 mA vs LG 500 mA. Test = put the LG in the free port **`4-1`** (different host controller and
    power path) and soak. **Blocked: enclosure is assembled.** Do it next time it's open.
@@ -605,11 +611,9 @@ does a real **60 fps** at 720p MJPG over USB 2.0 — the 16 fps was auto-exposur
    - `rclpy.shutdown()` RCLError — fires on **every QGC camera change**, dumps a traceback exactly
      when you'd be checking whether the swap worked.
    - cap consecutive cold-start failures → log "camera requires physical replug" instead of looping.
-4. **🔴 WFB RX antenna imbalance** — ⚠️ these 07-30 figures are SUPERSEDED; only **NIC-A ant0** is
-   bad (−48.5 vs −28.3 dBm) and NIC-B is 3 dB, not 9. See W3 above for the corrected table.
-5. ❌ **DELETED 08-01 — "trim PX4 MAVLink stream rates".** It fixes nothing: downlink already
-   delivers ~100%. Airtime-only, and headroom is now measured at ~34% of a 13 Mbit/s MCS1 PHY, so
-   the video-bitrate item no longer depends on it.
+*(Items 4 and 5 removed 09-19: **4** was a superseded copy of the antenna table that just pointed at
+W3 above, and **5** was the already-deleted "trim PX4 MAVLink stream rates" — ⛔ which stays deleted:
+it fixes nothing, downlink already delivers ~100%, and the bitrate item no longer depends on it.)*
 6. **Verify the hardcoded GS peer `10.5.6.50`** in `/etc/wifibroadcast.cfg` (`gs_video` :5600,
    `gs_mavlink` :14550) — fixed IP on a subnet unrelated to the 10.5.5.0/24 tunnel. Wrong-IP
    presents as "WFB broken" while the radio is flawless. Check as part of todo #4.
@@ -631,20 +635,23 @@ does a real **60 fps** at 720p MJPG over USB 2.0 — the 16 fps was auto-exposur
 ## ✅ Historical completed/closed list — REMOVED 2026-09-10
 
 The 2026-08-13 dump of finished items has been deleted; it was a record of work already done and was
-not being read. **The one thing that was still live in it: `#21 gyro-yaw` remains OPEN** (see the
-ROVER AUTONAV block above).
+not being read. ⚠️ **Its surviving note said "`#21 gyro-yaw` remains OPEN" — WRONG, corrected 09-19:
+`yaw_source: camera_gyro` shipped 08-09.** See item 21 above; only the DDS `vehicle_angular_velocity`
+bridge is left, and that needs an FC flash.
 
 ## 🔧 PX4 PARAMETER AUDIT — 2026-08-14
 > 📄 **FULL AUDIT + CHANGE LOG: `~/ros2_ws/docs/px4_param_audit.md`** (every value as read, the
 > verified-correct list, findings P1-P9, and the derivations). **Pull from there — not duplicated here.**
 > Applied changes also land in `setup_manual.md` §A7, the canonical param changelog.
 
-**Open items:** P1 `RO_MAX_THR_SPEED` 0.60 — its §A7 basis (0.58-0.60 m/s) is CONTRADICTED by the
-~0.9 m/s measured 08-12; needs an **OPEN-LOOP throttle sweep** (closed-loop data cannot identify a
-plant gain) · P4 `RO_SPEED_TH` −1 would kill the 0.14 floor but is **GATED ON THE ESC-DROPOUT FIX** ·
+**Open items:** ✅ **P1 `RO_MAX_THR_SPEED` — CLOSED 09-13, removed from the open list 09-19.** The
+sweep it asked for was answered in the negative under torque mode, and the RPM migration then made
+the question moot: the value is now **4.93**, floor-validated. ⛔ Don't re-run an 08-14 sweep. ·
+P4 `RO_SPEED_TH` −1 would kill the 0.14 floor but is **GATED ON THE ESC-DROPOUT FIX** ·
 ~~P5 `RC_MAP_KILL_SW`=12 vs docs "ch8"~~ ✅ **DONE 2026-09-12 — docs/tools fixed (`ros2_ws` `6506bdb`).** 🔴 **It had already cost an armed run before anyone actioned it: the operator was told to hit ch8, moved ch5 (ARM) instead, and S1 came back inconclusive.** · P6 read `si_motor_poles` ×4
-in VESC Tool · P8 outdoor/M4 params · P9 not audited: `EKF2_*` (SHARED WITH DRONE), sensor/RC cal,
-per-ESC output index.
+in VESC Tool — ✅ **SETTLED 09-12, leave it alone** (`si_motor_poles` is a LINKED PAIR; "fixing"
+poles silently HALVES `/odom`) · P8 outdoor/M4 params · P9 not audited: `EKF2_*` (SHARED WITH
+DRONE), sensor/RC cal, per-ESC output index.
 
 ⛔ **SUPERSEDED — DO NOT RE-APPLY.** `RO_DECEL_LIM` 0.5 / `RO_ACCEL_LIM` 0.3 / `RO_SPEED_LIM` 0.60
 were applied, saved and reboot-verified on 08-14 — and then **CAUSED A HARD WALL HIT IN MANUAL
@@ -667,9 +674,12 @@ redoing that division.**
 it was sized against a 0.19 m stop. 🔴 And `RO_SPEED_LIM` **does not limit Manual at all**: full
 stick is 4.93 m/s, not 0.70. → [[px4_rover_control_scope]], [[scope_px4_params_by_control_flags]]
 
-⏭ **STILL OPEN: ramp-tracking is NOT verified on the vehicle** — nothing has been driven since.
-Moot while both limiters are −1 (no ramp to track); it becomes live again only if they are ever
-re-enabled. **Gate on MEASURED speed, never the command.**
+⏭ **STILL OPEN: ramp-tracking is NOT verified on the vehicle.** ⚠️ **Corrected 09-19 — this used to
+read "moot while both limiters are −1". That stopped being true on 09-14, when `RO_DECEL_LIM` was
+set to 5 deliberately.** There IS a ramp now, it slews the manual stick **and the reflex**, and it
+has only ever been checked by **arithmetic** (09-18: +0.057 m at 0.75 m/s, worst case ~0.25 m against
+0.69 m of clearance) — ⛔ **which is enough not to book floor time for it, but it is an open number,
+not a measured one.** **Gate on MEASURED speed, never the command.**
 
 ---
 
@@ -688,20 +698,22 @@ Method: `tools/grid_review.py`. ⛔ **Do NOT "fix" it:** `MaxGroundHeight` 0.28 
 **keep 0.10**; and `NormalsSegmentation false` is what produced the ray-tracing spikes that got the
 v5 reprocess rejected. **Changing either makes the grid worse, not better.**
 
-### 🔴🔴 THE REAL CONSTRAINT IS THE ROOM, NOT THE MAP
-**Rover footprint 0.73 × 0.56 m ≈ 0.41 m² vs ~2 m² of open floor** (≈ a 1.4 × 1.4 m clear patch).
-**The rover is a FIFTH of the room's free space.** Add Nav2 inflation and there is almost nothing
-to plan through.
-⛔ **T2 CANNOT RUN IN THIS ROOM.** Its spec is a **clear 2 m corridor**; `t2_straight_goal_test.py`
-refuses to start below `distance × 1.35 + stop_distance` ≈ **3.05 m** of clearance. It would abort
-before moving. **T2 is blocked by the ROOM** (the FC no longer blocks it — hardfaults closed 08-29).
-🔑 **T2 ADJUDICATES ON TAPE, NOT `/odom`:** its tolerance is 0.20 m over 2 m, but `/odom` under-reads
-~24% at crawl (~0.48 m over 2 m) — **the instrument's error is more than twice the tolerance it would
-be judging.** The 1.35 factor exists for the same reason: the rover really travels ~2.6 m for a 2.0 m
-odom goal.
-⏭ **OPEN GOAL-LEVEL DECISION (operator's):** (1) run T2 in a corridor / larger space — **recommended**,
-keeps the ladder comparable · (2) re-scope T2 shorter (`--distance 0.8`), proves less · (3) reconsider
-whether this room is the M3 target at all — mapped *patrol* in 2 m² is a very small mission.
+### 🔴🔴 THE REAL CONSTRAINT IS THE ROOM, NOT THE MAP — ✅ **ANSWERED 09-14/16, kept as the reason why**
+**Rover footprint 0.73 × 0.450 m ≈ 0.33 m² vs ~2 m² of open floor** (≈ a 1.4 × 1.4 m clear patch).
+⚠️ **Width corrected 09-19: this said 0.56 m.** **0.450 is what the CODE uses** — verified in
+`src/rover_nav2/config/nav2_forward.yaml` (both footprints are `±0.225` in y, `+0.345/−0.385` in x);
+**0.560 came from a SALES QUOTATION** and four docs copied it. 🔑 No gap unless a tape disagrees.
+**The rover is still ~a sixth of the room's free space**; add Nav2 inflation and there is almost
+nothing to plan through.
+⛔ **T2 CANNOT RUN IN *THIS ROOM*** — its spec is a clear 2 m corridor and `t2_straight_goal_test.py`
+refuses to start below `distance × 1.35 + stop_distance` ≈ **3.05 m** of clearance.
+✅✅ **BUT T2 IS NOT BLOCKED ANY MORE — the venue decision was taken 09-14 (CORRIDOR) and T2 PASSED
+n=3 on 09-16, tape-adjudicated** (2.130 / 2.025 / 2.000 m against a 2.0 m goal). ⚠️ **The old
+"OPEN GOAL-LEVEL DECISION — corridor / re-scope to 0.8 m / drop this room" was removed 09-19; it had
+been answered for five days.**
+🔑 **T2 ADJUDICATES ON TAPE, NOT `/odom`** — and that rule outlives the fix. ⚠️ **The "~24% under-read
+at crawl" quoted here is superseded:** the error is **SPEED-DEPENDENT** — 0.946 @0.15 · 1.000 @0.25 ·
+1.030 @0.75 m/s (3 tape points, 09-16). ⇒ **quote every odom distance with its speed** → `rover_odometry`.
 
 ## ⛔⛔ WITHDRAWN — "THE CAMERA WAS PHYSICALLY ROTATED" (claimed 2026-08-16)
 
@@ -717,10 +729,48 @@ back on the top plate. The remount landed ~1° different in each axis — ordina
 2026-09-10 to the measured values, **made live by the 2026-09-11 boot, and VERIFIED against a flat
 wall that night — both constants held to 4.6 mm on tape.** ✅ **This sub-item is now CLOSED.**
 
-### 📌 Surviving fact from the deleted 08-16 ESC experiment
-⚠️ **The ESC address ↔ WHEEL-CORNER mapping has never been verified against one turning wheel.**
-The operator called the removed node "right rear"; the address that left the bus was **10**, which
-the docs map to right-**FRONT**. ✅ 2026-09-09 confirmed all four addresses (10/11/12/13) are live
-and independently controllable, **but that does not establish which address is bolted to which
-corner.** Spin exactly one wheel before trusting per-corner ESC data.
+### 📌 Surviving fact from the deleted 08-16 ESC experiment — ⚠️ **narrowed 09-19**
+🔑 **What IS proven: the LEFT/RIGHT allocation.** A 0.3 rad/s yaw drove the right pair (10, 12) and
+the left pair (11, 13) in opposite directions with the correct differential, matching
+`actuator_function` 102=right / 101=left, and the **addr-10 sign inversion is confirmed** (09-16: the
+old `-1` would have read HALF; it read 8% more).
+⚠️ **What is still NOT proven: FRONT vs REAR within a side.** The index map (**10=RF 11=FL 13=RL
+12=RR**) rests on config and docs, not on one turning wheel. The 08-16 episode is the warning — the
+operator called the removed node "right rear" while the address that left the bus was **10** = right
+**front**. ⇒ **Spin exactly one wheel before trusting any FRONT/REAR per-corner claim** — which is
+exactly what the `esc_config_audit` corner-collapse work depends on.
 
+
+---
+
+# 🔗 ITEMS 22–27 — RECONCILED 2026-09-18. These were cited in `MEMORY.md` but never written here.
+
+`MEMORY.md` pointed at `#22`, `#25`, `#26`, `#27` for weeks while this file's numbering stopped at
+**21** — the references resolved to nothing. Content recovered from the index one-liners and given
+real entries. 🔑 **Numbers are the contract between the two files. Never cite one here that does not
+exist.** ℹ️ **#23 and #24 were never used** — the gap is deliberate, don't "fill" it.
+
+⛔ **`5. Antenna tracker HW` — DROPPED 2026-09-19 ON THE OPERATOR'S CALL.** It was cited in
+`MEMORY.md` as existing "ONLY there" while having **no content in either file** — a citation pointing
+at nothing. Both mentions are now deleted. **Do not resurrect it from an old copy of the index.**
+
+### 22. Reseat drone NIC-A ant0 — the last WFB action, and it is HARDWARE
+⏸ The whole WFB block is PARKED and this is the only thing left in it. **Not a software item; do not
+re-debug the radio to avoid doing it.** 🔑 Standing rule: the drone TX is healthy — when video breaks,
+WFB's input queue is EMPTY ⇒ **suspect the source, not the link.** → `reference_wfb_ng.md`
+
+### 25. `camera_sw_node` still keys `/dev/video0`
+⛔ **Never key a camera by `/dev/videoN`** — the numbering reshuffles. Must key on
+`usbcam-<vidpid>-<serial>-i<iface>` like the rest of the vision stack.
+→ `docs/vision_streaming.md` · `project_vision_multicam_upgrade`
+
+### 26. The Orbbec clone is GITIGNORED — a re-clone silently restores this bug
+🔴 The fix is a local patch that is **not tracked**. Anyone re-cloning gets the broken tree back with
+no warning. Patch is preserved at `codex-work 16665f5` — reapply after any re-clone.
+⚠️ Related: `align_mode:=HW` is still **untested**; it would kill the depth-glitch class and save
+~71% of a core.
+
+### 27. Reflex still reads `/scan`, not `/scan_3d` — and it is only a param
+`collision.scan_topic` is configurable; nothing needs rewriting. **The blocker is proof, not code:
+it needs ONE low object that `/scan` misses**, to show the 3D topic catches what the 2D one cannot.
+Gated behind G4 (wire `/scan_3d` into a Nav2 `voxel_layer`); measure R6 first.

@@ -1,9 +1,11 @@
 ---
 name: px4_rover_control_scope
 description: "Which RO_* params actually reach the actuators in which mode, traced in PX4 source: decel limits DO slew the manual stick AND the collision reflex, RO_SPEED_LIM does NOT apply in Manual, jerk is auto-only. Read before changing any RO_* value."
-metadata:
+metadata: 
   node_type: memory
   type: reference
+  originSessionId: 5a67ac2d-7ab0-4d9b-aa5a-4f8430b150c4
+  modified: 2026-09-18T17:18:36.692Z
 ---
 
 # PX4 rover params — what each one actually reaches
@@ -43,6 +45,18 @@ Centring the stick stopped cutting the motors; the throttle ramped down over ~1.
 ⚠️ At low stick (3-30%) the ramp is 0.05-0.5 s and feels fine — **the hazard is at high throttle**,
 which only a long run makes reachable.
 
+✅✅ **2026-09-18 — THAT LINE CLOSES THE AUTONAV CASE, AND IT WAS ALREADY TRUE WHEN WRITTEN (09-14).**
+AutoNav drives at 0.15-0.75 m/s = **3-15% stick** — inside the "feels fine" band by construction.
+At 0.75 m/s: throttle 0.152, drains in **0.15 s**, adds **0.057 m**; at 0.25 m/s, **6 mm**. Stacked on
+the measured 0.19 m stop ⇒ **~0.25 m worst case against the reflex's 0.69 m clearance.**
+⛔ **`RO_DECEL_LIM`=5 NEEDS NO FLOOR MEASUREMENT. Do not book one.**
+🔴🔴 **RETRIEVAL FAILURE, NOT A KNOWLEDGE GAP — THE LESSON IS THE POINT:** this page had the formula,
+the table and the conclusion on 09-14, while THREE other files (`autonav_reference.md` §13,
+`todos.md` §G3, `MEMORY.md` [TODOS]) carried a red "STILL UNMEASURED" alarm. The alarm was louder and
+sat higher in the index, so it won for four days and nearly bought a floor session.
+🔑 **WHEN A FILE SHOUTS "UNMEASURED", CHECK WHETHER ANOTHER FILE ALREADY COMPUTED IT.** All three
+alarms corrected 09-18.
+
 ## 🔴 `RO_SPEED_LIM` DOES NOT LIMIT MANUAL MODE
 
 `DifferentialManualMode::manual()` passes the stick **straight to `throttle_body_x`**. Only
@@ -74,3 +88,19 @@ It trusted `wait_heartbeat()`, which latched a non-autopilot heartbeat, targeted
 **zero** parameters, and **still wrote a header-only `.params` file that looked like a valid backup**.
 Now filters for component 1 with a valid autopilot type (as `set_param.py` already did) and refuses
 to write without one. Verified 952/952. 🔑 **Check the parameter COUNT on any dump before trusting it.**
+
+## 🔧 PARAM READ/WRITE TOOLING — moved from `MEMORY.md` 2026-09-18
+
+⛔⛔ **NEVER WRITE A VEHICLE PARAM WITHOUT AN EXPLICIT YES. Reading is free.**
+🔧 **READ THE FC, NEVER TRUST A SNAPSHOT.** Values + RCA → `ros2_ws/docs/px4_param_audit.md` ·
+RC procedure → `rc_configuration.md` §6 · full 09-12 audit → `project_rover_autonav`.
+
+✅✅ **MAVLink `PARAM_SET` PERSISTS BY ITSELF** — `param_autosave()` fires ~300 ms after a write
+(`autosave.cpp:60`). **PROVEN across a reboot 09-12.** ⛔ The old "RAM-ONLY, then run `param_save.py`"
+rule was WRONG; both tools' NOTE was corrected 09-12. ⚠️ Don't reboot within ~2 s of a write.
+
+🔑 **`<no reply>` USUALLY MEANS WRONG PARAM NAME, NOT "BUSY".** ⇒ **Prove it with a fake-name control**
+before concluding the link or the FC is at fault.
+
+⚠️ `tools/set_param.py` is **FLOAT-ONLY** · INT32 → `diag/set_param_int.py` · reboot → `fc_reboot.py`.
+🔴 **`NAV_RCL_ACT` reads 1 (Hold), NOT 6 — RC loss will NOT disarm.**

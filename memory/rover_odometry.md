@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 2d8c9512-eb8c-4b27-b518-3de2ce63ad22
-  modified: 2026-09-15T18:51:53.173Z
+  modified: 2026-09-19T05:41:44.321Z
 ---
 
 # Rover Wheel Odometry — Implementation Plan
@@ -129,7 +129,8 @@ theta += v_angular * dt
 
 **Sign map VERIFIED 2026-07-19** (all 4 wheels hand-spun forward, wheels-up, deadband-filtered capture — every sample sign-consistent):
 `ERPM_SIGN = {10: -1, 11: +1, 12: +1, 13: +1}` — only addr 10 inverted. Apply as per-wheel parameter (not per-side).
-**Idle noise VERIFIED 2026-07-19**: all ESCs jitter ±1..±35 ERPM at standstill (Hall noise) → node needs deadband param, default ±40 ERPM (≈0.015 m/s), else stationary drift.
+~~**Idle noise VERIFIED 2026-07-19**: all ESCs jitter ±1..±35 ERPM at standstill (Hall noise) → node needs deadband param, default ±40 ERPM (≈0.015 m/s), else stationary drift.~~
+🔴 **SUPERSEDED — do not quote the line above.** ⛔ **The ±35 ERPM idle jitter DOES NOT REPRODUCE:** re-measured 08-01 over **2930 samples × 4 wheels — min 0, max 0**, and `/odom` held **0.0000 m over 10.0 s** stationary and disarmed on 09-17. `deadband_erpm` is **5**, not 40 — at the true `erpm_to_ms` scale, 40 ERPM means **0.185 m/s**, which would swallow most of Nav2's fine-positioning range. ⚠️ Still unchecked **ARMED** (dithering motors may differ from idle).
 
 ## ROS2 Node Plan
 - **Package**: `rover_odometry` (new, Python, ament_python — follow rc_control pattern)

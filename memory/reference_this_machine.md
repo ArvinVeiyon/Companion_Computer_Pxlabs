@@ -113,3 +113,11 @@ plan a measurement around them without checking `ros2 topic list` first.
 - ⚠️ **DISK 85% FULL** (8.7 G free); `rover_data/bags` alone is 15 G. ⛔ `map_run_20260809_185011`
   is NOT disposable — it is the replay adjudication bag. The two `mapping_run*_20260802` are
   false-map era.
+
+## 🔑 BOOT-CLOCK TRAP — moved from `MEMORY.md` 2026-09-18
+
+**This box's journal restamps early boot.** `ExecMainStartTimestamp` plus `NRestarts=0` once forged a
+completely convincing "service up 11 hours" on a unit that was **4 minutes old**.
+⛔⛔ **CHECK `/proc/uptime` BEFORE READING ANY DURATION OFF A TIMESTAMP.**
+🔑 Same family as the other ruler traps here: `active` proves nothing, `is-active` proves nothing,
+and a quiet topic is not evidence — prove a non-zero baseline first.

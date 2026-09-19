@@ -1627,3 +1627,103 @@ in the launch TF → `front_overhang` + `/scan` scale re-verified on tape to 4.6
 **2026-09-11 G0 CLOSED** block at the top of this file. ⏭ **Next is G2 (motion truth), NOT
 localization** — `autonomy_plan.md` §5: M2 needs no map and no localization, so G1 gates only M3.
 ⛔ **The "no moving test before geometry is verified" bar is now MET.**
+
+---
+
+# 🟢🟢 2026-09-17/18 — **PHASE 0: NAV2 RAN FOR THE FIRST TIME. IT PASSES, AND IT FOUND TWO BLOCKERS.**
+
+`rover_nav2` was written 2026-08-01 and had **never been launched**. It has now. Rover DISARMED
+throughout (`arming_state 1`, `nav_state 0`); nothing moved at any point.
+
+## ✅ THE CHAIN IS REAL — end to end, in the corridor
+```
+ARMING        arming_state=1 (disarmed), nav_state=0
+SCAN          3.77 m clear ahead (+-15 deg)
+COSTMAP       1.0m:0  1.5m:0  2.0m:0   free along heading
+GOAL          accepted, planner returned 81 poses
+/cmd_vel_nav  151 msgs, vx steady 0.250 m/s
+/cmd_vel      160 msgs, vx 0.050 -> 0.100 -> 0.150 -> 0.200 -> 0.250
+```
+🔑🔑 **THE SMOOTHER RAMPS THE FIRST COMMAND.** The first `/cmd_vel` an armed rover would see is
+**0.05 m/s over five messages**, not a step to 0.25. That is the property that makes an armed
+Phase 1 defensible. Peak 0.25 m/s against a 4.93 m/s stick cap; yaw stayed -0.026..0.237 rad/s.
+🔑 Costmap reading 45/41 at 0.0/0.5 m is the rover's OWN footprint + inflation (body extends
+0.345 m forward of `base_link`) — **not** self-marking. The 92-deg self-marking fear did not happen.
+
+## 🔴 BLOCKER 1 — `bt_navigator` COULD NOT ACTIVATE AT ALL (fixed)
+Nav2's default tree `navigate_to_pose_w_replanning_and_recovery.xml` calls the **`spin`** action, and
+`behavior_plugins` is `["wait"]` **on purpose** here (spin/backup drive through unobserved space).
+No spin server ⇒ `Exception when loading BT: Action server spin not available` ⇒ bt_navigator fails
+to ACTIVATE ⇒ **the lifecycle manager aborts the ENTIRE bringup.** Nothing else in the stack is at
+fault and the error names the XML, not the missing plugin — easy to misread.
+✅ **FIX, in `src/rover_nav2/config/nav2_forward.yaml` under `bt_navigator`:**
+`default_nav_to_pose_bt_xml: "/opt/ros/jazzy/share/nav2_bt_navigator/behavior_trees/navigate_w_replanning_time.xml"`
+(ComputePathToPose + FollowPath on a replan timer, **zero recovery actions**).
+⚠️⚠️ **SOURCE ONLY — `rover_nav2` HAS NOT BEEN `colcon build`-ED.** The installed share copy still
+lacks it. Tonight's runs used `params_file:=<source path>`. **Build it or keep passing params_file.**
+
+## 🔴🔴 BLOCKER 2 — WITH THE VOXEL LAYER ON, NAV2 COMMANDS A SPIN. THIS WOULD HAVE SPUN AN ARMED ROVER.
+Same corridor, same 2.0 m goal, voxel_layer re-enabled:
+```
+accepted: True   plan: 424 poses (vs 81 with voxel off -- a long detour)
+/cmd_vel_nav  vx 0.000   wz -0.500 SUSTAINED (max_vel_theta)
+/cmd_vel      vx 0.000   wz -0.500 .. -0.100
+```
+while `/scan` reported **nothing closer than 3.79 m**. The planner believes the direct path is
+blocked, detours, and DWB — with no admissible forward trajectory — falls back to **rotating in
+place at max yaw rate**. ⛔⛔ **DO NOT ARM WITH `voxel_layer` ENABLED.** Both layers left disabled
+as a **runtime param override**; the YAML on disk still has them enabled.
+
+### 🔬 What the voxel layer is actually doing — PARTLY diagnosed, DO NOT claim it is solved
+✅ **Floor tilt is REAL and measured** (81,688 pts, 6 clouds, `|lat|<0.30`, base_link):
+| band | n | floor z |
+|---|---|---|
+| 0.5-1.0 m | 144 | **-0.027** |
+| 1.5-2.0 m | 625 | **+0.060** (whole band 0.058-0.091 = the floor sheet) |
+⇒ **~8.7 cm rise per metre of range ≈ 5 deg residual tilt**, far more than the 1.44 deg the mount
+probe measured. Extrapolated it crosses `min_obstacle_height: 0.12` at **~2.4 m**.
+🔴🔴 **BUT THAT DOES NOT EXPLAIN THE SYMPTOM — I CLAIMED IT DID AND WAS WRONG.** The spurious mark
+in the corridor sits at **0.5 m**, where the floor measures **-0.027 m**, nowhere near 0.12.
+**The height threshold is A problem, not THE problem. A second marking cause is UNIDENTIFIED.**
+⛔ **Do not tune `min_obstacle_height` to make the symptom hide** — publish the voxel grid
+(`publish_voxel_map: True`) and compare marked cells against the raw cloud first.
+🔴 **`/camera/depth/points` is published in `camera_color_optical_frame`, NOT
+`camera_depth_optical_frame`** — depth_registration aligns it to colour. The yaml comment is STALE.
+`sensor_frame: ""` means nav2 uses the message frame, so this is not itself a fault, but ⚠️ a TF
+lookup on the wrong frame name throws `LookupException`, and the buffer needs ~10 s of spin first.
+
+## 🔴 BLOCKER 3, INDEPENDENT OF THE COSTMAP — **DWB WILL SPIN IN PLACE WHEN IT CANNOT GO FORWARD**
+The config removes `spin` as a **recovery behaviour**; nothing stops the **controller** from
+commanding rotation, and this rover has **no rear or side sensing**. ⏭ Cap or forbid in-place
+rotation in DWB so "no forward path" yields a **stop**, not a spin. **Close this before ANY armed run.**
+
+## 🔴 PHASE 1 WAS SET UP AND THEN STOPPED — THE PREFLIGHT GATE FAILED
+`tools/preflight_scan_check.py` at the corridor start position:
+```
+217 scans (21.7 Hz) | sector coverage 67.0% | scans with EMPTY sector: 217  (ALL of them)
+!! NOTHING VALID SEEN IN THE FORWARD SECTOR IN ANY SCAN -- it will NOT stop you.
+```
+🔑 **NOT a fault — GEOMETRY.** The reflex filters to a 0.275 m-wide corridor, which spans ~±4 deg at
+3 m, and the nearest thing ahead was **3.79 m**, past where `/scan` tracks. **A silent reflex there
+means BLIND, not CLEAR.** ⛔ Refused to arm on that reading: flat-scan-only was chosen *because* the
+reflex is the remaining protection, so a blind reflex removes the whole basis for the choice.
+⏭ **THE FIX IS PHYSICAL:** matte surface at **2.5-3.0 m**, goal **1.5 m** ⇒ bumper ends ~1.1 m short,
+reflex live from the start. The window is narrow by construction: reflex sees ≤3 m, needs 0.69 m to
+stop. ⚠️ Glossy/dark surfaces return no depth — that is what the tool's "re-aim at a matte surface"
+line means.
+
+## 🔑 ODOM DOES **NOT** DRIFT AT STANDSTILL — MEASURED
+**0.0000 m over 10.0 s**, `|vx|` max 0.0000, while stationary and disarmed. The `x≈71 m` odom
+position is **accumulated from earlier sessions**, harmless with rolling windows in `odom`.
+⚠️ Nuance against the standing "`/odom` DRIFTS AT STANDSTILL" note: it did not tonight.
+
+## ⏭ RESUME HERE (2026-09-18)
+1. **Reposition** per the preflight fix above, re-run `preflight_scan_check.py`, **go only if the
+   forward sector is populated.**
+2. **Phase 1** — armed, Nav2 drives a straight **1.5 m** goal, flat scan only, voxel OFF, hand on
+   **ch12**. Standing gates: start `rover-ekf-bridge` BEFORE (floor only) and **STOP IT AFTER** ·
+   `eph` vs 5.0 m `COM_POS_FS_EPH` · registration proved by the **LOG LINE**, never a message rate ·
+   `COM_DISARM_PRFLT` 10 s auto-disarms an idle armed rover, so send the goal promptly.
+3. Then Phase 2 = T3 (one offset obstacle).
+⚠️ **`RO_DECEL_LIM` 5 stop is STILL UNMEASURED** and wheel RPM cannot measure it. At 0.25 m/s the
+margins are generous, but it is an open number, not a verified one.

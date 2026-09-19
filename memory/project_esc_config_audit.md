@@ -185,3 +185,138 @@ listing. ⛔ Never reset `1-1`. 🔑 A wedge always hits the **first probe read*
 ESC half-written — a failed run is safe to repeat.
 🔑 **`is-active`, CAN telemetry and USB are independent rulers.** FL read online and healthy on
 DroneCAN at 24.66 V while its USB refused every connection — **CAN health says nothing about USB.**
+
+## 🔄 2026-09-17/18 — THE OPERATOR RESTORED RR, AND WHAT THE AUDIT FOUND
+
+**The operator restored RR's motor config, then asked for a four-way comparison.** `config_audit.py`
+earned its keep a second time.
+
+🔑🔑 **RR's live mcconf was an EXACT match for `configs_live/vesc_mcconf_RR_20260913_1226_pre.xml`** —
+its **as-found state at 09-13 12:26**, i.e. before the G2 speed tune AND before the 09-14 hall fix.
+⇒ **When a restore looks like a mix of eras, diff it against EVERY stored snapshot** (ignore
+`foc_offsets_*`, `ConfigVersion`, `motor_*_description` — they drift on every read). One file matched
+at zero differences and named the era instantly; guessing from individual fields had suggested three
+different sources.
+
+Out of family vs FR/FL/RL, and what each costs:
+| field | RR was | others | consequence |
+|---|---|---|---|
+| `foc_hall_table__1..5` | 1/135/168/65/33 | FR 198/134/167/66/30 · FL 199/134/166/65/33 | the 09-14 hall fault, back |
+| `s_pid_kp` | 0.004 | 0.008 | the gain that under-asks for current (12.0 -> 20.7 A) |
+| `s_pid_min_erpm` | 200 | 50 | drops into the duty-0 short brake **4x earlier** in crawl |
+| `l_in_current_min` | -5 | -10 | half the regen input current on the brake path |
+
+✅ **APPCONF WAS CLEAN** — all four identical apart from `controller_id`/`uavcan_esc_index`, and the
+RPM-mode migration (`uavcan_raw_mode` 3, `uavcan_raw_rpm_max` 9000) intact on all four. A config
+restore that touches mcconf need not touch appconf; **check both, report both.**
+🔑 `m_invert_direction` RR=0 is **NOT** a regression — it has been 0 since 09-13 and matches FR
+(left wheels 1, right wheels 0). ⚠️ **`MOTOR_MAP.md` still lists RR=1 from the August file — that
+doc is the stale one.**
+
+### 🔴 END STATE, 2026-09-18 00:00 — RR IS DELIBERATELY CARRYING THE 09-13 HALL TABLE
+Sequence, all readback-verified on device: restored the three tune values -> restored the 15-Aug hall
+table (`diag/restore_rr_hall.py`) -> **operator asked for the OLD hall table back, so it was reverted
+to 1/135/168/65/33/99.** ⇒ **RR NOW: hall = the 09-13 (suspect) table · tune = in family with the
+other three.** ⛔ **Do not "fix" the hall table without asking — it is set that way on purpose,
+pending a floor A/B.**
+📏 **The A/B metric is already on record from 09-14:** RR's reported speed collapsed to near zero in
+**20.2%** of moving samples vs FR/RL 6.0%, FL 10.2%, with a +20 A spike in the same samples. Re-run
+that and the comparison decides it. ⚠️ Use the **>20 rpm** threshold (>100 reads 0.0% at 0.25 m/s as
+an artifact), state the speed, and use `diag/brake_fullrate.py` — `brake_run_record.py` logs 1 sample
+in 20. ⚠️ `brake_fullrate.py` arms on mean >300 rpm.
+Backups both directions: `vesc_mcconf_RR_20260917_2318_hallpre.xml` (09-13 table) ·
+`diag/restore_rr_hall.py` (August table).
+
+### ⬜ `s_pid_kp` 0.004 ON ALL FOUR — TRIED AND REVERTED THE SAME NIGHT
+Operator asked for a quick all-four test at 0.004, then reverted to 0.008. Both directions verified
+on device. No measurement was taken in between, so **this produced no data** — recorded only so the
+0.004 backups (`*_20260917_2344_s_pid_kp_pre.xml`) are not mistaken for a considered setting.
+
+## 🔴🔴 USB — 2026-09-17 CONFIRMS THE 09-14 RULE, FIVE TIMES OVER
+**Five wedges in one session.** Every one showed `Could not read firmware version` / `Could not
+connect` while the device enumerated cleanly (`0483:5740`, no dmesg errors, `vcgencmd get_throttled`
+**0x0** ⇒ not undervoltage).
+⛔⛔ **A TARGETED SINGLE-DEVICE `USBDEVFS_RESET` MADE IT WORSE EVERY TIME** — the device dropped off
+the bus entirely (`ioctl: [Errno 19] No such device`, then gone from `/sys/bus/usb/devices`), and
+only the **hub `1-1.2` reset** brought it back. **This is the second independent confirmation. Go
+STRAIGHT to the hub reset; do not try the single device first.** (I tried it anyway tonight, having
+not re-read this file — cost ~15 min.)
+✅ **The hub reset recovered all four, every single time.** Guard the reset on
+`idVendor == 214b`; ⛔ never `1-1` (Realtek NICs + WFB).
+🔑 **A wedge can also clear ITSELF** — FL refused every connection for ~20 min, then answered
+normally after an unrelated hub reset.
+🔑 **The wedge MOVES between wheels** — FL, then RR, then FR/RL. It is not one bad ESC.
+🔑 **CAN health says nothing about USB, again:** FL read `online_flags 0xf` at **24.84 V** on
+DroneCAN while its USB refused everything. ⇒ **a USB-dead ESC is still fully configurable... just
+not tonight** — and its config CANNOT have changed, since USB is the only write path. That is what
+made it safe to substitute FL's last verified readback into the audit (checked afterwards against a
+live read: **identical apart from `foc_offsets_*`**).
+🔑 Port mapping was stable all session after each hub reset: **ACM0=12 RR · ACM1=10 FR · ACM2=13 RL ·
+ACM3=11 FL** — but `set_mcconf_field.py --expect-id` is what actually protects you; it refuses on a
+mismatch, so a reshuffle costs a retry, never a wrong wheel.
+
+---
+
+## 🛑 THE BRAKE PATH — 2026-09-18, MOVED HERE FROM `MEMORY.md`
+
+Consolidated out of the index on 09-18 (the index had grown to 99% of its read cap and was about to
+silently drop its own tail). **Nothing here is new; nothing here was recorded anywhere else.**
+
+### ✅ THE TUNE IN FORCE (09-13, all four, floor-validated under load)
+
+`s_pid_kp` **0.008** · `s_pid_min_erpm` **50** · `l_in_current_min` **−10** · `l_current_min` **−25**
+· `s_pid_ramp_erpms_s` **20000** · speed cap **4.93 m/s**.
+⚠️ `s_pid_kp` 0.004 UNDER-ASKED for current (12.0 → 20.7 A) — see the 09-17/18 section above.
+
+### ⛔⛔ DO NOT CHASE THE HARD NEUTRAL BRAKE WITH `l_current_min`
+
+**Measured 09-14, 99 Hz log, 9 stops: peak braking is only −3.5 to −4.6 A.** So −25, −15 and −6 all
+sit *above* it and **none of them ever bind.** Taken −25 → −15 → −6; the operator felt **nothing**;
+**all reverted to −25.**
+🔑 **NEUTRAL IS "HOLD 0 ERPM" — AN ACTIVE STOP**, not a release.
+
+🔴 **THE STAND CANNOT REPRODUCE THE SYMPTOM.** Those stops were 1.3–2.7 s coast-downs with *mean
+current positive* (+0.7 to +1.1 A). No mass ⇒ no kinetic energy ⇒ the speed loop is never asked for
+brake current. (Same trap as the crawl-catch work — see the test-condition caveat above.)
+⏭ **THE HARD STOP REMAINS UNDIAGNOSED. It needs a FLOOR run.**
+
+### ⚠️⚠️ THE MEASUREMENT TOOL IS A TRAP
+
+`brake_run_record.py` logs its CSV on a **0.2 s timer (5 Hz)** while `esc_status` arrives at **~98 Hz**
+— 1 sample in 20, **blind to a spike inside a 0.4 s stop.** ⇒ **use `diag/brake_fullrate.py`.**
+⚠️ But `brake_fullrate.py` **arms on mean wheel speed >300 rpm**, and 0.75 m/s only reaches ~270 ⇒ it
+scored **0 stop events** on a run that contained one. **Lower the arming threshold before trusting it.**
+🔑🔑 **AND WHEEL RPM CANNOT MEASURE A STOP AT ALL** — the end-of-stop speed signal is non-physical.
+→ `ros2_ws/docs/autonav_reference.md` §13b. Use an independent ruler: `/scan` against a wall, or tape.
+
+### ⛔⛔ `s_pid_ramp_erpms_s` STAYS 20000 — 2000 WAS TRIED AND REVERTED (09-13/14)
+
+Sluggish off the line, and the real reason:
+🔴 **ON A DIFFERENTIAL DRIVE THE RAMP THROTTLES YAW ONSET** — a turn *is* a side-to-side speed
+difference, so ramping speed ramps steering. Every turn went long. **This is CONTROL AUTHORITY, not
+comfort.**
+🔴 **AND THE COLLISION REFLEX RIDES ON IT:** the reflex only zeroes the setpoint, which in RPM mode
+*is* a duty-0 brake — but that is only instant at ramp 20000. **Any future ramp cut slews the
+EMERGENCY stop at comfort-stop rate.**
+⏭ **Durable fix: make the reflex COMMAND A BRAKE rather than collapse the setpoint.**
+
+🔑 **THE RAMP IS SYMMETRIC BY CONSTRUCTION** — `foc_math.c:504` → `utils_step_towards`
+(`utils_math.h:131`), same step both directions ⇒ it can **NEVER** give soft stop + snappy launch.
+⛔ **`cc_ramp_step_max` / `m_duty_ramp_step` ARE NOT USABLE BRAKE RAMPS** — they live only in
+`mcpwm.c` (BLDC), which is dead code on this FOC firmware.
+⇒ **Asymmetry has to come from PX4's `RO_DECEL_LIM`**, which is separate from `RO_ACCEL_LIM`.
+✅ **`RO_DECEL_LIM` is 5 since 09-14** (`RO_ACCEL_LIM` stays −1), and its stop contribution was
+**closed by arithmetic 09-18**: slew = 5 ÷ 4.93 = 1.01/s ⇒ ~0.06 m at 0.75 m/s.
+→ `autonav_reference.md` §13 (09-18). ⛔ The old "pinned −1 after the 08-14 wall hit" note is STALE.
+
+### ⏭ THE ONE UNTESTED ESC BRAKE LEVER
+
+**`foc_duty_dowmramp_kp` 50 / `foc_duty_dowmramp_ki` 1000** *(spelling is the firmware's, not a typo)*.
+Only 2 lines in the firmware, both inside the duty-control PI — and the **only** path into duty
+control here is the neutral duty-0 short brake ⇒ **brake-path-only: it cannot touch accel or yaw.**
+⚠️ **UNCONFIRMED — get floor data before touching it.**
+
+### 🔴 CEILINGS THAT MAKE A "CAP" MEANINGLESS
+
+`esc_rpm` is **MECHANICAL — multiply by 7** for the ERPM that `rpm_max` expects.
+Ceiling is **~10500 ERPM** (`l_max_duty` 0.95) ⇒ **a cap set above that is not a cap.**
