@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 3d6fddee-7330-454a-a767-3665b8dfbebf
-  modified: 2026-09-12T18:05:18.893Z
+  modified: 2026-09-20T12:19:46.948Z
 ---
 
 # ESC / DroneCAN telemetry — how to read it, and what it does NOT mean
@@ -61,6 +61,49 @@ Fixed 2026-09-11 in `tools/l2_test.py` and `tools/yaw_response_log.py`; `wheel_e
 and `collision_standoff_test.py` already did it correctly.
 ⚠️ The drive addresses are **10, 11, 12, 13**, but that is a **stable ordering only** — the
 address ↔ wheel-corner mapping **has never been verified against one turning wheel.**
+
+## 🔑🔑 "ESC 1" / "ESC 2" IN A PX4 MESSAGE NAMES A **SIDE**, NOT A WHEEL — and 3/4 CANNOT EXIST
+
+**Read live off the FC 2026-09-20** (`tools/set_param.py <NAME>`, read-only):
+
+| param | value | meaning |
+|---|---|---|
+| `UAVCAN_EC_FUNC1` | **101** | **Motor 1** |
+| `UAVCAN_EC_FUNC2` | **102** | **Motor 2** |
+| `UAVCAN_EC_FUNC3` | **101** | **Motor 1 — again** |
+| `UAVCAN_EC_FUNC4` | **102** | **Motor 2 — again** |
+| `UAVCAN_EC_FUNC5` | 407 | `RC_AUX1` — RC brake |
+| `UAVCAN_EC_FUNC6` | 301 | `Peripheral_via_Actuator_Set1` — software brake |
+
+🔑 **This is correct for a differential drive and must not be "fixed": one command per SIDE,
+broadcast to the two wheels on that side.** But it means **PX4 knows only two motors**, so:
+
+- **`ESC 1` = the RIGHT pair = array pos 0 + 2 = addresses 10 + 12.**
+- **`ESC 2` = the LEFT pair = array pos 1 + 3 = addresses 11 + 13.**
+- ⛔ **`Motor 3` and `Motor 4` DO NOT EXIST ⇒ a PX4 health message can never print 3 or 4.**
+  The operator read that as "it shows the wrong ESC number"; the number is right, it is just
+  **naming a side**. ⛔ **PX4 CANNOT TELL YOU WHICH WHEEL DIED — only which side.**
+
+🔑 **The exact string is `ESC {1} offline`** — found in `~/apps/fc_firmware/CLEAN_v1.17.0-2.0.0_px4_fmu-v6xrt_default.elf`
+(`strings`), so it is a PX4 *event* with a templated argument, not free text to grep for verbatim.
+⚠️ **The PX4 SOURCE IS NOT ON THIS MACHINE** (only `.bin`/`.elf`/`.px4`), so the check's loop was
+**not** read. The two-motor conclusion rests on the params above **plus** the operator's own
+observation that it never prints 3, 4, 5 **or 6** — if it iterated `esc_count` it would name the
+two permanently-offline brake slots every time. Strong, but **inferred**; the firmware tree closes it.
+
+### The live layout, measured the same day
+```
+esc_count 6   esc_online_flags 13 = 0b001101   esc_armed_flags 63
+pos0 online addr 10 | pos1 OFFLINE addr 0 ts 0 | pos2 online addr 12 | pos3 online addr 13
+```
+Node **11 was the one down**, and PX4 would call that **"ESC 2"** because 11 is on the left.
+✅ **pos → addr is 0→10, 1→11, 2→12, 3→13 and was IDENTICAL across all 30 messages** — it is each
+VESC's own **`uavcan_esc_index`** (see `codex-work/bldc_can/MOTOR_MAP.md`), not arrival order.
+⚠️ **That still does NOT verify the corner labels** — it verifies index↔address, not address↔wheel.
+🔑 `addr 0 + timestamp 0` is the **powered-off-or-dead-bus** signature; ask before diagnosing CAN.
+
+⇒ **To identify a failed wheel: `esc_online_flags` bit-by-bit, keyed on `esc_address`. Never the
+PX4 message, and never QGC.**
 
 ## ⛔ `UAVCAN_EC_MIN1..4` = 110 / `MAX1..4` = 8082 ARE DELIBERATE
 **Never "tidy" them back to 10/8191.** Sum 8192 ⇒ neutral lands exactly on 4096; **10 is dead
