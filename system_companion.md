@@ -202,9 +202,11 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
 |---|---|---|
 | `rover-camera.service` | enabled, active | Orbbec Gemini 336L ROS2 wrapper |
 | `rover-scan.service` | enabled, active | depth → `/scan` LaserScan (~20 Hz) |
+| `rover-scan-3d.service` | enabled | height-aware `/scan_3d` from the depth cloud. Runs **alongside** `rover-scan`, not instead of it — it publishes no TF, and the live collision reflex still reads `/scan` |
 | `rover-odometry.service` | enabled, active | wheel/gyro odometry → `/odom` (~100 Hz) |
 | `rover-autonav-mode.service` | enabled, active | `autonav_mode` px4_ros2 mode + reflex collision-stop |
 | `rover-ekf-bridge.service` | **installed but DISABLED on purpose** | EV velocity → EKF2. Wheels-up + closed-loop = self-sustaining limit cycle; start by hand only with the rover on the floor. **AutoNav cannot arm without it — that is deliberate, not a fault.** |
+| `rover-nav2.service` | **installed but DISABLED on purpose** (added 2026-09-20) | The six Nav2 servers — `controller_server` (DWB), `planner_server`, `behavior_server`, `bt_navigator`, `velocity_smoother`, `lifecycle_manager`. This is the unit that publishes `/cmd_vel`, so it is the unit that moves the rover: start it for a run, stop it after. **Restarting it is also the "clear both costmaps" step.** Params default to `nav2_forward_flat.yaml` (the armed-run config) via `Environment=NAV2_PARAMS=`; override with `systemctl edit rover-nav2`. ⛔ Never run `nav2_forward.yaml` armed — voxel layer active commanded a sustained max-rate spin. See `ros2_ws/docs/setup_manual.md` §C6b |
 
 **Video Pipeline:**
 ```
@@ -338,6 +340,38 @@ optional secondary cam ────────────┘    PiP overlay
 ### rov_collision_stop (`rov_collision_stop` package)
 - **Source:** `ros2_ws/src/rov_collision_stop/src/main.cpp` (C++ node)
 - **Function:** Emergency collision stop for rover mode
+- ⛔ **Not running, no service, superseded** (noted 2026-09-20): the live collision reflex lives
+  **inside the `autonav_mode` executor**, which is the single funnel to the motors and therefore
+  cannot be bypassed by anything publishing `/cmd_vel`. A second independent brake would make it
+  ambiguous which one stopped the rover. Slated for deletion — see `setup_manual.md` §C9.
+
+### The AutoNav chain — every node, and which language it is *(added 2026-09-20)*
+
+The whole autonomy stack is ROS 2 nodes, so any of them can in principle run on any machine that
+shares the DDS domain. Only two of the fifteen are Python.
+
+| # | Node | Package | Lang | Service |
+|---|---|---|---|---|
+| 1 | Micro XRCE-DDS agent | `microxrce-agent` | C++ | `microxrce-agent.service` ✅ |
+| 2 | Orbbec Gemini 336L wrapper | `orbbec_camera` | C++ | `rover-camera.service` ✅ |
+| 3 | `base_link→camera_link` static TF | `tf2_ros` | C++ | inside `rover-scan.service` ✅ |
+| 4 | `depthimage_to_laserscan` → `/scan` | stock | C++ | `rover-scan.service` ✅ |
+| 5 | `pointcloud_to_laserscan` → `/scan_3d` | stock | C++ | `rover-scan-3d.service` ✅ |
+| 6 | `wheel_odometry_node` → `/odom` + TF | `rover_odometry` | **Python** | `rover-odometry.service` ✅ |
+| 7 | `autonav_mode` — PX4 external mode **+ the collision reflex** | `autonav_mode` | C++ | `rover-autonav-mode.service` ✅ |
+| 8 | `rover_ekf_bridge` — `/odom` → EKF2 EV velocity | `rover_ekf_bridge` | C++ | `rover-ekf-bridge.service` ⛔ manual, floor only |
+| 9-14 | `controller_server` (DWB) · `planner_server` · `behavior_server` · `bt_navigator` · `velocity_smoother` · `lifecycle_manager` | stock Nav2 | C++ | `rover-nav2.service` ⛔ manual |
+| 15 | `rc_control_node` — CH9 camera / CH10 shutdown-reboot | `rc_control` | **Python** | `rc_control_node.service` ✅ |
+
+Built but deliberately not running: `rov_collision_stop`, `obstacle_distance`, `collision_manual_mode`,
+`optical_flow`, `rov_manual`, `rov_ext`, `tfmini_sensor` (⚠️ the last one must be re-enabled for the
+drone airframe). RTAB-Map localization has no unit because R1 is unresolved.
+
+🔴 **A unit reading `active` proves nothing about whether data is flowing.** Verified again
+2026-09-20: all four perception/odometry units read `active`, the camera container was burning 46% of
+a core and the Gemini was present on USB, yet depth, `/scan`, `/odom` and `/tf` were all at
+**0.00 Hz** measured with a direct rclpy subscriber. Measure rates, never `is-active`. Recovery order
+is camera → scan → scan-3d → odometry, in that order.
 
 ### Other packages (no active service, reference/example)
 - `arm_drone` — arm/disarm utilities

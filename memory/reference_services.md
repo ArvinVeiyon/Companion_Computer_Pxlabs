@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 15cc4d60-122c-4a4b-9f9b-8e1a15ef71a0
-  modified: 2026-07-21T18:36:46.315Z
+  modified: 2026-09-20T09:01:45.064Z
 ---
 
 last verified: 2026-05-09 — mavlink.router + microxrce-agent both active, FC client connected, DDS topics negotiated
@@ -45,6 +45,44 @@ rover-ekf-bridge.service  → /odom → EKF2 EV velocity. **INSTALLED BUT `disab
                             rover is on the floor: `sudo systemctl start rover-ekf-bridge`.
                             NOTE: AutoNav cannot arm at all while this is stopped (no v_xy_valid).
 All four boot units verified active + topics flowing 2026-07-21. sudo needs a password (printf|sudo -S).
+
+## 2026-09-20 — the stack is now COMPLETE as units. `rover-nav2` was the only one missing.
+
+`rover-nav2.service` — the six Nav2 servers (`controller_server` DWB, `planner_server`,
+`behavior_server`, `bt_navigator`, `velocity_smoother`, `lifecycle_manager`), launched from
+`rover_nav2/nav2_forward.launch.py`. **Installed, `disabled`, manual start only** — same policy and
+same reason as `rover-ekf-bridge`: this is the unit that publishes `/cmd_vel`, so it is the unit that
+moves the rover.
+
+- 🔑 **Restarting the unit IS the "clear both costmaps" step.** Both come up empty.
+- Params: `Environment=NAV2_PARAMS=` → `nav2_forward_flat.yaml`, the armed-run config.
+  ⛔ never `nav2_forward.yaml` armed (voxel layer = sustained max-rate spin, 09-17).
+  Override with `sudo systemctl edit rover-nav2`, no file edit.
+- **No colcon build needed to retune:** the installed config path is a *symlink* into `src/`, so
+  editing the YAML and restarting the unit is enough. Which matters because ⛔ DWB reads critic
+  `scale` and `sim_time` at initialise — a live `param set` does nothing.
+- `Restart=on-failure`, not `always`: a crash stops the rover anyway (`autonav_mode` zeroes the
+  setpoint after a 0.5 s `/cmd_vel` watchdog) and the replacement comes up with no goal; a clean
+  exit means the operator stopped the stack.
+- Smoke-tested 09-20 with the rover **disarmed** (`arming_state: 1`): all six processes launched.
+
+**Units too specific for the installer's `mkunit()` now live as whole files in
+`ros2_ws/systemd/` and are copied verbatim** — `rover-nav2.service` and `rover-scan-3d.service`
+(the latter had drifted: it existed in `/etc` but the installer never created it). The installer
+loops over `*.service` in its own directory, then leaves `rover-nav2` and `rover-ekf-bridge`
+disabled.
+
+🔴 **`active` proves nothing — reconfirmed 09-20 with an independent ruler.** All four
+perception/odometry units read `active`, the camera container was at 46% of a core and the Gemini
+was present on USB, yet depth, `/scan`, `/odom` and `/tf` all measured **0.00 Hz** on a direct rclpy
+subscriber. Nav2 came up but both costmaps sat at "Timed out waiting for transform … frame `odom`
+does not exist". ⚠️ Note one ESC read offline at the time (`esc_online_flags` 13) — untested as the
+cause. Recovery order: camera → scan → scan-3d → odometry.
+
+📗 Documented 09-20 in `setup_manual.md` §C1 + **§C6b** (numbered C6b on purpose, so the many
+existing C7-C10 references stay valid) and in `codex-work/system_companion.md` §6 service table +
+§6b, which now carries the **full fifteen-node AutoNav chain with each node's language** — only
+`rover_odometry` and `rc_control` are Python, everything else is C++.
 
 ## tfmini — DISABLED on the rover 2026-07-26 (MUST RE-ENABLE FOR THE DRONE BUILD)
 
