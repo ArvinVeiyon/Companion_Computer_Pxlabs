@@ -49,7 +49,17 @@ metadata:
   On this rover localization is **RTAB-Map**, the component returning 0/20.
 * 🔑 **VIO REPLACES ENCODERS, NOT GPS.** A drone needs VIO because it has **no wheels**. This rover
   already has the incremental half ⇒ VIO matters **less** here; what is missing is the **absolute**
-  half. ⇒ **publish the MAP-RELATIVE pose from relocalization to PX4, not raw VIO** (same topic).
+  half. ⇒ **publish the MAP-RELATIVE pose from relocalization to PX4, not raw VIO.**
+  🔑🔑 **THE ROUTE IS THE BRIDGE WE ALREADY RUN — no new node, topic or firmware.**
+  `rover-ekf-bridge` already uses `px4_ros2::LocalPositionMeasurementInterface`, and
+  `LocalPositionMeasurement` carries **`position_xy` + `position_xy_variance`** next to the
+  `velocity_*` fields it fills today ⇒ **populate two more optional fields.**
+  ⚠️ **A WELL-DEFINED VARIANCE IS MANDATORY** — *"its associated variance value is well defined"*,
+  *"Values do not have a NAN"*, else **`NavigationInterfaceInvalidArgument`**. ✅ right design:
+  after a long unmatched stretch hand PX4 a **bigger variance**, not a confident lie.
+  Global/lat-lon route = `GlobalPositionMeasurementInterface`, gated by **`EKF2_AGPn_CTRL`**.
+  📗 PX4 Guide → *ROS 2 → PX4 ROS 2 Navigation Interface*; detail in
+  `ros2_ws/docs/px4_companion_interface.md` §9.5.
 * 🔑 **Drones use VIO indoors because of the MOTION MODEL.** 2D scan matching assumes **planar
   motion** — a rover meets it (3-DOF, plane parallel to floor), a drone violates it (roll/pitch tilt
   the slice, climbing moves it, no altitude, weight). ⛔ **Not evidence that LiDAR is weak indoors.**
