@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: bb65f25d-0178-47c8-a2a3-6585b3e81df2
-  modified: 2026-07-25T18:03:29.578Z
+  modified: 2026-09-20T12:12:04.239Z
 ---
 
 **LIKELY FIXED 2026-07-25 ~22:55 IST — power module replaced. Confirmation pending an armed run.**
@@ -49,6 +49,31 @@ Because the failure mode is load-transient driven and every reading so far is at
 - systemd unit enabled (survives reboot), `Restart=always`, `Nice=10`; logrotate at `/etc/logrotate.d/ext5v` (daily, 7, maxsize 50M, restarts service to rewrite CSV header).
 
 **NEXT ACTION: after the next armed floor run, `ext5v-report 30`.** Verdict criteria — if `dips <4.80V` stays 0 and new TX drops stay 0 under VESC load, close this issue. If dips appear, the wiring impedance is the remaining fault, not the module.
+
+#### 🔴 2026-09-20 — THE VERDICT CRITERIA WERE MET ON THE "DIPS" SIDE. ⛔ DO NOT CLOSE THIS ISSUE.
+**Dips <4.80 V DID appear**, on an ordinary desk day with **nothing armed and the VESCs idle** —
+so the remaining fault is the **wiring impedance / supply path**, not the XL4015 module, exactly as
+the criterion above predicted. Day's log (6235 samples, 13:28→17:26, logrotate-fresh):
+
+| metric | value |
+|---|---|
+| dips **<4.80 V** | **2** — 15:01:04 (4.79050) and **17:01:15 (4.79452)** |
+| dips <4.90 V | **690** (~190/hour, steady all afternoon — chronic, not a spike) |
+| mean / max | 4.9885 / 5.1027 V · headroom **−10 mV** above the 4.80 knee |
+| peak core | **5.55 A** · peak temp 63.7 °C · `throttled` **0x0 throughout** |
+| new WFB TX drops | **0 on all three NICs** |
+
+🔑 **The NIC half of this issue still looks fixed** — 0 TX drops across the whole window, including
+both sub-knee excursions.
+⛔ **No consequence has ever been observed from these dips** — nothing has been traced to them. The
+dips are real; the harm is still hypothetical.
+
+⏭ **The criterion is met, so the NEXT ACTION stands and is now overdue: `ext5v-report 30` after an
+armed floor run**, where the VESC load actually exists. Everything above was measured at **desk
+idle** — nothing armed, VESCs quiet — which is what makes 2 sub-knee dips notable rather than
+reassuring.
+⛔ **Raising `EXT5V_WARN_BELOW` to silence the 190/hour WARN spam would destroy the only ruler
+we have.** Leave it at 4.90.
 
 ### Who reverted WFB_NICS — investigated 2026-07-25 eve: NOT system_files_sync
 The single-NIC mitigation was **manually undone after ~11 minutes**, not lost to a reboot or the sync timer.

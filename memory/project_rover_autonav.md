@@ -5,10 +5,49 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5ff45709-5e20-4964-9bd8-fce6f3bc03f0
-  modified: 2026-09-15T18:51:12.007Z
+  modified: 2026-09-20T12:11:57.413Z
 ---
 
 # Rover Autonomous Navigation — ACTIVE (started 2026-07-19)
+
+## ✅ 2026-09-20 (desk, disarmed) — **EVERYTHING IS PUSHED OFF THE CARD. SIGN FIX PROVEN IN THE RUNNING BINARY.**
+
+Session `bb07cdc3`, 13:40→17:00 IST. **Nothing was lost** — the push below landed 17:09. Rover
+disarmed and the EKF bridge stopped throughout; nothing moved.
+
+**🔑 THE SAFETY NET CLOSED.** `ros2_ws` → `79c82bf` on `main`, `codex-work` → `72514ce` on `master`,
+both pushed, both trees clean. 🔴 **Until that push, `nav2_forward_flat.yaml` — the config T3 passed
+on and the one `rover-nav2.service` loads by default — and the `mode.hpp` sign fix existed NOWHERE
+BUT THIS SD CARD.** Both remotes are SSH, so this did not touch the two unrevoked PATs.
+
+**✅✅ THE 09-19 SIGN FIX IS IN THE BINARY THAT IS RUNNING. Verified four ways — ⛔ don't re-derive:**
+1. header edited 09-19 13:06:23, object recompiled 13:07:42, binary linked 13:07:51 — rebuild *after* edit;
+2. the CMake depfile lists `autonav_mode/mode.hpp` as a dependency of `main.cpp.o`, so it cannot have been skipped;
+3. ⚠️ **the install path is a SYMLINK into the build tree, not a copy** — `install/autonav_mode/lib/autonav_mode/autonav_mode` → `build/…`. Its own mtime reads **2026-08-01** and looks stale. **That is the symlink's date, not the binary's.** 🔑 `/proc/<pid>/exe` is the ruler that settles it;
+4. **decisive:** disassembly shows an `fneg` inside the `/cmd_vel` callback in `AutoNavMode::AutoNavMode`.
+
+**✅ Clean rebuild is BYTE-IDENTICAL.** `colcon build --packages-select autonav_mode --cmake-clean-first`,
+46 s, genuinely recompiled (new object+binary timestamps 16:54, one `Building CXX` line) → same
+sha256 `5a95d3cb…59915` before and after. So the build is reproducible **and** the binary that had
+been running since 09-19 was already built from current source.
+
+**✅ Service re-verified end to end after the restart** (16:55:35) — because `is-active` proves
+nothing here: registration request+reply at t=8.8 s, `success=True`, **`mode_id=23`**; arming-check
+handshake running continuously (28 requests / 20 replies), **`can_arm_and_run=True`**; mode selectable.
+
+**🅿️ Parked deliberately, NOT documented anywhere:** the **second Pi 5 running Nav2 in parallel**
+over DDS. Operator: *"not now but later."* The design exists only in the lost transcript. The four
+constraints identified: same `ROS_DOMAIN_ID` **and** same RMW; `px4_msgs` built from the **same
+commit** (a mismatch shows up as a topic that silently never connects, not as an error); a **wired**
+link, not the radio; clocks agreed to a few ms, because TF and costmap stamps are compared across
+machines.
+
+**⏭ THE QUESTION THE SESSION DIED ON, and its answer:** *"we introduced two UAVCAN actuator outputs,
+one is for brake and another one is for?"* → **both are the brake.** Slot 5 (`UAVCAN_EC_FUNC5` =
+**407** = `RC_AUX1`) is the operator's **RC passthrough hand-brake, with no software path at all**;
+slot 6 (`FUNC6` = **301** = `Peripheral_via_Actuator_Set1`) is the **software-commandable** brake the
+collision reflex needs, drivable from the companion over DDS. ⛔ **Do NOT move slot 5.** Slot 6 is
+**still inert** pending the VESC firmware change. Full detail in the 2026-09-12 slot-6 section below.
 
 ## ✅✅✅ 2026-09-15/16 (corridor, floor) — **G3 CLOSED. T2 PASSED n=3, TAPE-ADJUDICATED, ACROSS A 5× SPEED RANGE**
 
