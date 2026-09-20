@@ -73,6 +73,19 @@ metadata:
 * ⏭ **Confirm applicability before site selection** — it drives cost and mounting more than
   anything else discussed.
 
+## ⚠️ "MAP" MEANS TWO DIFFERENT THINGS — the trap that recurred three times
+
+* **Obstacle map / costmap** = *what is in the way*. Built **using** your pose, consumed by the
+  planner. **PX4's `global_planner` octomap is this**; so are our Nav2 costmaps.
+* **Localization map** = *what the world looks like*, matched against live sensing to recover pose.
+  **RTAB-Map's `house_map_v4.db` is this.**
+* 🔑🔑 **An obstacle map can NEVER localize you — it was built assuming you already knew where you
+  were.** Drift writes obstacles at the drifted place; the error is baked in, not detectable.
+* ⇒ PX4's *"builds a map of the environment"* is **true and irrelevant** — the same page requires
+  *"accurate global position and heading"* as an input.
+* ✅ **We have both; only one is broken:** Nav2 costmaps ✅ (T3 avoided + rejoined) ·
+  RTAB-Map DB 🔴 0/20.
+
 ## 🔴 PX4's OWN WARNING ON GPS + VISION — bears on the site plan
 
 * PX4 VIO page, verbatim: *"This is really difficult, because when they disagree it will confuse the
