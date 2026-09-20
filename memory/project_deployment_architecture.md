@@ -73,6 +73,35 @@ metadata:
 * ⏭ **Confirm applicability before site selection** — it drives cost and mounting more than
   anything else discussed.
 
+## 🔴 PX4's OWN WARNING ON GPS + VISION — bears on the site plan
+
+* PX4 VIO page, verbatim: *"This is really difficult, because when they disagree it will confuse the
+  EKF. **From testing it is more reliable to just use vision velocity.**"*
+* ⇒ ⛔ **The easy plan — fuse GPS where available, fall back to vision — is the exact case PX4 says
+  confuses the estimator.** 🔑 **ARBITRATE, DON'T BLEND** (one source per area), or design the
+  handover deliberately. ⚠️ `EKF2_GPS_CTRL` reads **7** (fully enabled) **with no GPS fitted.**
+
+## 🔧 PREREQUISITES BEFORE ENABLING POSITION FUSION — all read live 2026-09-21
+
+* ✅ **The code change is small and located:** `rover_ekf_bridge/src/main.cpp:25` constructs with
+  `PoseFrame::Unknown, VelocityFrame::BodyFRD`; lines 63-70 fill `velocity_xy`/`velocity_z` +
+  variances and **never `position_xy`**. ⇒ **add `position_xy` + `position_xy_variance`, move
+  `PoseFrame` off `Unknown`.** Nothing else moves.
+* ⚠️ **`EKF2_EV_POS_X/Y/Z` = 0.0, 0.0, 0.0 — right TODAY, wrong LATER.** They are the *VI sensor
+  focal point relative to the CoG*. Today velocity comes from **wheel odometry at the body frame**,
+  so zero is correct. 🔑 **The moment a CAMERA-derived pose is fed they must be set from the
+  measured mount** — `front_overhang` **0.337**, `cam_z` **0.305**, already known from G0.
+  ⛔ Unmodelled lever arm ⇒ yaw rate becomes **spurious lateral velocity**.
+* ⚠️ **`EKF2_EV_DELAY` = 0.0, UNTUNED.** PX4: estimate the IMU↔vision offset from logs, then vary it
+  for **lowest EKF innovations during dynamic manoeuvres**.
+* ⚠️ `EKF2_HGT_REF` is **not** Vision (PX4 says it should be for VIO). Low priority on a rover.
+* 🔑 **Bring-up step worth copying:** *"Yaw the vehicle until the quaternion of the ODOMETRY message
+  is very close to a unit quaternion (w=1, x=y=z=0)."* Velocities stay **FRD body frame** — already correct.
+* ⚠️ **Vibration:** PX4 warns VIO cameras are *"very sensitive to high-frequency vibrations"* —
+  ⛔ untested here, and relevant to hard wheels on concrete.
+* ✅ **The PX4 VIO page says NOTHING about relocalization or mapping** — vendor confirmation that
+  **VIO is odometry, not map localization.**
+
 ## ⏭ NEXT ACTION — a diagnosis, not a purchase
 
 * 🔴🔴 **Relocalization: 0 accepted of 20 on the map's OWN bag, failing at GEOMETRY not appearance
