@@ -82,3 +82,54 @@ metadata:
   regulates against its own under-read. ⛔ Not fixed by better calibration.
 * **Odometry is a PRIOR, not the position source.** ✅ the calibration is **not** wasted — it carries
   the estimate between absolute fixes, which is how industry fuses it. ⛔ Never re-open the scale.
+
+## ✅ THE DEPTH CAMERA'S PRIMARY JOB — confirmed by the operator 2026-09-21
+
+* ✅ **The depth camera builds the LOCAL MAP (the costmap), and that is what PLANNING runs on.**
+  This is its main role and it **already works** — T3 demonstrated avoidance and rejoin on it.
+* 🔑 Consistent with the planning-vs-localization split above: the camera supplies the **obstacle
+  information** the local and global planners consume. ⛔ That is not the same as it localizing.
+* ⇒ **Two separate jobs, do not conflate them:**
+  * **camera → local map → planning** ✅ working today
+  * **relocalization → pose** 🔴 the 0/20 blocker
+
+## 🔬 VIO / SLAM STACK OPTIONS — assessed 2026-09-21 against the live box
+
+### ⚠️ Option A — ORB-SLAM3 / OpenVINS (VI mode) → `robot_localization` EKF
+
+* ✅ **IMU is available and live:** `/camera/accel/sample`, `/camera/gyro/sample`.
+* ❌🔴 **THE STEREO IR STREAMS ARE NOT PUBLISHED.** Live topic list is **colour + depth + IMU only**
+  — no `/camera/ir/*`, no left/right. ⇒ Option A needs streams **enabled first**, at USB-bandwidth
+  and CPU cost, before any SLAM runs. ⛔ Do not plan on them being there.
+* ✅ The "clean IR, IR-pass filter kills indoor glare" claim is **genuine** — the 336L *is* the
+  IR-pass variant. The reasoning is sound; it just is not free.
+* 🔴 **CPU makes it unaffordable today.** Measured 09-21: **load 2.68 of 4 cores**, `wheel_odometry`
+  54.5%, camera container 45.5% ⇒ **~1.3 cores free — and FPV streaming was OFF** (it costs **139%
+  of a core**). ⇒ near-zero headroom with video. For scale, `rgbd_odometry` alone is **79.6% of a
+  core stationary**.
+* 🔴 **It solves the WRONG HALF.** It produces **VIO = odometry**. The blocker is **Case B
+  relocalization**. ⛔ **OpenVINS has no map reuse at all** and cannot help.
+* ⚠️ It would add a **third estimator** (`robot_localization` on top of PX4 EKF2 on top of RTAB-Map)
+  to a system that already has `/odom`↔EKF circular feedback.
+* ✅✅ **BUT IT HAS ONE REAL USE — AS A DIAGNOSTIC, NOT AN ARCHITECTURE.** Running **ORB-SLAM3's
+  relocalization against the same bag** answers: *is the failure RTAB-Map-specific, or fundamental
+  to visual relocalization in this environment?* 🔑 That is a different question from "should we
+  ship it", and it is worth one experiment.
+
+### ✅ Option B — RTAB-Map all-in-one (camera + `/scan`) = THE TARGET ARCHITECTURE
+
+* ✅ **Right shape:** already running here, does **odometry AND relocalization**, and fusing visual
+  features with laser scan matching is exactly the *fusion-not-replacement* conclusion.
+* 🔴🔴 **CATCH THE PROPOSAL MISSED: our `/scan` COMES FROM THE DEPTH CAMERA**
+  (`depthimage_to_laserscan`), **not a LiDAR.** Feeding it to RTAB-Map as a laser input is **the
+  same data twice** — no independent geometric constraint, no independent failure mode.
+* ⇒ **Option B only pays off once a REAL LiDAR is fitted.** ⛔ Do not expect a gain from wiring it
+  up against the camera-derived `/scan`. ⏭ Worth **designing toward** now so the LiDAR decision is
+  not retrofitted.
+
+### ⏭ Order
+
+1. 🔴 **Diagnose the 0/20 first.** Both options are "add more stack"; neither explains why
+   relocalization fails at **geometry** on its own bag, and both would inherit the fault.
+2. **Option A once, as an experiment** (enable IR, measure bandwidth + CPU, A/B the relocalization).
+3. **Option B as the target**, gated on a LiDAR.
