@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
-  modified: 2026-08-28T17:36:29.891Z
+  modified: 2026-09-26T08:13:32.985Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -269,3 +269,59 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   `netplan`, `sudoers.d/wfb-rlyctl`. ⛔ **Do NOT run `wfb-rlyctl use-cluster` — the CPE610 is not connected.**
 - ⚠️ Still open, lower priority: the unprivileged sync never backs up `iptables`, `netplan`, or
   `sudoers.d/wfb-rlyctl` (that last one gates `wfb-rlyctl` itself).
+
+### 2026-09-26 — ✅✅ 2-NODE CLUSTER VERIFIED ON RF · 🔴 THE BOX IS A MARCH-VINTAGE SD
+- 🔴🔴 **THE RELAY IS NOT THE MACHINE THE 08-28 SECTION DESCRIBES.** Its `~/codex-relay` reflog
+  stops at `01aa9ab` (Auto-sync 2026-03-15) — **no August commits at all**, no `0870840`. So
+  `wfb-cfg-apply` and `/etc/wifibroadcast.cfg.default` **DO NOT EXIST** here, `relay_files_sync.timer`
+  is **enabled+active** again, and `/etc/wifibroadcast.cfg` was back to the pre-restore 5375 B
+  `9f368f0d…`. ⛔ **Don't trust an 08-28 claim about this box without re-measuring it.** This is an
+  older card, not a file-level revert. ⚠️ Its clock now reads ~**1 MONTH** behind, not 3 days.
+- ✅✅ **CLUSTER MODE WORKS AND IS NOW THE RUNNING MODE.** ⛔⛔ **The old "NEVER run `wfb-rlyctl
+  use-cluster`" is DEAD** — it was conditional on the CPE610 being unplugged, and it is now wired:
+  relay `eth0` **UP, 10.5.7.100/24, 100 Mb/s full duplex**, node answers at **10.5.7.102** in 0.62 ms.
+- 🔑🔑 **ROOT CAUSE OF "SWITCHING TO CLUSTER FROM G-CONTROL DOES NOTHING": the `[cluster]` block was
+  the stock commented-out template** ⇒ `wfb-server --cluster ssh` aborts `Cluster is empty!` ⇒
+  `use-cluster` stops standalone and then fails to start cluster, **leaving NO WFB server at all.**
+  Wiped by commit **`8ccd66a` "Auto-sync: 2026-02-22 18:48"**, during that day's mavlink-router work
+  (`/etc/mavlink-router/main.conf` is dated Feb 22 **18:36**, 12 min earlier). The original backup
+  `2695911` **had a populated, working block** ⇒ a regression, and the template shape proves the file
+  was **replaced wholesale**, not hand-edited. 🔑 the auto-sync is one-way (`/`→repo): it only
+  **recorded** the damage. ✅ **FIXED + PUSHED: GitHub master `0e2443b`, tag `v1.0.6`.**
+- 🔑🔑 **THE CLUSTER SWITCH DOES NOT CHANGE THE LINK CHANNEL — it tunes the NODE *TO* 161.** The only
+  iface touched is the CPE610's `phy0-mon0`. Its `/usr/sbin/wfb-mon0.sh` had a stale `set channel 157`,
+  but WFB-NG's generated init runs that helper **first** and then applies `set channel 161 HT20` +
+  `iw reg set BO` from the cfg ⇒ **the generated script has the last word on both channel and
+  regdomain.** ✅ corrected to 161 on 09-26 anyway (backup `wfb-mon0.sh.bak-ch157`); it mattered only
+  for running the helper standalone. ⛔ **Don't "fix" a channel here — 161 is permanent everywhere.**
+- 🔑 **`--cluster ssh` SSHes to EVERY node INCLUDING `127.0.0.1`** ⇒ the cluster key must authorise
+  **`root@127.0.0.1` on the relay itself**, not just the CPE610. It does (tested).
+- 🔑 **`--gen-init <addr>` takes the NODE address**; the `-c` target in the generated script comes from
+  `[cluster] server_address` (**10.5.7.100** = relay eth0, the only IP both nodes can reach). The doc's
+  `10.5.6.102` was a wrong-subnet typo, fixed in v1.0.6. ⚠️ `--gen-init` and `--cluster` are mutually
+  exclusive args.
+- 🔑 **PROOF OF A REAL 2-NODE CLUSTER (not just "unit active"):** `tcpdump -ni eth0 src 10.5.7.102`
+  shows continuous 1400 B UDP **10.5.7.102 → 10.5.7.100:10001** = the node forwarding off-air MAVLink.
+  Plus drone-side decrypt errors **0**, RSSI −28..−30 dB, MAVLink still hitting `mavlink-routerd`
+  `:14560`. ⛔ `systemctl is-active` alone proves nothing here either.
+- ⚠️ **VERSION SKEW IS GROUND-SIDE ONLY:** relay **25.4.27.73439** · CPE610 node **25.01-r1** ·
+  **companion/drone 25.4.27.73439 = IDENTICAL to the relay.** ⛔ Don't blame the rover/drone for it.
+- 🔑 **MY EARLIER FALSE ALARM: `mavlink-router` reads `inactive`/`disabled` because the LIVE UNIT IS
+  NAMED `mavlink.router.service`** (dot, not dash — both unit files exist). `mavlink-routerd` was
+  running the whole time on `:14560`+`:5760`. ⛔ Never conclude "QGC has no telemetry" from the
+  dashed name. → [[feedback_independent_rulers]]
+- 🔑 **A ONE-OFF `ping 10.5.5.77` FAILURE MEANT NOTHING** — 100% loss, then fine 3 min later, because
+  `wifibroadcast@gs` had been restarted twice ~1 min earlier. **GS restarts are also the whole
+  explanation for bursts of `Unable to decrypt` + repeated `New session detected` on the drone** —
+  new session epoch, old packets undecryptable. ⛔ **Not a key mismatch.**
+- 🔑 **SAFE WAY TO FLIP A MODE THAT KILLS THE LINK YOU ARE ON:** run it detached with an unconditional
+  revert, then disarm only after proving health —
+  `nohup setsid sh -c 'sudo -n wfb-rlyctl use-cluster; sleep 200; [ -f /tmp/cluster_ok ] || sudo -n wfb-rlyctl use-standalone' &`
+  then `touch /tmp/cluster_ok`. ⚠️ `sudo -n` works for `wfb-rlyctl` only (scoped sudoers); **everything
+  else on the relay needs `printf '1987\n' | sudo -S`**.
+- ⏭ **STILL OPEN:** the relay's repo has **NO REMOTE and the box has NO DEFAULT ROUTE** ⇒ pushing from
+  the relay is impossible; GitHub is reached only via the companion's `~/codex-relay-mirror`. Its
+  master line and this SD's March line **diverge**, so aligning the box needs the git-bundle transfer
+  (merge, not fast-forward). · `release` branch is **12 commits behind** master (pre-existing). ·
+  🔴 **the repo tracks the PRIVATE KEY `System_files/home/vind-admin/.ssh/wfb_cluster_ed25519`**
+  (line 20 of `System_files_list.txt`) — already on GitHub long before today. · NTP still unapplied.
