@@ -74,7 +74,7 @@ Both FPV-capable, port 6-2, **swap from QGC only**; LG Smart Cam current. ⛔ **
 ## [WFB_NG] → `wfb_ng` (**PARKED — only action left is HW: reseat drone NIC-A ant0 = #22**)
 **Drone TX is flawless — when video breaks WFB's input queue is EMPTY: SUSPECT THE SOURCE.** ⚠️ the measurement METHOD cost a week — read the file first.
 ## [RELAY_STATION] → `relay2_relaystn`
-`vind-rly` RPi5 | `ssh vind-admin@10.5.5.77` (sudo pass) | tunnel 2222→:22 | NO RTC, clock ~1 MONTH OFF. ✅✅ **2-NODE CLUSTER VERIFIED ON RF 09-26 ⇒ `use-cluster` is now CORRECT; CPE610 = `root@10.5.7.102` off relay eth0.** 🔴 **THIS SD IS MARCH-VINTAGE: 08-28 fixes ABSENT (no `wfb-cfg-apply`), repo has NO REMOTE — GitHub = `v1.0.6`.** 🔑 QGC-laptop ping = FALSE NEGATIVE (`ip neigh`) · a repo pull DEPLOYS NOTHING.
+`vind-rly` RPi5 | `ssh vind-admin@10.5.5.77` (sudo pass) | tunnel 2222→:22 | NO RTC, clock ~1 MONTH OFF. ✅✅ **2-NODE CLUSTER VERIFIED ON RF 09-26 ⇒ `use-cluster` is now CORRECT; CPE610 = `root@10.5.7.102` off relay eth0.** 🔴 **THIS SD IS MARCH-VINTAGE: 08-28 fixes ABSENT (no `wfb-cfg-apply`), repo has NO REMOTE — GitHub = `v1.0.7`.** 🔑 QGC-laptop ping = FALSE NEGATIVE (`ip neigh`) · a repo pull DEPLOYS NOTHING.
 ## [REPOS / GCS]
 📗 **`codex-work/README.md` = THE COMPANION DOC INDEX — open it before hunting for a doc.** ⚠️ distinct from `ros2_ws/docs/README.md` (autonomy side).
 `codex-work` → Companion_Computer_Pxlabs, branch **master** (origin/main stale); **docs live at the ROOT — rover/DroneCAN docs belong HERE, not `ros2_ws`** | `codex-relay` on vind-rly → Relay_Station_Pxlabs | `ros2_ws` → ArvinVeiyon/ros2_ws, on `main`.

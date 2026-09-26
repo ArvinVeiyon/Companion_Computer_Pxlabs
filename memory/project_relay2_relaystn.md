@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
-  modified: 2026-09-26T09:06:25.120Z
+  modified: 2026-09-26T09:36:00.172Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -320,8 +320,10 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   then `touch /tmp/cluster_ok`. ⚠️ `sudo -n` works for `wfb-rlyctl` only (scoped sudoers); **everything
   else on the relay needs `printf '1987\n' | sudo -S`**.
 - ✅✅ **VERSION CONTROL RECONCILED 09-26 — relay == mirror == GitHub `master` == GitHub `release` ==
-  `7241fc0`.** Releases now run v1.0.0→**v1.0.6** (`60d063d`, first RF-verified cluster), and the relay
-  finally holds every `v1.0.*` tag. 🔑 **THE BUNDLE PATTERN, VERIFIED TWICE (07-12 and 09-26) — the box
+  `4137552`.** Releases run v1.0.0→**v1.0.7** (`7666a03` = the stable checkpoint: cluster verified,
+  CPE610 backed up, repos reconciled, docs aligned; **v1.0.6** `60d063d` = first RF-verified cluster),
+  and the relay finally holds every `v1.0.*` tag. ⚠️ **a bundle carries NO TAGS unless you name a tag
+  ref in it** — `git bundle create f refs/tags/vX ^<base>` then fetch `'+refs/tags/*:refs/tags/*'`. 🔑 **THE BUNDLE PATTERN, VERIFIED TWICE (07-12 and 09-26) — the box
   has NO REMOTE and NO DEFAULT ROUTE, so this is the ONLY route:** clean its tree → in the mirror
   `git fetch ssh://vind-admin@10.5.5.77/home/vind-admin/codex-relay '+refs/heads/master:refs/remotes/relay/master'`
   → `git merge --no-ff relay/master` (09-26 was a **pure history join, 0 files changed** — its only job
