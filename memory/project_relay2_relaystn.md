@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
-  modified: 2026-09-26T08:29:31.346Z
+  modified: 2026-09-26T09:06:25.120Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -331,10 +331,30 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   ⚠️ before the pull, the relay's uncommitted `scripts/system_files_sync.sh` was **byte-identical to the
   mirror's committed copy** (the July fix, applied on disk but never committed on this SD) ⇒ discarding
   it lost nothing; the log went to `~/system_files_sync.log.bak.pre-align-0926`.
-- ⏭ **STILL OPEN:** `relay_files_sync.timer` is enabled+active, so the box **will commit locally and
-  re-diverge** — repeat the bundle after any auto-sync, or disable the timer as on 08-28. ·
-  `System_files/{usr/local/sbin/wfb-cfg-apply, etc/wifibroadcast.cfg.default}` are now in the relay's
-  repo but **NOT INSTALLED on disk** — install them if G-Control calls `wfb-cfg-apply` rather than
-  `wfb-rlyctl`. · 🔴 **the repo tracks the PRIVATE KEY
-  `System_files/home/vind-admin/.ssh/wfb_cluster_ed25519`** (line 20 of `System_files_list.txt`) —
-  already on GitHub long before today. · NTP still unapplied.
+- ✅ **`relay_files_sync.timer` DISABLED AGAIN 09-26** (disabled+inactive, gone from `list-timers`;
+  the `.service` stays `static` ⇒ **back up on demand with `systemctl start relay_files_sync.service`**).
+  🔑 that timer was the re-divergence engine, so the repos now stay aligned on their own.
+- ✅✅ **THE CPE610 IS NOW BACKED UP — `Node_CPE610/` in the relay repo** (UCI config with the PSK
+  **REDACTED**, package list, `wfb-mon0.sh`, firmware info, restore-after-reflash steps). 🔑 it had
+  existed **nowhere but on the device** — `system_files_sync.sh` rsyncs from the *relay's* `/` and can
+  never reach a second machine. ⚠️ nothing deploys it; restoring is manual.
+- 🔑🔑 **THE NODE IS RX-ONLY IN PRACTICE AND NO VERSION BUMP CHANGES THAT.** The relay's RTL8812EU
+  reports `rssi_avg` **+14..+16** with real SNR; the node's **ath9k reports true dBm −23..−21 and no
+  noise ⇒ SNR 0**. The TX selector compares them against `tx_sel_rssi_delta`=3 ⇒ **the relay's card
+  always wins**; measured: `tunnel tx` goes out on ant `0x7F000001…`. ⛔ **Don't read this as a fault or
+  as the skew's doing — it is a chipset/driver scale difference.** ✅ its RX share is real: **220 pkt vs
+  the local card's 233**, `dec_err [0,0]`. 🔑 **read per-antenna truth from the JSON API on `:8103`**
+  (ant id = IP in the high 32 bits: `0x7F000001…`=local, `0x0A050766…`=10.5.7.102) — the journal only
+  prints TX *switches*.
+- 🔑 **THE NODE HAS NO INTERNET STRUCTURALLY:** `radio0` is `disabled '1'`, so its leftover house-SSID
+  `sta` never comes up, no default route, no opkg feeds — **and the CPE610 has ONE radio, so it can
+  never be a station and a ch161 monitor at the same time.** ⇒ any package must arrive as an `.ipk`
+  carried over Ethernet via the relay. ⚠️ the only local `.ipk`s (`24.9.7-r2`) are **OLDER** than the
+  installed `25.01-r1` — ⛔ don't "upgrade" to them.
+- ⏭ **STILL OPEN:** wfb-ng skew (node `25.01-r1` vs relay+drone `25.4.27.73439`) — hygiene only,
+  needs an **x86 host** + the OpenWrt 24.10 ath79 SDK to build for `mips_24kc`. ·
+  `System_files/{usr/local/sbin/wfb-cfg-apply, etc/wifibroadcast.cfg.default}` are in the repo but
+  **NOT INSTALLED on disk** — install if G-Control calls `wfb-cfg-apply` rather than `wfb-rlyctl`. ·
+  🔴 **the repo tracks the PRIVATE KEY `System_files/home/vind-admin/.ssh/wfb_cluster_ed25519`**
+  (line 20 of `System_files_list.txt`) — already on GitHub long before today. ⚠️ the node's dropbear
+  also has `RootPasswordAuth on`. · NTP still unapplied.
