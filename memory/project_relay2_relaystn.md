@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
-  modified: 2026-09-26T08:13:32.985Z
+  modified: 2026-09-26T08:29:31.346Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -319,9 +319,22 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   `nohup setsid sh -c 'sudo -n wfb-rlyctl use-cluster; sleep 200; [ -f /tmp/cluster_ok ] || sudo -n wfb-rlyctl use-standalone' &`
   then `touch /tmp/cluster_ok`. ⚠️ `sudo -n` works for `wfb-rlyctl` only (scoped sudoers); **everything
   else on the relay needs `printf '1987\n' | sudo -S`**.
-- ⏭ **STILL OPEN:** the relay's repo has **NO REMOTE and the box has NO DEFAULT ROUTE** ⇒ pushing from
-  the relay is impossible; GitHub is reached only via the companion's `~/codex-relay-mirror`. Its
-  master line and this SD's March line **diverge**, so aligning the box needs the git-bundle transfer
-  (merge, not fast-forward). · `release` branch is **12 commits behind** master (pre-existing). ·
-  🔴 **the repo tracks the PRIVATE KEY `System_files/home/vind-admin/.ssh/wfb_cluster_ed25519`**
-  (line 20 of `System_files_list.txt`) — already on GitHub long before today. · NTP still unapplied.
+- ✅✅ **VERSION CONTROL RECONCILED 09-26 — relay == mirror == GitHub `master` == GitHub `release` ==
+  `7241fc0`.** Releases now run v1.0.0→**v1.0.6** (`60d063d`, first RF-verified cluster), and the relay
+  finally holds every `v1.0.*` tag. 🔑 **THE BUNDLE PATTERN, VERIFIED TWICE (07-12 and 09-26) — the box
+  has NO REMOTE and NO DEFAULT ROUTE, so this is the ONLY route:** clean its tree → in the mirror
+  `git fetch ssh://vind-admin@10.5.5.77/home/vind-admin/codex-relay '+refs/heads/master:refs/remotes/relay/master'`
+  → `git merge --no-ff relay/master` (09-26 was a **pure history join, 0 files changed** — its only job
+  is making the relay's commit an ancestor so the box can fast-forward) → push → `git bundle create f
+  master ^<relay HEAD>` → scp → `git pull --ff-only <bundle> master`, then a second
+  `git fetch <bundle> '+refs/tags/*:refs/tags/*'` because **the pull does NOT bring tags.**
+  ⚠️ before the pull, the relay's uncommitted `scripts/system_files_sync.sh` was **byte-identical to the
+  mirror's committed copy** (the July fix, applied on disk but never committed on this SD) ⇒ discarding
+  it lost nothing; the log went to `~/system_files_sync.log.bak.pre-align-0926`.
+- ⏭ **STILL OPEN:** `relay_files_sync.timer` is enabled+active, so the box **will commit locally and
+  re-diverge** — repeat the bundle after any auto-sync, or disable the timer as on 08-28. ·
+  `System_files/{usr/local/sbin/wfb-cfg-apply, etc/wifibroadcast.cfg.default}` are now in the relay's
+  repo but **NOT INSTALLED on disk** — install them if G-Control calls `wfb-cfg-apply` rather than
+  `wfb-rlyctl`. · 🔴 **the repo tracks the PRIVATE KEY
+  `System_files/home/vind-admin/.ssh/wfb_cluster_ed25519`** (line 20 of `System_files_list.txt`) —
+  already on GitHub long before today. · NTP still unapplied.
