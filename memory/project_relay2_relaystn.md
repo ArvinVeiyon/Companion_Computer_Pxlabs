@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: b345fe8c-a652-4392-a588-178f764af9e8
-  modified: 2026-09-26T09:36:00.172Z
+  modified: 2026-09-26T09:45:07.743Z
 ---
 
 A **second WFB-NG ground-station relay** was provisioned 2026-07-12: hostname
@@ -355,8 +355,11 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   installed `25.01-r1` — ⛔ don't "upgrade" to them.
 - ⏭ **STILL OPEN:** wfb-ng skew (node `25.01-r1` vs relay+drone `25.4.27.73439`) — hygiene only,
   needs an **x86 host** + the OpenWrt 24.10 ath79 SDK to build for `mips_24kc`. ·
-  `System_files/{usr/local/sbin/wfb-cfg-apply, etc/wifibroadcast.cfg.default}` are in the repo but
-  **NOT INSTALLED on disk** — install if G-Control calls `wfb-cfg-apply` rather than `wfb-rlyctl`. ·
+  ✅✅ **CLOSED — THE OPERATOR SWITCHED FROM G-CONTROL AND IT WORKS (09-26).** ⇒ **G-Control drives
+  `wfb-rlyctl`, NOT `wfb-cfg-apply`** (proven by elimination: that script does not exist on this SD).
+  ⛔ **Don't propose installing `wfb-cfg-apply` to fix a switch** — it is tracked in the repo for
+  completeness only, and the mode switch never needed it. 🔑 the whole fault was ALWAYS the wiped
+  `[cluster]` block. ·
   🔴 **the repo tracks the PRIVATE KEY `System_files/home/vind-admin/.ssh/wfb_cluster_ed25519`**
   (line 20 of `System_files_list.txt`) — already on GitHub long before today. ⚠️ the node's dropbear
   also has `RootPasswordAuth on`. · NTP still unapplied.
