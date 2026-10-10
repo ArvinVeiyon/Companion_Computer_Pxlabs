@@ -71,34 +71,6 @@ repo_state() {
   fi
 }
 
-# FC firmware git hash. Read-only MAVLink query; AUTOPILOT_VERSION.flight_custom_version is the
-# 8-byte git hash. This is the ONLY trustworthy firmware identity — flight_sw_version does not
-# distinguish our own build from an upstream one, and the two have different hardfault behaviour.
-# Uses the same tcp:127.0.0.1:5760 endpoint as system_files_sync.sh.
-fc_firmware_hash() {
-  command -v python3 >/dev/null 2>&1 || { printf 'UNREAD (no python3)'; return; }
-  python3 - <<'PY' 2>/dev/null || printf 'UNREAD (no MAVLink answer — FC down, or mavlink-router not running)'
-import sys
-try:
-    from pymavlink import mavutil
-    m = mavutil.mavlink_connection('tcp:127.0.0.1:5760')
-    m.wait_heartbeat(timeout=4)
-    m.mav.command_long_send(
-        m.target_system, m.target_component,
-        mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
-        mavutil.mavlink.MAVLINK_MSG_ID_AUTOPILOT_VERSION, 0, 0, 0, 0, 0, 0)
-    msg = m.recv_match(type='AUTOPILOT_VERSION', blocking=True, timeout=4)
-    if not msg:
-        sys.exit(1)
-    h = ''.join('%02x' % b for b in msg.flight_custom_version).rstrip('0')
-    print(h if h else 'UNREAD (empty custom version)')
-except SystemExit:
-    raise
-except Exception:
-    sys.exit(1)
-PY
-}
-
 # Units that start on boot on WHATEVER airframe this companion is bolted to. The drone needs
 # tfmini enabled and the rover-* units disabled; the rover needs the reverse. Stamping the
 # actual state keeps the before-flight revert checklist honest.
@@ -148,12 +120,10 @@ build_stamp() {
   printf '#   ros2_ws              %s\n' "$(repo_state /home/roz/ros2_ws)"
   printf '#   codex-work           %s\n' "$(repo_state /home/roz/codex-work)"
   printf '#\n'
-  printf '# --- flight controller (NOT on this SD card) ---\n'
-  printf '#   firmware git hash    %s\n' "$(fc_firmware_hash)"
-  printf '#   Expected: a52c38b07d (tag pxlabs-v1.17.0-r2-Beta, our own build).\n'
-  printf '#   A DIFFERENT hash means a reflash from upstream — the FC hardfault class returns.\n'
-  printf '#   PX4 PARAMETERS LIVE ON THE FC, NOT HERE. Cloning this image does not capture them\n'
-  printf '#   and restoring it does not put them back. Verify params on the FC separately.\n'
+  printf '# --- NOT ON THIS CARD, so not stamped here ---\n'
+  printf '#   PX4 params, FC firmware and ESC config all live off-card. An image clone captures\n'
+  printf '#   none of them. Records: px4_param_audit.md, pxlabs_release_note_v1.17.0-r2.1.md,\n'
+  printf '#   esc_px4_config_audit_20260914.md. To know a param, READ THE FC.\n'
   printf '#\n'
   printf '# --- units enabled at boot (one image, two airframes — check before flight) ---\n'
   unit_states

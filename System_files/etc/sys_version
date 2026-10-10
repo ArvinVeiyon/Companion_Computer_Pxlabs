@@ -1,6 +1,6 @@
 # >>> AUTOGEN sys_version_stamp.sh — DO NOT EDIT BELOW THIS LINE <<<
 sys version = 2.3
-Date = 10/10/2026 21:41
+Date = 10/10/2026 21:59
 #
 # Stamped by codex-work/scripts/sys_version_stamp.sh. Re-run it before cutting an image.
 # Everything above the END marker is generated; the changelog below it is hand-written.
@@ -15,14 +15,12 @@ Date = 10/10/2026 21:41
 #
 # --- repositories (the image is only as identified as these are) ---
 #   ros2_ws              main @ 597d59f4f7 (last tag: v1.2.0) [clean]
-#   codex-work           master @ b01a0059bc (last tag: sync-20261010-1540) [clean]
+#   codex-work           master @ 675f271268 (last tag: sync-20261010-1540) [1 UNCOMMITTED — this image does NOT match any commit]
 #
-# --- flight controller (NOT on this SD card) ---
-#   firmware git hash    UNREAD (no MAVLink answer — FC down, or mavlink-router not running)
-#   Expected: a52c38b07d (tag pxlabs-v1.17.0-r2-Beta, our own build).
-#   A DIFFERENT hash means a reflash from upstream — the FC hardfault class returns.
-#   PX4 PARAMETERS LIVE ON THE FC, NOT HERE. Cloning this image does not capture them
-#   and restoring it does not put them back. Verify params on the FC separately.
+# --- NOT ON THIS CARD, so not stamped here ---
+#   PX4 params, FC firmware and ESC config all live off-card. An image clone captures
+#   none of them. Records: px4_param_audit.md, pxlabs_release_note_v1.17.0-r2.1.md,
+#   esc_px4_config_audit_20260914.md. To know a param, READ THE FC.
 #
 # --- units enabled at boot (one image, two airframes — check before flight) ---
 #   rover-odometry         enabled
@@ -271,306 +269,235 @@ v2.2
 
 v2.3
 10/10/2026
-#Period covered: 16/08/2026 - 10/10/2026. The rover moved from "cannot hold a speed" to
-#"Nav2 drove it armed, avoided an obstacle and rejoined". Localization is now the single blocker.
+#Period covered: 16/08/2026 - 10/10/2026. COMPANION SOFTWARE ONLY.
 
-#=== READ FIRST: v2.2 IS SUPERSEDED IN FOUR PLACES ===
-# v2.2 is kept verbatim above for history, but FOUR of its statements are now FALSE. Do not quote
-# them from that entry:
-#   1. "SPEED COMMANDS ARE NOT HONOURED" - fixed 14/09. All four ESCs now run RPM mode. See below.
-#   2. "Keep both at -1" (RO_ACCEL_LIM / RO_DECEL_LIM) - superseded 14/09, RO_DECEL_LIM is now 5.
-#   3. "NEW BLOCKER - FC HARDFAULT LOOP" - CLOSED 29/08. Do not reopen.
-#   4. "FIRMWARE PROVENANCE GAP ... Find f0889f3d" - RESOLVED. The flashed build is our own.
-# Everything in v2.2's torque-mode reasoning ("throttle is TORQUE", "overspeed is an INTEGRAL",
-# "DURATION is the control", "do not calibrate RO_MAX_THR_SPEED") is HISTORY. It described an ESC
-# configuration that no longer exists.
+#=== SCOPE OF THIS FILE - read before adding anything ===
+# THIS FILE LOGS COMPANION SOFTWARE ON THIS SD CARD. Nothing else belongs here.
+# WHAT IS NOT ON THIS CARD, AND SO IS NOT LOGGED HERE:
+#   PX4 parameters      -> they live in FC flash. ros2_ws/docs/px4_param_audit.md is the record,
+#                          and codex-work/px4_param_backups/ + ~/fc_param_backups/ hold snapshots.
+#   FC firmware         -> FC flash. codex-work/pxlabs_release_note_v1.17.0-r2.1.md.
+#   ESC / VESC config   -> ESC flash, per wheel. codex-work/esc_px4_config_audit_20260914.md
+#                          and px4_vesc_dronecan_implementation.md.
+# Cloning this image captures NONE of the three, and restoring it changes NONE of them. Logging
+# them here only creates a second, staler copy. If you want to know a param, READ THE FC.
+# v2.2 stated this boundary and then broke it - most of its body was FC and ESC content. Kept above
+# for history; do not use it as a template.
 
-#--- ONE SYSTEM, TWO AIRFRAMES - still true, re-read it ---
-# The ROVER and the DRONE still share BOTH the flight controller AND this companion computer. All
-# work in this period was done with the hardware on the ROVER. CA_AIRFRAME remains 6 (Rover,
-# differential). The BEFORE-FLIGHT REVERT CHECKLIST at the end of this entry supersedes v2.2's.
-# Param scope unchanged: RO_* are rover-only and safe to leave; EKF2_* and sensor calibration are
-# SHARED WITH THE DRONE and are an operator decision, not a tuning knob.
+#--- ONE IMAGE, TWO AIRFRAMES - why the unit list matters ---
+# This companion is physically MOVED between the rover and the drone (drone -> rover 17/04/2026).
+# FIVE rover-* units are ENABLED, so they start on WHATEVER AIRFRAME this card is booted on.
+# That is a property OF THIS IMAGE, which is why it is logged here. See the checklist at the end.
 
-#--- THE BIG ONE: SPEED CONTROL WORKS (13-14/09) ---
-# All four ESCs were moved to CONTROL_MODE_SPEED (RPM mode). Speed commands are now honoured.
-#   RO_MAX_THR_SPEED  0.60 -> 4.93   (this IS calibrated now - the old "never calibrate it" is dead)
-#   s_pid_kp 0.008 . s_pid_min_erpm 50 (was 200) . s_pid_ramp_erpms_s 20000
-#   l_in_current_min -10 . l_current_min -25 . deadband_erpm 40 -> 5
-# BELOW s_pid_min_erpm THE ESC APPLIES A DUTY-0 SHORT BRAKE (CONTROL_MODE_SPEED only). It FINISHES
-#   the stop - so NEVER command 0 expecting a coast. The old "free coast below min_erpm" was wrong.
-#   The ramp is SYMMETRIC.
-# DO NOT CUT s_pid_ramp_erpms_s. 2000 was tried and reverted 13-14/09. It slews the EMERGENCY stop
-#   to comfort rate, and on a differential drive it throttles YAW ONSET - that is control authority,
-#   not ride comfort.
-# REGEN IS CUT ON A CHARGED PACK, so spin-down is mechanical scrub, not regen. Do not raise the
-#   cut-in to "fix" it.
-# OPEN: a HARD NEUTRAL BRAKE remains UNDIAGNOSED and needs a FLOOR test. Do NOT chase it with
-#   l_current_min - no candidate value binds and the stand cannot reproduce it. Both brake loggers
-#   lie, and WHEEL RPM CANNOT MEASURE A STOP AT ALL - adjudicate on tape or /scan.
-# ESC access is USB ONLY, one session per ESC. Hub 1-1.2 may be reset; NEVER 1-1 (the Realtek NICs
-#   and WFB ride on it). VESC Tool 7.01 is built here and runs headless.
-# RR IS DEMAGNETISED - replace it before further pivot work. Flux linkage is magnet strength, and
-#   every further pivot-from-rest actively damages it. NO PIVOTS FROM REST.
-# DroneCAN ESC integration is DROPPED. Flashing 60_mk5.bin over DroneCAN BRICKS the unit - USB only.
+#--- SYSTEMD UNITS (companion) ---
+# ADDED 20/09: rover-nav2.service. DISABLED on purpose - it MOVES the rover. Start it per run.
+#   Restarting rover-nav2 IS the costmap clear.
+# rover-scan-3d captured and documented in the same change.
+# ENABLED at this release: rover-odometry, rover-camera, rover-scan, rover-scan-3d,
+#   rover-autonav-mode, ext5v-logger, microxrce-agent, mavlink.router
+# DISABLED on purpose: rover-ekf-bridge and rover-nav2 (both MOVE the rover - start manually per
+#   run, stop after), tfmini (REQUIRED BY THE DRONE), ldlidar, vision_streaming
+# NEVER arm AutoNav on stands with rover-ekf-bridge running - self-sustaining limit cycle.
+# SERVICE STATE IS NOT PROOF OF FUNCTION. Twice this period every unit read "active" while depth,
+#   /scan and /odom were all at 0.0 Hz. MEASURE RATES, NEVER is-active.
+# RESTART ORDER MATTERS: restart the camera FIRST, then rover-scan / rover-scan-3d / rover-odometry
+#   in that order. Out of order they sit at 0 Hz forever. Seen twice: the colour stream died, depth
+#   registration lost its align target, and every frame was dropped.
 
-#--- FC HARDFAULTS CLOSED (29/08) ---
-# The hardfault loop recorded as an open blocker in v2.2 is CLOSED. Do not reopen it.
-# PROVENANCE RESOLVED: the running firmware is OUR OWN BUILD - git a52c38b07d, tag
-#   pxlabs-v1.17.0-r2-Beta. THE ONLY LIVE HAZARD IS A REFLASH: any firmware taken from upstream or
-#   rebuilt from ~/apps/fc_firmware brings the hardfault class back. VERIFY BY GIT HASH, NEVER BY
-#   flight_sw_version - the two builds report the same version string.
-# sys_version_stamp.sh now records this hash automatically. Re-run it with the FC POWERED UP before
-#   cutting an image; it stamps UNREAD when the FC does not answer.
-
-#--- AUTONOMY: WHAT NOW WORKS ---
-# G0 CLOSED 11/09 - /scan geometry verified against a wall, ESC slot-5 indexing fixed. The camera
-#   mount numbers are settled. THE CAMERA IS MOUNTED CORRECTLY - the "camera rotated" theory was
-#   withdrawn and must not be raised again.
-# T2 PASSED 16/09, n=3 - first autonomous drive. It PASSED IN THE CORRIDOR, not in this room: the
-#   room has only ~2 sq m of open floor and CANNOT host T2. Footprint is 0.73 x 0.450 m (the 0.560
-#   figure copied by four docs was a SALES QUOTATION). RD_WHEEL_TRACK 0.31 is correct.
-# T3 19/09 - NAV2 DROVE AN ARMED ROVER, avoided an obstacle and rejoined the path. New rover-nav2
-#   systemd unit (DISABLED on purpose - it moves the rover; start it per run).
+#--- COMPANION ROS 2 SOFTWARE (ros2_ws) ---
+# 03/09 dump_params.py added - pulls an FC param snapshot to the card (the TOOL is companion
+#   software; the params it reads are not).
+# 04/09 wall_probe.py added - the absolute geometric reference the manuals already cited.
+# 11/09 G0 CLOSED: /scan geometry verified against a wall, and ESC slot-5 indexing fixed in our
+#   code. The camera mount numbers are settled - the "camera rotated" theory was WITHDRAWN and
+#   must not be raised again.
+# 12/09 ODOMETRY BUG FIXED: address 10 was not inverted - /odom had been publishing HALF the true
+#   speed. This was a companion node defect, not a calibration error.
+# 12/09 KILL SWITCH CORRECTED IN SIX MOVING TOOLS: our tools had been reading ch8, which has
+#   nothing assigned to it. They now read ch12. (The RC mapping itself is FC-side; the BUG was ours.)
+# 12/09 preflight_scan_check: two defects fixed so it mirrors the executor properly.
+# 12/09 map and log paths repointed at ~/rover_data (3 configs + 3 tools).
+# 12/09 field_measure.py added - an offline measurement harness that SUGGESTS, never writes.
+#   Gained wheelmap, range and dimensions; deceleration fit corrected; now scores only the window
+#   where /scan actually tracks.
+# 16/09 T2 PASSED n=3 - first autonomous drive, IN THE CORRIDOR. This room has only ~2 sq m of open
+#   floor and CANNOT host T2. Also recorded there: WHEEL RPM CANNOT MEASURE A STOP AT ALL -
+#   adjudicate on tape or /scan.
+# 19/09 ARMED NAV2 SESSION: Nav2 drove an armed rover, avoided an obstacle and rejoined the path.
+#   SIGN BUG FIXED: /cmd_vel angular.z, ROS FLU vs PX4 FRD. Watchdog added.
 #   ARMED RUNS USE nav2_forward_flat.yaml. NEVER nav2_forward.yaml - its voxel layer spins at max rate.
-#   DWB reads sim_time and critic scale AT INITIALISE. A live param set does NOTHING - edit the YAML
-#     and restart. Restarting rover-nav2 IS the costmap clear; clear BOTH costmaps before every run.
-#   SIGN BUG FIXED 19/09: /cmd_vel angular.z, ROS FLU vs PX4 FRD.
-#   T3's one remaining number is ObstacleFootprint.scale. Say which ruler when quoting a clearance -
+#   DWB READS sim_time AND CRITIC scale AT INITIALISE. A live param set does NOTHING - edit the
+#     YAML and restart. Clear BOTH costmaps before every run.
+#   A goal inside obstacle+inflation fails in the PLANNER, not the controller.
+#   T3's one remaining number is ObstacleFootprint.scale. Say WHICH RULER when quoting a clearance -
 #     RAW and BUMPER are 0.337 m apart.
-# ARMED AUTONAV IS REPEATABLE: reboot FC -> restart the bridge and autonav-mode TOGETHER
-#   (registration requires DISARMED) -> verify the gates -> arm on ch5 (cycle it down-up).
-#   Budget 45-60 min per bridge restart.
-#   PX4 WILL NOT REGISTER AN EXTERNAL MODE WHILE ARMED, and AN FC REBOOT WIPES THE REGISTRATION
-#     WITHOUT THE NODE NOTICING. Proof of registration is the arming-check handshake, not is-active.
-#   EVERY AutoNav run needs rover-ekf-bridge started first (FLOOR ONLY - armed and idle WITH the
-#     bridge produces delayed motor kicks, a self-sustaining limit cycle). Disarm between runs.
-#     NEVER arm AutoNav on stands with the bridge running.
-#   ARMED AUTONAV IS REFUSED BY eph vs COM_POS_FS_EPH (5 m), NOT by the mode, bridge or
-#     registration. PX4 relaxes position requirements DISARMED and enforces them ARMED. Never call
-#     AutoNav "working" or "broken" without quoting the eph at that moment. The durable fix is
-#     localization, not raising the threshold (that would disable a real failsafe).
+# Reflex collision-stop (companion executor) unchanged and still passing: the perception-health gate
+#   (min_valid_fraction 0.35) runs BEFORE the clearance test. Corridor is |y| <= 0.275 m. A high NaN
+#   count is NOT blindness - the corridor filter discards everything outside 0.275 m by design.
+#   THE REFLEX ONLY ZEROES THE SETPOINT. Commanding a real brake would be an ESC firmware change,
+#   which is off-card and out of scope here.
+# AutoNav mode registration: PX4 WILL NOT REGISTER AN EXTERNAL MODE WHILE ARMED, and AN FC REBOOT
+#   WIPES THE REGISTRATION WITHOUT OUR NODE NOTICING. Proof is the arming-check handshake, not
+#   is-active. A registration watchdog exists (autonav_registration_watchdog.py).
 
-#--- SAFETY CORRECTIONS (both were wrong in earlier releases) ---
-# THE KILL SWITCH IS ch12, NOT ch8. RC_MAP_KILL_SW=12, ARM_SW=5, FLTMODE=6, KILLSWITCH_TH 0.75.
-#   Nothing is assigned to ch8. Corrected in all six moving tools 12/09. PX4 KILL IS NOT DISARM.
-# THE TURN / 360 STICK IS ch1 -> .roll. RC_MAP_YAW=4 is a red herring; ch4 is empty.
+#--- LOCALIZATION SOFTWARE (runs on this card - THE blocker) ---
+# RTAB-Map relocalization ACCEPTS 0 OF 20 ATTEMPTS ON THE MAP'S OWN BAG. It fails at GEOMETRY, not
+#   appearance, which makes it a PIPELINE FAULT in software on this card - not an environment or
+#   sensor problem. NEVER lower Vis/MinInliers to make it pass. Do NOT re-map the house. The
+#   DB-param-mismatch lead is DEAD.
+#   Disproven, do not re-propose: map coverage, lighting/exposure, the rover sitting inside the
+#   0.308 m depth minimum, camera-gyro rate-dependent scale, yaw_source: wheels.
+# The 2D grid itself is FINE - do not "fix" MaxGroundHeight (keep 0.10) or NormalsSegmentation.
+# REFERENCE MAP: ~/rover_data/maps/house_map_v4.db, from bag map_run_20260809_185011. Walls single,
+#   scale tape-verified. THAT BAG IS NOT DISPOSABLE - it is the replay adjudicator.
+# NO VIO IS RUNNING. Position is wheel ERPM plus camera-gyro dead reckoning, and RTAB-Map CONSUMES
+#   our TF odom. This is a CPU and plate-in-frame decision, NOT a capability gap: rgbd_odometry and
+#   icp_odometry are both INSTALLED here and have run.
+#   COST, measured 09/21: load 2.68 of 4 cores with FPV streaming OFF; rgbd_odometry alone 79.6% of
+#   a core stationary; FPV streaming costs a further 139% of a core.
+#   SEE OPEN FAULT 2 - those numbers were taken on a box that may have been thermally/power
+#   throttled, so treat them as an upper bound on available headroom, not a measurement of it.
+# Odometry is a PRIOR, not the position source. The calibration is not wasted - it carries the
+#   estimate between absolute fixes. Quote every odom distance WITH ITS SPEED: the error is
+#   speed-dependent, under-reading at crawl and over-reading at speed.
+
+#--- COMPANION OS AND CONFIG ---
+# 12/09 $HOME REORGANISED: 83 loose files down to 4. Mutable data now in
+#   ~/rover_data/{maps,bags,logs,fc}, deliberately OUTSIDE ros2_ws because a map .db is ~166 MB and
+#   GitHub rejects blobs over 100 MB. ~/apps holds source and build trees.
+#   NOTHING IN $HOME WAS EVER A LIVE SERVICE DEPENDENCY - services run from /usr/local/bin and DKMS
+#   from /usr/src. ros2_ws and codex-work DID NOT MOVE (systemd references them by absolute path).
+#   THE MAP MOVED: ~/house_map_v4.db -> ~/rover_data/maps/house_map_v4.db. Any doc naming the old
+#   path is stale.
+# Disk pressure eased: 85% full at v2.2, 69% now (18 G free of 58 G). ~/rover_data/bags is the bulk.
+# 03/09 eth0 WIRED RECOVERY added (netplan 60-eth0-recovery.yaml): ssh roz@10.10.10.10, laptop on
+#   10.10.10.20/24. The address exists ONLY with carrier, so an empty "ip -br addr show eth0" with
+#   no cable is CORRECT, not a fault - judge it by networkctl status eth0 -> routable.
+#   STILL CABLE-UNTESTED. There is NO Wi-Fi fallback; remote access is WFB -> relay:2222.
+# 03/09 EVERY NIC NAME IN THE OLDER DOCS IS STALE. The uplink adapter was SWAPPED and no doc caught
+#   it: uplink is wlx8c86dd5beed9, a TP-Link Archer T2U PLUS (2357:0120, RTL8821AU) on
+#   rtl88xxau_wfb. The RTL8821CU every doc named is NOT PRESENT in lsusb at all.
+#   RUN lsusb AND ip -br addr FIRST - never trust a NIC name or chipset from a doc.
+#   WFB NICs are the other two: wlx782288d98f91 and wlx782288d993c0 (0bda:a81a, rtl88x2eu).
+#   There is no wlan* at all - the disable-wifi-pi5 overlay is live (plain disable-wifi is silently
+#   ignored on a Pi 5, which is why it was twice recorded as done while the radio was still up).
+# 04/09 sshd NOW PROBES DEAD PEERS (ClientAliveInterval 30 / CountMax 4, in
+#   sshd_config.d/60-keepalive.conf; was 0 = never probe, so dead sessions parked). That reaps the
+#   SESSION, not the WORK - it makes tmux MORE necessary, not less. Long jobs go in tmux.
+# 07/09 claude IS NOW A SHELL FUNCTION, not the binary - ~/.bashrc launches it inside tmux session
+#   vindroz so an SSH drop no longer kills it. "type claude" shows the wrapper; "command claude"
+#   forces the raw binary. tmux does NOT survive a reboot.
+# ~/.bashrc sources install/setup.bash by a RELATIVE path. A shell started outside ~/ros2_ws
+#   silently gets no px4_msgs, and ros2 topic echo then fails with "message type is invalid", which
+#   reads exactly like a dead topic. STILL UNFIXED - worth an absolute path.
+# VESC Tool 7.01 is BUILT ON THIS CARD and runs headless (the tool is companion software; the ESC
+#   configs it writes are not, and are logged elsewhere). USB only, one session per ESC. Hub 1-1.2
+#   may be reset; NEVER 1-1 - the Realtek NICs and WFB ride on it.
+# AIDE timer remains DISABLED (it was ~3.5 h/day of a core).
 # RC CH10 REBOOTS THIS COMPANION BY DESIGN (2014 = reboot, 1514 = shutdown, 1011 = safe). It is not
 #   a uXRCE or UART fault. CHECK CH10 BEFORE DEBUGGING ANY COMPANION RESTART. Note that CH10 and
 #   every clean reboot leave a systemd shutdown sequence, so a journal that simply STOPS exonerates it.
-# Reflex collision-stop unchanged and still passing: perception-health gate (min_valid_fraction
-#   0.35) runs BEFORE the clearance test. Corridor is |y| <= 0.275 m. A high NaN count is NOT
-#   blindness - the corridor filter discards everything outside 0.275 m by design.
-# THE REFLEX ONLY ZEROES THE SETPOINT. In RPM mode that is a real brake, but only at ramp 20000.
-#   The durable fix is for the reflex to COMMAND a brake, which is a VESC FIRMWARE change.
-
-#--- ODOMETRY: CLOSED, WITH ONE CORRECTION ---
-# erpm_to_ms = 0.003900. CLOSED - never re-open the scale.
-# 12/09: address 10 was NOT inverted - /odom had been publishing HALF the true speed. Fixed.
-#   si_motor_poles is a LINKED PAIR: "fixing" poles silently halves /odom. It is 14 on every wheel.
-# THE ERROR IS SPEED-DEPENDENT: dropout under-reads at crawl, slip over-reads at speed, crossover
-#   around 0.25 m/s. The old "8.1% over" and "24% under" figures are two ends of ONE curve.
-#   ALWAYS QUOTE AN ODOM DISTANCE WITH ITS SPEED.
-# 19/09 RETRACTION: "/odom drifts at standstill" is FALSE - 0 m over 10 s disarmed, once
-#   deadband_erpm went 40 -> 5. Unchecked ARMED.
-# ESC addresses: 10 = RF, 11 = FL, 12 = RR, 13 = RL. LEFT/RIGHT is PROVEN; FRONT/REAR IS NOT -
-#   spin one wheel before making any per-corner claim.
-# esc_count is 6. QGC's ESC health indicator is permanently lit - read esc_online_flags over DDS
-#   instead, and NEVER index esc[] by position, key on esc_address.
-# "ESC 1/2" IN A PX4 MESSAGE NAMES A SIDE, NOT A WHEEL, and 3/4 can never appear. EC_FUNC1/3 = 101
-#   = Motor1 = RIGHT (addr 10 + 12); FUNC2/4 = 102 = Motor2 = LEFT (addr 11 + 13). Correct for a
-#   differential drive - do not "fix" it. PX4 CANNOT SAY WHICH WHEEL DIED, ONLY WHICH SIDE.
-# A POWERED-OFF ESC IS INDISTINGUISHABLE FROM A DEAD BUS (online_flags clear, timestamp == 0).
-#   ASK WHETHER THEY ARE POWERED BEFORE DIAGNOSING CAN.
-
-#--- THE BLOCKER: LOCALIZATION ---
-# RTAB-Map relocalization accepts 0 OF 20 ATTEMPTS ON THE MAP'S OWN BAG. It fails at GEOMETRY, not
-#   appearance, which makes it a PIPELINE FAULT rather than an environment problem.
-#   NEVER lower Vis/MinInliers to make it pass. Do NOT re-map the house. The DB-param-mismatch lead
-#   is DEAD. Disproven and not to be re-proposed: map coverage, lighting/exposure, the rover sitting
-#   inside the 0.308 m depth minimum, camera-gyro rate-dependent scale, yaw_source: wheels.
-# The 2D grid itself is FINE - do not "fix" MaxGroundHeight (keep 0.10) or NormalsSegmentation.
-# GOOD ROOM MAP: ~/rover_data/maps/house_map_v4.db (from bag map_run_20260809_185011). Walls are
-#   single and the scale is tape-verified. That bag is NOT disposable - it is the replay adjudicator.
-# THERE IS NO VIO RUNNING. Position is wheel ERPM plus camera-gyro dead reckoning, and RTAB-Map
-#   CONSUMES our TF odom. This is a CPU and plate-in-frame decision, NOT a capability gap:
-#   rgbd_odometry and icp_odometry are installed and have run here. rgbd_odometry alone costs 79.6%
-#   of a core stationary; measured 09/21 load was 2.68 of 4 cores with FPV streaming OFF (FPV costs
-#   a further 139% of a core).
-# PX4 NEVER KNOWS WHERE IT IS - BY CONFIG, NOT DESIGN. EKF2_EV_CTRL = 4 (bit 2, VELOCITY ONLY);
-#   position fusion (bit 0) is OFF. Target is 9 (position + yaw). EKF2_* IS SHARED WITH THE DRONE,
-#   so this is an operator decision. Depth-camera VIO into EKF2 is the standard PX4 GPS-denied
-#   method - their own worked example uses a D455.
-# FC HEADING IS UNUSABLE INDOORS - it is the EKF's FUSED YAW, not the gyro. Two untested suspects
-#   remain, bmm350 (EKF2_MAG_TYPE) and GPS (EKF2_GPS_CTRL = 7, fully enabled WITH NO GPS FITTED).
-#   Both are EKF2_*, so both are shared with the drone.
-# YAW IS UNRESOLVED on the rover side too: CORR = 7.4, RO_YAW_RATE_I STAYS 0, and /odom yaw is
-#   unusable at speed.
-
-#--- PRODUCT AND ARCHITECTURE SETTLED (20-21/09) ---
-# Full text: ros2_ws/docs/deployment_site_scope.md sections 6-8, and px4_companion_interface.md s9.
-# THE PRODUCT IS CASE B - a mission executed on a PREVIOUSLY BUILT MAP, which makes relocalization
-#   unavoidable. The venue is a bounded SITE (a yard or a manufacturing unit), NOT a house. GPS is
-#   an AID, never the architecture. INDOOR IS FIRST.
-#   Nothing in the M0-M4 / L0-L5 / R1-R7 ladders or the A1-A9 feature list was reordered or
-#   renumbered - only the VENUE assumption was wrong.
-# THE DEPTH CAMERA IS PRIMARY FOR LOCALIZATION and builds the local costmap that planning runs on.
-#   That half already works - T3 proved avoid-and-rejoin on it.
-# LiDAR IS NOT PRIMARY but is NOT EXCLUDED - RTAB-Map fuses laser and visual. THE CAMERA IS NOT
-#   REPLACEABLE BY A LiDAR: a 2D scan plane at 200-300 mm passes OVER a person lying on the floor
-#   (the ISO 3691-4 70 x 400 mm test piece), and cannot see overhangs, negative obstacles or
-#   anything semantic. The question is only ever "do we ADD a LiDAR".
-#   CATCH WORTH REMEMBERING: our /scan comes FROM THE DEPTH CAMERA via depthimage_to_laserscan, not
-#   from a LiDAR. Feeding it to RTAB-Map as a laser input is the same data twice - no independent
-#   geometric constraint. That option only pays off once a REAL LiDAR is fitted.
-# PLANNING IS NOT LOCALIZATION, and VIO REPLACES ENCODERS, NOT GPS. What is missing here is the
-#   ABSOLUTE half, so the thing to publish to PX4 is the MAP-RELATIVE pose from relocalization, not
-#   raw VIO. THE ROUTE IS THE BRIDGE WE ALREADY RUN - no new node, topic or firmware:
-#   rover_ekf_bridge/src/main.cpp already uses LocalPositionMeasurementInterface and fills only the
-#   velocity fields; position_xy and position_xy_variance sit beside them unused.
-#   A WELL-DEFINED VARIANCE IS MANDATORY (no NaN) or the interface throws. After a long unmatched
-#   stretch, hand PX4 a BIGGER VARIANCE rather than a confident lie.
-#   EKF2_EV_POS_X/Y/Z are all 0.0 - correct TODAY because velocity comes from wheel odometry at the
-#   body frame, but THEY MUST BE SET FROM THE MEASURED MOUNT the moment a camera-derived pose is fed
-#   (front_overhang 0.337, cam_z 0.305, both known from G0). An unmodelled lever arm turns yaw rate
-#   into spurious lateral velocity. EKF2_EV_DELAY is 0.0 and UNTUNED.
-# PX4's OWN WARNING, verbatim: fusing GPS and vision "is really difficult, because when they
-#   disagree it will confuse the EKF. From testing it is more reliable to just use vision velocity."
-#   So ARBITRATE, DO NOT BLEND - one source per area, or design the handover deliberately.
-# SAFETY RATING IS A SEPARATE, CERTIFIED PURCHASE. ISO 3691-4 expects a safety-rated scanner
-#   (IEC 61496 Type 3, typically PL d) for personnel detection. NEITHER the Gemini 336L NOR an
-#   STL-19P qualifies - it is a THIRD device. Confirm applicability before site selection; it drives
-#   cost and mounting more than anything else.
-# NEXT ACTION IS A DIAGNOSIS, NOT A PURCHASE. Buy nothing until the 0/20 is understood: a new sensor
-#   feeding a broken pipeline buys nothing, and the diagnosis decides which sensor is even right.
-
-#--- HOUSEKEEPING AND INFRASTRUCTURE ---
-# 12/09: $HOME reorganised, 83 loose files down to 4. Mutable data now lives in
-#   ~/rover_data/{maps,bags,logs,fc} - deliberately OUTSIDE ros2_ws, because a map .db is ~166 MB
-#   and GitHub rejects blobs over 100 MB. ~/apps holds source and build trees. NOTHING IN $HOME WAS
-#   EVER A LIVE SERVICE DEPENDENCY - services run from /usr/local/bin and DKMS from /usr/src.
-#   ros2_ws and codex-work DID NOT MOVE (systemd references them by absolute path).
-#   THE MAP MOVED: ~/house_map_v4.db -> ~/rover_data/maps/house_map_v4.db. Any doc still naming the
-#   old path is stale.
-# Disk pressure eased: 85% full at v2.2, 69% now (18 G free of 58 G).
-# 03/09: eth0 wired recovery added - ssh roz@10.10.10.10 (laptop 10.10.10.20/24). The address
-#   exists ONLY with carrier, so an empty "ip -br addr show eth0" with no cable is CORRECT.
-#   STILL CABLE-UNTESTED. There is NO Wi-Fi fallback; remote access is WFB -> relay:2222.
-# 03/09: EVERY NIC NAME IN THE OLDER DOCS IS STALE - the uplink adapter was swapped without any doc
-#   catching it. Run lsusb and ip -br addr first, never trust a NIC name from a doc.
-# 07/09: claude is now a SHELL FUNCTION, not the binary - it launches inside tmux session vindroz so
-#   an SSH drop no longer kills the session. Use "type claude" to see the wrapper; "command claude"
-#   forces the raw binary. tmux does NOT survive a reboot.
-# 04/09: long jobs go in tmux. sshd now probes dead peers (ClientAliveInterval 30 / CountMax 4),
-#   which reaps the SESSION, not the WORK - that makes tmux MORE necessary, not less.
-# 16/08: ONE mavlink_shell.py PER FC BOOT. Retrying an empty result exhausts the sessions and KILLS
-#   THE GCS MAVLINK LINK. Recovery is a reboot over DDS.
-# 10/10: /etc/sid.conf RENAMED TO /etc/sys_version. The old name read as a Debian-suite file and
-#   collided with /etc/debian_version's "trixie/sid" content. A compat symlink remains at
-#   /etc/sid.conf. Renamed with git mv so this changelog's history follows the file.
+# 10/10 THIS FILE WAS RENAMED: /etc/sid.conf -> /etc/sys_version. The old name read as a
+#   Debian-suite file and collided with /etc/debian_version's "trixie/sid" content. A compat symlink
+#   remains at /etc/sid.conf. Renamed with git mv so this changelog's history follows the file.
 #   NEW: codex-work/scripts/sys_version_stamp.sh regenerates the machine-readable header above the
-#   AUTOGEN markers (host, OS, kernel, ROS distro, disk, both repo states, enabled units, FC
-#   firmware hash). It never touches this hand-written changelog. Run it before cutting an image.
+#   AUTOGEN markers (host, OS, kernel, ROS distro, disk, both repo states, enabled units). It never
+#   touches this hand-written changelog. RUN IT BEFORE CUTTING AN IMAGE.
 
-#--- RELAY STATION ---
-# 2-NODE CLUSTER VERIFIED ON RF 26/09, so use-cluster is now correct. CPE610 reachable as
-#   root@10.5.7.102 off the relay's eth0.
-# THE RELAY'S SD CARD IS MARCH-VINTAGE: the 28/08 fixes are ABSENT (no wfb-cfg-apply), and its repo
-#   has NO REMOTE. GitHub is at v1.0.7. A repo pull DEPLOYS NOTHING there.
-# The relay has NO RTC and its clock runs roughly a month off. A QGC-laptop ping is a FALSE NEGATIVE
-#   - check ip neigh instead.
-# WFB is PARKED. The only action left is hardware: reseat the drone NIC-A ant0. Drone TX is
-#   flawless; when video breaks, WFB's input queue is EMPTY - SUSPECT THE SOURCE, not the radio.
+#--- VIDEO / CAMERA (companion software) ---
+# vision_streaming: ffmpeg watchdog with hung-alive and degraded-stream detection. The capture node
+#   resolves the camera by sysfs index, so a /dev/videoN shift is normal and handled.
+#   NEVER key a camera by /dev/videoN - use usbcam-<vidpid>-<serial>-i<iface>.
+#   vision_streaming RUNNING IS NOT STREAMING. Prove it: pgrep -af "[f]ffmpeg" should show the
+#   encoder at ~110% CPU and ss -unap should show wfb-server bound on 5602. Do NOT use
+#   /proc/<pid>/io wchar - RTP goes out via sendto, which does not increment it.
+# LG Smart Cam is the current FPV camera; both cameras are FPV-capable on port 6-2. SWAP FROM QGC
+#   ONLY. FPV video costs /scan 28.4 -> 22.3 Hz. Do NOT modify the ffmpeg line (vetoed).
+# Orbbec unaligned-depth guard is a LOCAL PATCH (codex-work 16665f5). A RE-CLONE OF THE GITIGNORED
+#   ORBBEC TREE RESTORES THE BUG.
 
-#--- RULER TRAPS THAT COST REAL TIME THIS PERIOD ---
-# systemctl "active" PROVES NOTHING. Twice, every unit read active while depth, /scan and /odom were
-#   all at 0.0 Hz. MEASURE RATES, NEVER is-active.
-# THE ros2 CLI IS ITSELF AN UNRELIABLE RULER. node list ghosts for minutes; topic echo and topic hz
-#   can return nothing on a provably live topic. Prove a node dead with pgrep; measure with a direct
-#   rclpy subscriber. When the CLI goes quiet, reach for MAVLink.
+#--- RULER TRAPS THAT COST REAL TIME THIS PERIOD (all companion-side) ---
+# THE ros2 CLI IS ITSELF AN UNRELIABLE RULER. node list ghosts for minutes after a stop; topic echo
+#   and topic hz can return NOTHING on a provably live topic, --no-daemon included. Prove a node
+#   dead with pgrep; measure with a direct rclpy subscriber. When the CLI goes quiet, reach for
+#   MAVLink - never read the silence as the thing being dead.
 # IT IS /fmu/out/vehicle_status_v1, NOT /fmu/out/vehicle_status. The unversioned name yields SILENCE
 #   rather than an error, and a None default then reads as "disarmed" while the wheels are spinning.
-#   PX4 message versioning is in effect across the board.
-# BOOT-CLOCK TRAP: check /proc/uptime BEFORE reading any duration off a timestamp. This box
+#   PX4 message versioning is in effect across the bridged set, and that set is THIN and appears
+#   LAZILY - check ros2 topic list before planning any measurement around a topic.
+# BOOT-CLOCK TRAP: CHECK /proc/uptime BEFORE READING ANY DURATION OFF A TIMESTAMP. This box
 #   restamps early boot and once forged a convincing "service up 11 hours" on a 4-minute-old unit.
 #   A GAP in a timestamped log is not a fault either - grep timesyncd for a clock STEP first.
-# NEVER READ A QUIET TOPIC AS EVIDENCE - prove a non-zero baseline first. The same applies to any
-#   detector: prove the detector was live across the window.
+# NEVER READ A QUIET TOPIC AS EVIDENCE - prove a non-zero baseline first. Same for any detector:
+#   prove the detector itself was live across the window.
 # /scan DOES NOT TRACK BEYOND ~3 m - park about 2.5 m out. It also does not come back on its own
 #   after a scan-killing test.
-# IS THE BOX ALIVE? tail -2 /var/log/ext5v/ext5v.csv - stamped every 2 s, independent of tmux and
-#   of Claude, so a fresh row means ALIVE. Use it before ever cutting power on a silent terminal.
-# A silent terminal reads as a dead box from the operator's chair: anything that may run over 30 s
-#   must say so up front or go to the background.
+# NO RATE OR CPU NUMBER IS TRUSTWORTHY WITHOUT ps -eo pid,pcpu --sort=-pcpu FIRST - the rate you
+#   measure may be reporting CPU starvation rather than the thing you meant to measure. Spikes
+#   vanish before ps can see them; use ros2_ws/tools/cpu_catcher.sh.
+# START A PERCEPTION MEASUREMENT, THEN GO QUIET. Commanding throughout starved the camera on 09/08
+#   and produced two wrong answers.
+# IS THE BOX ALIVE? tail -2 /var/log/ext5v/ext5v.csv - stamped every 2 s, independent of tmux and of
+#   Claude, so a fresh row means ALIVE. Use it before ever cutting power on a silent terminal.
+# ONE mavlink_shell.py PER FC BOOT (16/08). Retrying an empty result exhausts the sessions and KILLS
+#   THE GCS MAVLINK LINK. Recovery is a reboot over DDS.
+# Replays need ROS_DOMAIN_ID=42; the LIVE stack is domain 0.
 
-#--- KNOWN OPEN FAULTS AT THIS RELEASE ---
-# 1. LOCALIZATION: RTAB-Map relocalization 0/20 on its own bag. THE blocker. Diagnosis, not purchase.
-# 2. HARD NEUTRAL BRAKE: undiagnosed, needs a floor test. Not reproducible on the stand.
-# 3. RR MOTOR DEMAGNETISED: replace before further pivot work. No pivots from rest.
-# 4. YAW: unresolved on both the FC side (fused yaw unusable indoors) and the rover side (CORR 7.4).
-# 5. NEGATIVE OBSTACLES: /scan_3d filters to 0.12-0.45 m so sub-ground points are discarded, and
-#    /scan reads a hole as clear road. NEITHER SENSOR AS CONFIGURED SEES A POTHOLE.
-# 6. /odom CIRCULAR FEEDBACK: rover-ekf-bridge feeds the EKF from /odom, so the controller regulates
-#    against its own under-read. Not fixable by better calibration.
-# 7. 268 DEGREE BLIND ARC: unaddressed.
-# 8. TWO LIVE GITHUB PATs STILL UNREVOKED since 20/08 - ~/git_key and a classic scope-repo token in
-#    ~/.claude/history.jsonl. THE OPERATOR MUST REVOKE THESE IN A BROWSER. Revoking breaks nothing;
+#--- KNOWN OPEN FAULTS ON THIS IMAGE ---
+# 1. LOCALIZATION: RTAB-Map relocalization 0/20 on its own bag, failing at geometry. THE blocker,
+#    and it is software on this card. Needs a DIAGNOSIS - do not buy a sensor to feed a broken
+#    pipeline, and do not add stack (ORB-SLAM3 / OpenVINS) that would inherit the same fault.
+#    ORB-SLAM3 relocalization against the same bag is worth ONE experiment as a DIAGNOSTIC - it
+#    answers whether the failure is RTAB-Map-specific - but it is not an architecture.
+# 2. UNDER-VOLTAGE AND ACTIVE THROTTLING, FOUND 10/10 AT RELEASE TIME. vcgencmd get_throttled reads
+#    0x50005 = under-voltage NOW (bit 0) + currently throttled NOW (bit 2) + both have also occurred
+#    since boot (bits 16, 18). A CLEAN BOX READS 0x0. The ext5v rail is logging 4.75-4.87 V where it
+#    should sit near 5.1, flipping between 0x50000 and 0x50005 two seconds apart, so it DIPS UNDER
+#    LOAD rather than sitting at a steady fault. UNDIAGNOSED.
+#    CONSEQUENCE: every CPU-headroom figure in this release may be measuring the throttle rather
+#    than the workload. Re-measure before using any of them to decide against running VIO.
+# 3. NINE AUTONOMY UNITS ARE NOT BACKED UP. Absent from codex-work/System_files_list.txt, so
+#    system_files_sync does not capture them: rover-odometry, rover-camera, rover-scan,
+#    rover-scan-3d, rover-autonav-mode, rover-ekf-bridge, rover-nav2, ldlidar, ext5v-logger.
+#    AN SD IMAGE CLONE DOES capture them (they live in /etc/systemd/system). A REBUILD FROM THE REPO
+#    DOES NOT - it would lose the entire autonomy stack. Add them to the list.
+# 4. NO IMAGE BACKUP EXISTS AT THIS RELEASE. 38 G used cannot be written into the 18 G free on the
+#    same card, and no removable media is attached. AN EXTERNAL USB DISK IS REQUIRED.
+# 5. TWO LIVE GITHUB PATs STILL UNREVOKED since 20/08: ~/git_key, and a classic scope-repo token in
+#    ~/.claude/history.jsonl. THE OPERATOR MUST REVOKE THESE IN A BROWSER. Revoking breaks nothing -
 #    every remote is SSH. NEVER PASTE A SECRET INTO A PROMPT.
-# 9. BACKUP GAP FROM v2.2 IS STILL OPEN AND NOW WIDER. These NINE units are still absent from
-#    codex-work/System_files_list.txt, so system_files_sync is NOT backing them up:
-#      rover-odometry, rover-camera, rover-scan, rover-scan-3d, rover-autonav-mode,
-#      rover-ekf-bridge, rover-nav2 (new this period), ldlidar, ext5v-logger
-#    An SD IMAGE CLONE DOES capture them (they live in /etc/systemd/system). A REBUILD FROM THE REPO
-#    DOES NOT. Add them to the list.
-# 10. NO IMAGE BACKUP EXISTS AT THIS RELEASE. 38 G used cannot be written into the 18 G free on the
-#    same card, and no removable media is attached. An external USB disk is required.
+# 6. ~/.bashrc sources install/setup.bash by a relative path (see COMPANION OS above). Unfixed.
+# 7. NEGATIVE OBSTACLES: /scan_3d filters to 0.12-0.45 m so sub-ground points are discarded, and
+#    /scan reads a hole as clear road. NEITHER SENSOR AS CONFIGURED SEES A POTHOLE. 268-degree blind
+#    arc also unaddressed. Both are perception-software gaps on this card.
+# 8. /odom CIRCULAR FEEDBACK: rover-ekf-bridge feeds the EKF from /odom, so the controller regulates
+#    against its own under-read. Not fixable by better calibration.
 
-#=== BEFORE-FLIGHT REVERT CHECKLIST (companion/FC going back on the DRONE) ===
+#=== BEFORE-FLIGHT CHECKLIST - THE COMPANION-SIDE ITEMS ONLY ===
 # STILL NOT VALIDATED AS A PROCEDURE - setup_manual.md F6 remains an acknowledged unwritten gap.
-# This supersedes v2.2's list; item 7 is new.
-# 1. systemctl enable --now tfmini          <- REQUIRED BY THE DRONE, currently DISABLED.
-# 2. Disable the FIVE enabled rover-* units or they start on the drone at boot:
+# These are the items that live ON THIS CARD. The FC and ESC items are NOT listed here by design -
+# they are off-card. For those see pxlabs_release_note_v1.17.0-r2.1.md, px4_param_audit.md and
+# esc_px4_config_audit_20260914.md.
+# 1. systemctl enable --now tfmini   <- REQUIRED BY THE DRONE, currently DISABLED for the rover.
+# 2. DISABLE THE FIVE ENABLED rover-* UNITS or they start on the drone at boot:
 #      rover-odometry, rover-camera, rover-scan, rover-scan-3d, rover-autonav-mode.
-#      (rover-ekf-bridge and rover-nav2 are already disabled on purpose - both MOVE the rover.)
-# 3. CA_AIRFRAME is 6 (Rover, differential); the aerial airframe config must be restored. HOW this
-#      swap is performed is STILL NOT DOCUMENTED. Establish it before the next flight.
-# 4. Revert any EKF2_* changed for the rover. NONE have been changed by us as of this release -
-#      re-check setup_manual A7 at the time. The queued yaw-fault tests WOULD change shared params.
-# 5. RO_* need NOT be reverted - they are rover-airframe-only. Do not "revert" them by mistake.
-# 6. Re-read all params AFTER an FC reboot - they have not always survived one.
-# 7. NEW: the ESCs are now in CONTROL_MODE_SPEED with a 4.93 m/s cap and a duty-0 short brake below
-#      50 ERPM. This is a ROVER configuration. Establish what the drone's ESCs require before flight.
-# 8. PX4 collision prevention is MULTICOPTER-ONLY - none of the rover's reflex or Nav2 obstacle
-#      logic transfers to the drone, and none of it covers MANUAL drive on either vehicle.
-
-#--- PX4 PARAMETERS AT THIS RELEASE ---
-# READ THE FC, NEVER TRUST THIS SNAPSHOT. PX4 PARAMETERS ARE NOT ON THIS SD CARD - they live on the
-# flight controller. Cloning this image does NOT capture them and restoring it does NOT put them
-# back. tools/set_param.py reads and writes them, but WRITES ARE RAM ONLY - finish with 'param save'.
-# NEVER WRITE A VEHICLE PARAM WITHOUT AN EXPLICIT GO-AHEAD. Reading is free.
-#   RO_DECEL_LIM     5      (since 14/09 - SUPERSEDES v2.2's "keep both at -1")
-#   RO_ACCEL_LIM    -1
-#   RO_MAX_THR_SPEED 4.93   (calibrated 14/09, was 0.60)
-#   RO_YAW_RATE_I    0      (STAYS 0)
-#   RD_WHEEL_TRACK   0.31   (correct - 0.430 is the wheelbase, not the track)
-#   CA_AIRFRAME      6      (Rover, differential)
-#   RC_MAP_KILL_SW   12 . ARM_SW 5 . FLTMODE 6 . KILLSWITCH_TH 0.75
-#   COM_POS_FS_EPH   5 m    (this is what refuses ARMED AutoNav)
-#   EKF2_EV_CTRL     4      (velocity only; target 9 - SHARED WITH THE DRONE)
-#   EKF2_GPS_CTRL    7      (fully enabled with NO GPS FITTED)
-#   NAV_RCL_ACT      1      (RC loss will NOT disarm)
-# RO_ACCEL_LIM and RO_DECEL_LIM slew the MANUAL stick AND the collision reflex. Re-verify the reflex
-#   standoff after any decel change. A rover param is scoped by flag_control_*_enabled, NOT by its
-#   description. Scope map and ramp arithmetic: ros2_ws/docs/px4_param_audit.md and setup_manual A7.
-# QUEUED, needs no FC flash: vehicle_angular_velocity is already bridged to DDS - that decouples
-#   odometry from the camera.
+#      (rover-ekf-bridge and rover-nav2 are already disabled - both MOVE the rover.)
+# 3. NONE of the companion's obstacle logic covers the drone: the reflex and the Nav2 costmaps are
+#      rover-only, and PX4 collision prevention is MULTICOPTER-ONLY. None of it covers MANUAL drive
+#      on either vehicle.
+# 4. ldlidar.service is present but disabled (STL-19, outdoor track). Leave it disabled.
+# 5. Re-run sys_version_stamp.sh after any unit enable/disable so this file matches the card.
 
 #--- Repo state at this release ---
 # ros2_ws:    main @ 597d59f4f7, last tag v1.2.0, CLEAN.
 #             (v2.2 shipped from fix/collision-perception-health-gate @ 03fb73b with 8 uncommitted
 #              files. That condition is CLOSED - this release is on main and matches a commit.)
-# codex-work: master @ b01a005, pushed to origin. Docs live at the REPO ROOT; rover and DroneCAN
-#             docs belong HERE, not in ros2_ws. Note origin/main is stale - master is the branch.
+# codex-work: master, pushed to origin. Docs live at the REPO ROOT; rover and DroneCAN docs belong
+#             HERE, not in ros2_ws. origin/main is stale - MASTER is the branch.
 # Doc index:  ros2_ws/docs/README.md (autonomy) and codex-work/README.md (companion) - two separate
 #             indexes. autonomy_plan.md M0-M4 is the ONLY mode numbering. ros2_architecture.md is
 #             STALE and roadmap.md is archived.
+# VERIFICATION STATUS OF THIS ENTRY: the stamp header above the AUTOGEN markers was MEASURED on
+#             10/10. The companion software history below it was compiled from the ros2_ws git log
+#             and the operator's dated notes. No FC or ESC value was read for this release - the
+#             MAVLink link was DOWN (no heartbeat) and microxrce-agent was not running.
