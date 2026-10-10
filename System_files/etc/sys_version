@@ -1,6 +1,6 @@
 # >>> AUTOGEN sys_version_stamp.sh — DO NOT EDIT BELOW THIS LINE <<<
 sys version = 2.3
-Date = 10/10/2026 22:25
+Date = 10/10/2026 23:21
 #
 # Stamped by codex-work/scripts/sys_version_stamp.sh. Re-run it before cutting an image.
 # Everything above the END marker is generated; the changelog below it is hand-written.
@@ -11,11 +11,11 @@ Date = 10/10/2026 22:25
 #   os                   Ubuntu 24.04.1 LTS
 #   kernel               6.8.0-1048-raspi
 #   ros distro           jazzy
-#   root filesystem      18G free of 58G (69% used)
+#   root filesystem      22G free of 58G (61% used)
 #
 # --- repositories (the image is only as identified as these are) ---
 #   ros2_ws              main @ 597d59f4f7 (last tag: v1.2.0) [clean]
-#   codex-work           master @ f7c956966e (last tag: sync-20261010-1540) [clean]
+#   codex-work           master @ 4d3f32e450 (last tag: sync-20261010-1540) [1 UNCOMMITTED — this image does NOT match any commit]
 #
 # --- NOT ON THIS CARD, so not stamped here ---
 #   PX4 params, FC firmware and ESC config all live off-card. An image clone captures
@@ -36,6 +36,9 @@ Date = 10/10/2026 22:25
 #   microxrce-agent        enabled
 #   mavlink.router         enabled
 #   vision_streaming       disabled
+#   ollama                 disabled
+#   rc_control_node        enabled
+#   ros2_px4_translation_node disabled
 # >>> END AUTOGEN — hand-written changelog follows <<<
 
 Version Updates
@@ -564,8 +567,12 @@ v2.3
 #    The After= / Requires= ordering is also recorded only in these units (camera -> scan ->
 #    odometry -> nav2, and scan-3d Requires scan). THAT ORDERING IS THE RECOVERY SEQUENCE for the
 #    0 Hz failure mode, so it had been living in exactly one unbacked place.
-# 4. NO IMAGE BACKUP EXISTS AT THIS RELEASE. 38 G used cannot be written into the 18 G free on the
-#    same card, and no removable media is attached. AN EXTERNAL USB DISK IS REQUIRED.
+# 4. NO IMAGE BACKUP EXISTS AT THIS RELEASE. AN EXTERNAL USB DISK IS REQUIRED - no removable media
+#    is attached. Figures after the 10/10 reclaim: 34 G used, 22 G free on the same 58 G card, so
+#    it STILL DOES NOT FIT, and freeing more space cannot change that by enough to matter.
+#    SEPARATELY AND MORE IMPORTANTLY: IMAGING A LIVE MOUNTED ROOT GIVES AN INCONSISTENT SNAPSHOT.
+#    Even if it fit, a dd of the running system is not a restorable backup. Use external media,
+#    and prefer imaging the card from another machine or from a read-only/quiesced state.
 # 5. TWO LIVE GITHUB PATs STILL UNREVOKED since 20/08: ~/git_key, and a classic scope-repo token in
 #    ~/.claude/history.jsonl. THE OPERATOR MUST REVOKE THESE IN A BROWSER. Revoking breaks nothing -
 #    every remote is SSH. NEVER PASTE A SECRET INTO A PROMPT.
@@ -575,10 +582,13 @@ v2.3
 #    arc also unaddressed. Both are perception-software gaps on this card.
 # 8. /odom CIRCULAR FEEDBACK: rover-ekf-bridge feeds the EKF from /odom, so the controller regulates
 #    against its own under-read. Not fixable by better calibration.
-# 9. MISNAMED mavlink-router STANZA, FOUND 10/10. /etc/mavlink-router/main.conf declares
-#    "[UartEndpoint serial-AMA4]" with Device=/dev/ttyAMA0. THE LABEL NAMES THE WRONG PORT -
-#    AMA4 is the uXRCE-DDS wire, AMA0 is MAVLink. It works (the Device line is what counts) but it
-#    will send someone to the wrong UART while debugging a dead link. Rename the stanza.
+# 9. [CLOSED 10/10/2026] MISNAMED mavlink-router STANZA. /etc/mavlink-router/main.conf declared
+#    "[UartEndpoint serial-AMA4]" with Device=/dev/ttyAMA0 - the label named the WRONG PORT, since
+#    AMA4 is the uXRCE-DDS wire and AMA0 is MAVLink. Harmless at runtime (mavlink-router reads
+#    Device, not the label) but it pointed anyone debugging a dead MAVLink link at the DDS wire,
+#    on a box where those are two separate UARTs with independent failure modes.
+#    RENAMED to "[UartEndpoint serial-AMA0]". Backup: main.conf.bak-20261010. Takes effect on the
+#    next mavlink.router restart; behaviour is identical either way, so it was not restarted.
 # 10. STALE CAMERA DEVICE PATHS IN rc_control. ros2_ws/src/rc_control/camera_sw_params.yaml and
 #    config/rc_mapping.yaml still name /dev/video0 and /dev/video2 for front/bottom, from the
 #    retired udev model. /dev/videoN is UNSTABLE here, so those now point at whatever happens to
@@ -599,6 +609,71 @@ v2.3
 #      on either vehicle.
 # 4. ldlidar.service is present but disabled (STL-19, outdoor track). Leave it disabled.
 # 5. Re-run sys_version_stamp.sh after any unit enable/disable so this file matches the card.
+
+#--- 10/10/2026 addendum: STORAGE RECLAIM AND ollama DISABLED ---
+# DISK WENT 38912M USED -> 34425M (69% -> 61%), 22.5 G free. ~4.2 G reclaimed, nothing functional
+# changed. What was removed and why:
+#   3.3 G  ~/.local/lib/ollama/cuda_v12 and cuda_v13 - NVIDIA CUDA runner libraries on a board with
+#          NO NVIDIA GPU and no /dev/nvidia* node. Provably unused: ollama's own log reports
+#          "inference compute id=cpu library=cpu", and its CPU runner is compiled into
+#          /usr/local/bin/ollama, not that directory (the dir held NOTHING ELSE).
+#          ** AN ollama UPGRADE WILL RESTORE THEM. Re-check after any ollama update. **
+#    769 M ~/rover_data/maps/sweep_roi_{0.00,0.10,0.15,0.20,0.25,0.35}.db - six outputs of a single
+#          parameter sweep on 08/08, referenced by NO config, tool, doc or memory file.
+#     66 M /var/log/aide/aide.log* - reports from a timer that has been disabled for months.
+#          THE AIDE DATABASE IN /var/lib/aide WAS NOT TOUCHED - AIDE still works if re-enabled.
+#     61 M apt cache (apt-get clean).
+# ollama.service STOPPED AND DISABLED at the operator's instruction - re-enable when required:
+#   sudo systemctl enable --now ollama
+#   The Phi-3 model blob (2.1 G, ~/.ollama) IS INTACT. Only the boot-time service was turned off,
+#   because it was holding a slice of a 4-core board that is currently under-volting (fault 2) while
+#   CPU headroom is the open question blocking VIO.
+#
+# MAP RETENTION - CHECKED AGAINST EVERY REFERENCE BEFORE DELETING ANYTHING. 23 .db files remain.
+#   SIX ARE REFERENCED AND MUST BE KEPT:
+#     house_map_v4.db           ACTIVELY LOADED (database_path) + cited in 10 files
+#     house_map_v2.db           the superseded predecessor, named in the provenance comment
+#     rtabmap_run3_vis_nav.db   the FALSE-MAP build, named in the same comment chain
+#     rtabmap_replay_wheel.db / rtabmap_run3_raw.db / rtabmap_final.db   cited in docs
+#   KEEP THE TWO SUPERSEDED MAPS EVEN THOUGH NOTHING LOADS THEM. The comment chain in
+#     rover_nav2/config/rtabmap_localization.yaml is the EVIDENCE for trusting v4, and each
+#     predecessor records a SPECIFIC MEASURED FAILURE: rtabmap_run3_vis_nav had 38 loop closures
+#     accepted with rejection disabled, 34 of which fail the check; house_map_v2 was built on FC
+#     heading and the uncorrected 19% odom over-report, giving 22 cm keyframe disagreement and
+#     21 deg jitter while parked. With relocalization failing at GEOMETRY on v4's OWN bag, the
+#     ability to A/B against those two is potentially diagnostic. 241 M is cheap for that.
+#   STILL UNREFERENCED, NOT DELETED, OPERATOR'S CALL (~1.8 G): house_map_v3 and v5 (either side of
+#     v4 in the same 09/08 session, so possibly the near-miss comparisons), gridtest_raytrace,
+#     rtabmap_run3_{B1,B2,C,D,E,fixedA,nav,visual}, rtabmap_{icp_cropped,icp_plate,masked,nav,
+#     visual}, rtabmap_replay_wheel_grid.
+#   METHOD WORTH REUSING: audit each .db against every reference in ros2_ws, codex-work, the memory
+#     files and /etc BEFORE deleting. A grep is not proof a map is disposable, but an unreferenced
+#     map plus a dated provenance comment usually is.
+#
+# NOT DONE, STILL AVAILABLE: /var/lib/aide holds 376 M from the same disabled timer (aide.db.new
+#   duplicates the live aide.db byte-for-byte, plus 24 dailyaidecheck.old.* dirs), and FOUR
+#   NON-RUNNING KERNELS are installed (1010, 1013, 1015, 1018; running is 1048) with apt autoremove
+#   listing 30 packages, worth ~1-2 G. ** THE DKMS MODULES (rtl88xxau_wfb, rtl88x2eu) BUILD
+#   PER-KERNEL - check dkms status AFTER any kernel removal, and never remove the running one. **
+#
+# FREEING SPACE DOES NOT ENABLE AN IMAGE BACKUP OF THIS CARD. 34 G used still will not fit in the
+#   22 G free, and imaging a LIVE MOUNTED ROOT gives an inconsistent snapshot regardless. External
+#   USB media remains required - see fault 4. This reclaim bought HEADROOM, not a backup.
+
+#--- 10/10/2026 addendum: FAULT 9 FIXED ---
+# /etc/mavlink-router/main.conf stanza renamed "[UartEndpoint serial-AMA4]" -> "serial-AMA0" to
+# match its own Device=/dev/ttyAMA0. Backup at /etc/mavlink-router/main.conf.bak-20261010.
+# Cosmetic at runtime (mavlink-router reads Device, not the label) but it had been pointing anyone
+# debugging a dead MAVLink link at the uXRCE-DDS wire. NOT YET RESTARTED - the rename takes effect
+# on the next mavlink.router restart, and behaviour is identical either way.
+# FAULT 10 IS STILL OPEN. Note while investigating: vision_config_manager accepts "a device, id, or
+#   alias" and has a 'list' subcommand, so the migration target exists. ALSO FOUND:
+#   rc_control_node.service IS ENABLED, and it is the node that reads the stale /dev/video0 paths.
+#   Its own source comment records the consequence - the camera switch's RESTING DETENT REQUESTS THE
+#   FRONT CAMERA, so a missing /dev/video0 was retried at the RC rate: 2181 failures in ten minutes,
+#   ~100% of a core. That retry storm is now bounded by CAM_MAX_ATTEMPTS, but the stale paths mean
+#   the default boot state still aims at a device that may not exist. Treat fault 10 as LIVE, not
+#   latent - it sits on an enabled service with a CPU-burn history on a throttling board.
 
 #--- Repo state at this release ---
 # ros2_ws:    main @ 597d59f4f7, last tag v1.2.0, CLEAN.

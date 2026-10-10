@@ -78,7 +78,8 @@ unit_states() {
   local u s found=0
   for u in rover-odometry rover-camera rover-scan rover-scan-3d rover-autonav-mode \
            rover-ekf-bridge rover-nav2 tfmini ldlidar ext5v-logger \
-           microxrce-agent mavlink.router vision_streaming; do
+           microxrce-agent mavlink.router vision_streaming ollama \
+           rc_control_node ros2_px4_translation_node; do
     # is-enabled exits non-zero for a disabled unit while still printing "disabled",
     # so the exit status must be discarded and the verdict taken from stdout only.
     s=$(systemctl is-enabled "${u}.service" 2>/dev/null) || true
