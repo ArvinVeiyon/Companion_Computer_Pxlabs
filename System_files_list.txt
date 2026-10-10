@@ -33,6 +33,16 @@ usr/local/bin/vision_config_manager
 usr/local/bin/block-traffic.sh
 usr/local/sbin/wfb-cfg-apply
 etc/systemd/system/block-traffic.service
+etc/systemd/system/rover-odometry.service
+etc/systemd/system/rover-camera.service
+etc/systemd/system/rover-scan.service
+etc/systemd/system/rover-scan-3d.service
+etc/systemd/system/rover-autonav-mode.service
+etc/systemd/system/rover-ekf-bridge.service
+etc/systemd/system/rover-nav2.service
+etc/systemd/system/ldlidar.service
+etc/systemd/system/ext5v-logger.service
+usr/local/bin/ext5v-logger
 boot/firmware/config.txt
 etc/systemd/system/ollama.service
 home/roz/.bashrc

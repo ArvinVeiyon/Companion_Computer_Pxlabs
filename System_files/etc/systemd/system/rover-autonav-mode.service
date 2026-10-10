@@ -1,0 +1,20 @@
+[Unit]
+Description=PX4 custom mode AutoNav (px4_ros2 external mode)
+After=network.target microxrce-agent.service
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=roz
+Group=roz
+Environment=HOME=/home/roz
+WorkingDirectory=/home/roz/ros2_ws
+ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/roz/ros2_ws/install/setup.bash && exec ros2 run autonav_mode autonav_mode'
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

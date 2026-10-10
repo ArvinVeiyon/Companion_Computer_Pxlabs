@@ -1,0 +1,63 @@
+#!/bin/bash
+# ext5v-logger — samples the RPi5 5V input rail and correlates dips with WFB NIC TX drops.
+#
+# Background to this: EXT5V was measured 4.65-4.84V on 2026-07-25 (healthy 5.0-5.1,
+# brownout ~4.8) and browned out a WFB adapter into 99.8% TX drop. Power module was
+# replaced with an XL4015 set to 5.25V; the Pi still reads ~5.00V, i.e. ~0.25V of
+# wiring loss, leaving only ~0.2V of headroom. This logger exists to catch load
+# transients that eat that headroom during armed runs.
+
+LOG_DIR=/var/log/ext5v
+LOG=$LOG_DIR/ext5v.csv
+EVENTS=$LOG_DIR/events.log
+INTERVAL=${EXT5V_INTERVAL:-2}
+WARN_BELOW=${EXT5V_WARN_BELOW:-4.90}
+
+mkdir -p "$LOG_DIR"
+
+mapfile -t nics < <(ls /sys/class/net 2>/dev/null | grep -E '^wlx')
+
+# Header only on a fresh/rotated file, so restarts append cleanly.
+if [ ! -s "$LOG" ]; then
+    {
+        printf 'time,ext5v_v,vdd_core_a,vdd_core_v,3v3_sys_v,temp_c,arm_hz,throttled'
+        for n in "${nics[@]}"; do printf ',%s_txdrop,%s_txpkt' "$n" "$n"; done
+        printf '\n'
+    } >>"$LOG"
+fi
+
+echo "$(date -Is) logger started: interval=${INTERVAL}s warn_below=${WARN_BELOW}V nics=${nics[*]}" >>"$EVENTS"
+
+while :; do
+    now=$(date -Is)
+
+    # One pmic_read_adc call gets every rail; cheaper than one call per rail.
+    adc=$(vcgencmd pmic_read_adc 2>/dev/null)
+    ext5v=$(awk -F= '/EXT5V_V/   {gsub(/[VA]$/,"",$2); print $2}' <<<"$adc")
+    core_a=$(awk -F= '/VDD_CORE_A/{gsub(/[VA]$/,"",$2); print $2}' <<<"$adc")
+    core_v=$(awk -F= '/VDD_CORE_V/{gsub(/[VA]$/,"",$2); print $2}' <<<"$adc")
+    v33=$(awk -F=   '/3V3_SYS_V/ {gsub(/[VA]$/,"",$2); print $2}' <<<"$adc")
+
+    temp=$(vcgencmd measure_temp 2>/dev/null | tr -dc '0-9.')
+    arm=$(vcgencmd measure_clock arm 2>/dev/null | cut -d= -f2)
+    thr=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)
+
+    row="$now,$ext5v,$core_a,$core_v,$v33,$temp,$arm,$thr"
+    for n in "${nics[@]}"; do
+        d=$(cat "/sys/class/net/$n/statistics/tx_dropped" 2>/dev/null || echo NA)
+        p=$(cat "/sys/class/net/$n/statistics/tx_packets" 2>/dev/null || echo NA)
+        row="$row,$d,$p"
+    done
+    printf '%s\n' "$row" >>"$LOG"
+
+    # Flag the two things worth waking up for: a dip toward the brownout knee,
+    # and any throttle bit the kernel has latched.
+    if [ -n "$ext5v" ] && awk -v v="$ext5v" -v w="$WARN_BELOW" 'BEGIN{exit !(v<w)}'; then
+        echo "$now WARN low rail ext5v=${ext5v}V core_a=${core_a}A temp=${temp}C throttled=$thr" >>"$EVENTS"
+    fi
+    if [ -n "$thr" ] && [ "$thr" != "0x0" ]; then
+        echo "$now WARN throttled=$thr ext5v=${ext5v}V core_a=${core_a}A temp=${temp}C" >>"$EVENTS"
+    fi
+
+    sleep "$INTERVAL"
+done

@@ -1,0 +1,15 @@
+[Unit]
+Description=RPi5 EXT5V input rail logger (power-sag watchdog)
+Documentation=man:vcgencmd(1)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ext5v-logger
+Restart=always
+RestartSec=5
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

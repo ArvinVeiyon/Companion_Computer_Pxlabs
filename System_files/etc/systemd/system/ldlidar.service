@@ -1,0 +1,14 @@
+[Unit]
+Description=LDRobot STL-19 LiDAR ROS2 Node
+After=network.target microxrce-agent.service
+Wants=microxrce-agent.service
+
+[Service]
+User=roz
+ExecStart=/usr/bin/env bash -c 'source /opt/ros/jazzy/setup.bash && source /home/roz/ros2_ws/install/setup.bash && ros2 launch ldlidar_stl_ros2 ld19.launch.py port_name:=/dev/ttyAMA3'
+Restart=always
+RestartSec=5
+WorkingDirectory=/home/roz/ros2_ws
+
+[Install]
+WantedBy=multi-user.target
