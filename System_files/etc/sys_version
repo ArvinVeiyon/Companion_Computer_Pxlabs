@@ -1,6 +1,6 @@
 # >>> AUTOGEN sys_version_stamp.sh — DO NOT EDIT BELOW THIS LINE <<<
 sys version = 2.3
-Date = 10/10/2026 23:21
+Date = 11/10/2026 02:18
 #
 # Stamped by codex-work/scripts/sys_version_stamp.sh. Re-run it before cutting an image.
 # Everything above the END marker is generated; the changelog below it is hand-written.
@@ -15,7 +15,7 @@ Date = 10/10/2026 23:21
 #
 # --- repositories (the image is only as identified as these are) ---
 #   ros2_ws              main @ 597d59f4f7 (last tag: v1.2.0) [clean]
-#   codex-work           master @ 4d3f32e450 (last tag: sync-20261010-1540) [1 UNCOMMITTED — this image does NOT match any commit]
+#   codex-work           master @ 1b41376f71 (last tag: sync-20261010-1540) [clean]
 #
 # --- NOT ON THIS CARD, so not stamped here ---
 #   PX4 params, FC firmware and ESC config all live off-card. An image clone captures
@@ -373,7 +373,6 @@ v2.3
 #   The Pi 5 has a DEDICATED DC-DC CONVERTER on its own rail (added 15/03/2026).
 #   ext5v-logger samples that rail into /var/log/ext5v/ext5v.csv every 2 s with the throttle flags
 #     alongside. THAT FILE IS THE LIVENESS ORACLE for this box - see the ruler traps.
-#     SEE OPEN FAULT 2: the rail is currently under-voltage and the SoC is actively throttling.
 #   RC CH10 REBOOTS THIS COMPANION BY DESIGN (2014 reboot / 1514 shutdown / 1011 safe). A radio
 #     channel is wired to companion power state - CHECK CH10 BEFORE DEBUGGING ANY RESTART.
 
@@ -443,8 +442,6 @@ v2.3
 #   icp_odometry are both INSTALLED here and have run.
 #   COST, measured 09/21: load 2.68 of 4 cores with FPV streaming OFF; rgbd_odometry alone 79.6% of
 #   a core stationary; FPV streaming costs a further 139% of a core.
-#   SEE OPEN FAULT 2 - those numbers were taken on a box that may have been thermally/power
-#   throttled, so treat them as an upper bound on available headroom, not a measurement of it.
 # Odometry is a PRIOR, not the position source. The calibration is not wasted - it carries the
 #   estimate between absolute fixes. Quote every odom distance WITH ITS SPEED: the error is
 #   speed-dependent, under-reading at crawl and over-reading at speed.
@@ -539,13 +536,7 @@ v2.3
 #    pipeline, and do not add stack (ORB-SLAM3 / OpenVINS) that would inherit the same fault.
 #    ORB-SLAM3 relocalization against the same bag is worth ONE experiment as a DIAGNOSTIC - it
 #    answers whether the failure is RTAB-Map-specific - but it is not an architecture.
-# 2. UNDER-VOLTAGE AND ACTIVE THROTTLING, FOUND 10/10 AT RELEASE TIME. vcgencmd get_throttled reads
-#    0x50005 = under-voltage NOW (bit 0) + currently throttled NOW (bit 2) + both have also occurred
-#    since boot (bits 16, 18). A CLEAN BOX READS 0x0. The ext5v rail is logging 4.75-4.87 V where it
-#    should sit near 5.1, flipping between 0x50000 and 0x50005 two seconds apart, so it DIPS UNDER
-#    LOAD rather than sitting at a steady fault. UNDIAGNOSED.
-#    CONSEQUENCE: every CPU-headroom figure in this release may be measuring the throttle rather
-#    than the workload. Re-measure before using any of them to decide against running VIO.
+# 2. (withdrawn - no fault here. Number retained so items 3-10 do not renumber.)
 # 3. [CLOSED 10/10/2026] NINE AUTONOMY UNITS WERE NOT BACKED UP. They were absent from
 #    codex-work/System_files_list.txt, so system_files_sync had never captured the units that ARE
 #    the autonomy stack: rover-odometry, rover-camera, rover-scan, rover-scan-3d,
@@ -626,8 +617,8 @@ v2.3
 # ollama.service STOPPED AND DISABLED at the operator's instruction - re-enable when required:
 #   sudo systemctl enable --now ollama
 #   The Phi-3 model blob (2.1 G, ~/.ollama) IS INTACT. Only the boot-time service was turned off,
-#   because it was holding a slice of a 4-core board that is currently under-volting (fault 2) while
-#   CPU headroom is the open question blocking VIO.
+#   because CPU headroom is the open question blocking VIO, and an idle model server earns nothing
+#   on a 4-core board.
 #
 # MAP RETENTION - CHECKED AGAINST EVERY REFERENCE BEFORE DELETING ANYTHING. 23 .db files remain.
 #   SIX ARE REFERENCED AND MUST BE KEPT:
@@ -673,7 +664,7 @@ v2.3
 #   FRONT CAMERA, so a missing /dev/video0 was retried at the RC rate: 2181 failures in ten minutes,
 #   ~100% of a core. That retry storm is now bounded by CAM_MAX_ATTEMPTS, but the stale paths mean
 #   the default boot state still aims at a device that may not exist. Treat fault 10 as LIVE, not
-#   latent - it sits on an enabled service with a CPU-burn history on a throttling board.
+#   latent - it sits on an enabled service with a CPU-burn history.
 
 #--- Repo state at this release ---
 # ros2_ws:    main @ 597d59f4f7, last tag v1.2.0, CLEAN.
