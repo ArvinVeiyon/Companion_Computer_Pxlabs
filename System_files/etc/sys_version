@@ -1,6 +1,6 @@
 # >>> AUTOGEN sys_version_stamp.sh — DO NOT EDIT BELOW THIS LINE <<<
 sys version = 2.3
-Date = 10/10/2026 22:05
+Date = 10/10/2026 22:25
 #
 # Stamped by codex-work/scripts/sys_version_stamp.sh. Re-run it before cutting an image.
 # Everything above the END marker is generated; the changelog below it is hand-written.
@@ -15,7 +15,7 @@ Date = 10/10/2026 22:05
 #
 # --- repositories (the image is only as identified as these are) ---
 #   ros2_ws              main @ 597d59f4f7 (last tag: v1.2.0) [clean]
-#   codex-work           master @ ca82983860 (last tag: sync-20261010-1540) [clean]
+#   codex-work           master @ f7c956966e (last tag: sync-20261010-1540) [clean]
 #
 # --- NOT ON THIS CARD, so not stamped here ---
 #   PX4 params, FC firmware and ESC config all live off-card. An image clone captures
@@ -528,7 +528,9 @@ v2.3
 #   THE GCS MAVLINK LINK. Recovery is a reboot over DDS.
 # Replays need ROS_DOMAIN_ID=42; the LIVE stack is domain 0.
 
-#--- KNOWN OPEN FAULTS ON THIS IMAGE ---
+#--- KNOWN FAULTS ON THIS IMAGE ---
+# Items fixed after the release are marked [CLOSED <date>] IN PLACE rather than deleted, so a
+# standing instruction never outlives its fix. Numbers are stable - do not renumber.
 # 1. LOCALIZATION: RTAB-Map relocalization 0/20 on its own bag, failing at geometry. THE blocker,
 #    and it is software on this card. Needs a DIAGNOSIS - do not buy a sensor to feed a broken
 #    pipeline, and do not add stack (ORB-SLAM3 / OpenVINS) that would inherit the same fault.
@@ -541,11 +543,27 @@ v2.3
 #    LOAD rather than sitting at a steady fault. UNDIAGNOSED.
 #    CONSEQUENCE: every CPU-headroom figure in this release may be measuring the throttle rather
 #    than the workload. Re-measure before using any of them to decide against running VIO.
-# 3. NINE AUTONOMY UNITS ARE NOT BACKED UP. Absent from codex-work/System_files_list.txt, so
-#    system_files_sync does not capture them: rover-odometry, rover-camera, rover-scan,
-#    rover-scan-3d, rover-autonav-mode, rover-ekf-bridge, rover-nav2, ldlidar, ext5v-logger.
-#    AN SD IMAGE CLONE DOES capture them (they live in /etc/systemd/system). A REBUILD FROM THE REPO
-#    DOES NOT - it would lose the entire autonomy stack. Add them to the list.
+# 3. [CLOSED 10/10/2026] NINE AUTONOMY UNITS WERE NOT BACKED UP. They were absent from
+#    codex-work/System_files_list.txt, so system_files_sync had never captured the units that ARE
+#    the autonomy stack: rover-odometry, rover-camera, rover-scan, rover-scan-3d,
+#    rover-autonav-mode, rover-ekf-bridge, rover-nav2, ldlidar, ext5v-logger.
+#    FIXED in codex-work f7c9569. All nine added, plus a TENTH file the audit turned up:
+#    /usr/local/bin/ext5v-logger, the executable that ext5v-logger.service runs - without it the
+#    unit would have restored with nothing to launch.
+#    HISTORY: flagged in v2.2 (15/08) as "BACKUP GAP - ACTION REQUIRED" and still open two months
+#    later. rover-nav2 was added in the interval and inherited the same gap, so the list grew
+#    while it sat.
+#    KEEP THE DISTINCTION THAT MADE IT EASY TO MISS: AN SD IMAGE CLONE ALWAYS CAPTURED THESE
+#    (they live in /etc/systemd/system). ONLY THE REPO PATH WAS BROKEN, and a rebuild from the repo
+#    produced a box that booted to nothing. "IT IS ON THE CARD" IS NOT "IT IS IN VERSION CONTROL" -
+#    the two backup routes have different contents, and this file only logs the card.
+#    WHY rover-nav2.service MATTERED MOST: it pins
+#    NAV2_PARAMS=/home/roz/ros2_ws/install/rover_nav2/share/rover_nav2/config/nav2_forward_flat.yaml
+#    in its own Environment= line, so the "never nav2_forward.yaml" rule is enforced BY THAT FILE,
+#    not by memory. Losing it restores the max-rate voxel spin as the default for ARMED runs.
+#    The After= / Requires= ordering is also recorded only in these units (camera -> scan ->
+#    odometry -> nav2, and scan-3d Requires scan). THAT ORDERING IS THE RECOVERY SEQUENCE for the
+#    0 Hz failure mode, so it had been living in exactly one unbacked place.
 # 4. NO IMAGE BACKUP EXISTS AT THIS RELEASE. 38 G used cannot be written into the 18 G free on the
 #    same card, and no removable media is attached. AN EXTERNAL USB DISK IS REQUIRED.
 # 5. TWO LIVE GITHUB PATs STILL UNREVOKED since 20/08: ~/git_key, and a classic scope-repo token in
