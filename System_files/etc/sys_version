@@ -1,6 +1,6 @@
 # >>> AUTOGEN sys_version_stamp.sh — DO NOT EDIT BELOW THIS LINE <<<
 sys version = 2.3
-Date = 10/10/2026 21:59
+Date = 10/10/2026 22:05
 #
 # Stamped by codex-work/scripts/sys_version_stamp.sh. Re-run it before cutting an image.
 # Everything above the END marker is generated; the changelog below it is hand-written.
@@ -15,7 +15,7 @@ Date = 10/10/2026 21:59
 #
 # --- repositories (the image is only as identified as these are) ---
 #   ros2_ws              main @ 597d59f4f7 (last tag: v1.2.0) [clean]
-#   codex-work           master @ 675f271268 (last tag: sync-20261010-1540) [1 UNCOMMITTED — this image does NOT match any commit]
+#   codex-work           master @ ca82983860 (last tag: sync-20261010-1540) [clean]
 #
 # --- NOT ON THIS CARD, so not stamped here ---
 #   PX4 params, FC firmware and ESC config all live off-card. An image clone captures
@@ -272,7 +272,10 @@ v2.3
 #Period covered: 16/08/2026 - 10/10/2026. COMPANION SOFTWARE ONLY.
 
 #=== SCOPE OF THIS FILE - read before adding anything ===
-# THIS FILE LOGS COMPANION SOFTWARE ON THIS SD CARD. Nothing else belongs here.
+# THIS FILE LOGS COMPANION SOFTWARE ON THIS SD CARD - INCLUDING THE COMPANION'S SIDE OF EVERY
+# LINK TO ATTACHED HARDWARE: which UART, which baud, which driver, which agent, how a device
+# is identified, and which bus must never be reset. That half IS on the card.
+# WHAT DOES NOT BELONG IS THE OTHER END'S INTERNAL CONFIGURATION.
 # WHAT IS NOT ON THIS CARD, AND SO IS NOT LOGGED HERE:
 #   PX4 parameters      -> they live in FC flash. ros2_ws/docs/px4_param_audit.md is the record,
 #                          and codex-work/px4_param_backups/ + ~/fc_param_backups/ hold snapshots.
@@ -288,6 +291,88 @@ v2.3
 # This companion is physically MOVED between the rover and the drone (drone -> rover 17/04/2026).
 # FIVE rover-* units are ENABLED, so they start on WHATEVER AIRFRAME this card is booted on.
 # That is a property OF THIS IMAGE, which is why it is logged here. See the checklist at the end.
+
+#--- INTERFACES TO ATTACHED HARDWARE - THE COMPANION'S SIDE OF EACH LINK ---
+# The companion is not standalone: it is wired to the FC, the ESC bus, the cameras and the radios.
+# THE COMPANION'S HALF OF EACH LINK IS ON THIS CARD AND BELONGS HERE - which port, which baud,
+# which driver, which agent, how a device is identified. The OTHER END'S INTERNAL CONFIG DOES NOT.
+# All values below were READ LIVE 10/10/2026 from the unit files and configs on this card.
+
+# FC <-> COMPANION: TWO SEPARATE UARTS, TWO INDEPENDENT FAILURE DOMAINS. Both 921600.
+#   /dev/ttyAMA0 -> mavlink-router  (TCP server 5760, UDP out 127.0.0.1:14550)
+#   /dev/ttyAMA4 -> MicroXRCEAgent  (uXRCE-DDS; /usr/local/bin/MicroXRCEAgent serial -b 921600)
+#   THESE ARE DIFFERENT WIRES. One can be dead while the other is healthy, so NAME WHICH LINK YOU
+#     MEAN. "The FC is down" is not a diagnosis.
+#   PX4 PARAMETERS ARE NOT EXPOSED OVER DDS AT ALL. tools/set_param.py must go via MAVLink on
+#     ttyAMA0. CONSEQUENCE: if mavlink-router or AMA0 is down there is NO ROUTE TO ANY PARAM, even
+#     with DDS perfectly healthy. Confirmed 10/10: "NO HEARTBEAT - MAVLink link down".
+#   Conversely vehicle_status_v1, esc_status and the rest of the bridged set arrive over DDS on
+#     AMA4, so ESC telemetry survives a MAVLink outage and vice versa.
+#   TRAP, STILL PRESENT IN THE CONFIG: the mavlink-router stanza is NAMED
+#     "[UartEndpoint serial-AMA4]" but its Device is /dev/ttyAMA0. THE STANZA NAME IS WRONG - AMA4
+#     is the DDS port. Do not pick your wire from that label.
+#   DDS fine but MAVLink dead still means THE FC IS ALIVE - reboot it over DDS.
+
+# UART MAP (ports confirmed present 10/10; overlays enabled in /boot/firmware/config.txt)
+#   AMA0   FC MAVLink -> mavlink-router      921600   GPIO14/15
+#   AMA2   TFmini lidar                      115200   GPIO4/5    (tfmini.service DISABLED - drone)
+#   AMA3   STL-19 LiDAR (RX-only, no PWM)    230400   GPIO8/9    (ldlidar.service DISABLED)
+#   AMA4   FC uXRCE-DDS -> MicroXRCEAgent    921600   GPIO12/13
+#   AMA10  internal SoC / JST debug (BT)     115200
+#   AMA1   NOT PRESENT - needs dtoverlay=uart1-pi5
+#   Enabled overlays: uart0, uart2, uart3-pi5, uart4.
+
+# ESC BUS: THE COMPANION HAS NO DIRECT CAN PATH, BY DECISION.
+#   NO mcp2515 or can_dev module is loaded and NO can interface exists - confirmed 10/10.
+#   DroneCAN integration was DROPPED. DO NOT RE-DEBUG THE MCP2515.
+#   ESC telemetry therefore reaches us ONLY as PX4 esc_status over DDS. Read esc_online_flags there,
+#     not QGC's ESC health indicator, which is permanently lit.
+#   NEVER INDEX esc[] BY POSITION - key on esc_address. esc_count is 6.
+#   A POWERED-OFF ESC IS INDISTINGUISHABLE FROM A DEAD BUS (online_flags clear, timestamp == 0).
+#     ASK WHETHER THEY ARE POWERED BEFORE DIAGNOSING ANYTHING.
+#   "ESC 1/2" IN A PX4 MESSAGE NAMES A SIDE, NOT A WHEEL, and 3/4 can never appear ==> PX4 CANNOT
+#     TELL US WHICH WHEEL DIED, ONLY WHICH SIDE. That is a limit of this interface, not a bug.
+#   ESC configuration itself is written over USB by VESC Tool 7.01, built on this card, headless.
+#     ONE SESSION PER ESC. The values it writes live in ESC flash and are logged in
+#     esc_px4_config_audit_20260914.md, NOT here.
+
+# USB TOPOLOGY - THE RULE THAT PROTECTS THE RADIO LINK
+#   Hub 1-1.2 may be reset to recover a device. NEVER RESET 1-1: the Realtek NICs and WFB ride on
+#     it, and resetting it takes the radio link down with the thing you were trying to fix.
+#   LIVE 10/10: exactly ONE device attached beyond the root hubs - the uplink NIC on
+#     rtl88xxau_wfb. NO CAMERA, NO WFB NICs (the 4-port hub on bus 001 is present but EMPTY), and
+#     the FC is not answering. THE PERIPHERALS WERE DETACHED OR UNPOWERED AT STAMP TIME, so the
+#     topology above could not be re-verified device-by-device for this release.
+
+# CAMERA IDENTITY - DO NOT USE DEVICE PATHS
+#   /etc/udev/rules.d/99-usb-cameras.rules is RETIRED (27/07/2026). The two cameras it pinned were
+#     physically removed and neither vid:pid is on USB.
+#   CAMERAS ARE KEYED BY usbcam-<vidpid>-<serial>-i<iface> via vision_config_manager and
+#     /etc/vision_cameras.yaml. DO NOT ADD PATH-PINNING RULES BACK.
+#   /dev/videoN IS UNSTABLE HERE: the LG cam moved video8 -> video0 -> video1 in one evening, and
+#     the Orbbec claims and releases its nodes depending on rover-camera.service.
+#   OPEN: ros2_ws/src/rc_control/camera_sw_params.yaml and config/rc_mapping.yaml STILL NAME
+#     /dev/video0 and /dev/video2 for front/bottom. Those are stale and now point at whatever
+#     occupies those nodes. MIGRATE THEM TO IDS BEFORE RC CAMERA SWITCHING IS USED AGAIN.
+#   Both FPV cameras sit on port 6-2. SWAP FROM QGC ONLY.
+
+# RADIO LINK (companion side)
+#   Uplink: wlx8c86dd5beed9, TP-Link Archer T2U PLUS (2357:0120, RTL8821AU), driver rtl88xxau_wfb,
+#     static 192.168.1.240/24, route metric 50.
+#   WFB: wlx782288d98f91 and wlx782288d993c0 (0bda:a81a, rtl88x2eu).
+#   NO wlan* EXISTS - the disable-wifi-pi5 overlay is live. Plain disable-wifi is SILENTLY IGNORED
+#     on a Pi 5, which is why the radio was twice recorded as disabled while still up.
+#   EVERY NIC NAME IN THE OLDER DOCS IS STALE - the uplink adapter was swapped and no doc caught it.
+#     RUN lsusb AND ip -br addr FIRST, never trust a NIC name or chipset from a doc.
+#   WFB channel is 161. When video breaks, WFB's input queue is EMPTY - SUSPECT THE SOURCE.
+
+# POWER AND RC - HARDWARE SIGNALS THAT REACH COMPANION SOFTWARE
+#   The Pi 5 has a DEDICATED DC-DC CONVERTER on its own rail (added 15/03/2026).
+#   ext5v-logger samples that rail into /var/log/ext5v/ext5v.csv every 2 s with the throttle flags
+#     alongside. THAT FILE IS THE LIVENESS ORACLE for this box - see the ruler traps.
+#     SEE OPEN FAULT 2: the rail is currently under-voltage and the SoC is actively throttling.
+#   RC CH10 REBOOTS THIS COMPANION BY DESIGN (2014 reboot / 1514 shutdown / 1011 safe). A radio
+#     channel is wired to companion power state - CHECK CH10 BEFORE DEBUGGING ANY RESTART.
 
 #--- SYSTEMD UNITS (companion) ---
 # ADDED 20/09: rover-nav2.service. DISABLED on purpose - it MOVES the rover. Start it per run.
@@ -472,6 +557,15 @@ v2.3
 #    arc also unaddressed. Both are perception-software gaps on this card.
 # 8. /odom CIRCULAR FEEDBACK: rover-ekf-bridge feeds the EKF from /odom, so the controller regulates
 #    against its own under-read. Not fixable by better calibration.
+# 9. MISNAMED mavlink-router STANZA, FOUND 10/10. /etc/mavlink-router/main.conf declares
+#    "[UartEndpoint serial-AMA4]" with Device=/dev/ttyAMA0. THE LABEL NAMES THE WRONG PORT -
+#    AMA4 is the uXRCE-DDS wire, AMA0 is MAVLink. It works (the Device line is what counts) but it
+#    will send someone to the wrong UART while debugging a dead link. Rename the stanza.
+# 10. STALE CAMERA DEVICE PATHS IN rc_control. ros2_ws/src/rc_control/camera_sw_params.yaml and
+#    config/rc_mapping.yaml still name /dev/video0 and /dev/video2 for front/bottom, from the
+#    retired udev model. /dev/videoN is UNSTABLE here, so those now point at whatever happens to
+#    occupy the nodes. MIGRATE TO usbcam-<vidpid>-<serial>-i<iface> IDS BEFORE RC CAMERA SWITCHING
+#    IS USED AGAIN. (multicam Phase D; see codex-work/vision_multicam_companion.md section 4b.)
 
 #=== BEFORE-FLIGHT CHECKLIST - THE COMPANION-SIDE ITEMS ONLY ===
 # STILL NOT VALIDATED AS A PROCEDURE - setup_manual.md F6 remains an acknowledged unwritten gap.
