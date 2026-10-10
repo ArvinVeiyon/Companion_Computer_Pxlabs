@@ -1,5 +1,44 @@
+# >>> AUTOGEN sys_version_stamp.sh — DO NOT EDIT BELOW THIS LINE <<<
 sys version = 2.2
-Date = 15/08/2026
+Date = 10/10/2026 16:14
+#
+# Stamped by codex-work/scripts/sys_version_stamp.sh. Re-run it before cutting an image.
+# Everything above the END marker is generated; the changelog below it is hand-written.
+#
+# --- host ---
+#   hostname             Vind-Roz
+#   model                Raspberry Pi 5 Model B Rev 1.0
+#   os                   Ubuntu 24.04.1 LTS
+#   kernel               6.8.0-1048-raspi
+#   ros distro           jazzy
+#   root filesystem      18G free of 58G (69% used)
+#
+# --- repositories (the image is only as identified as these are) ---
+#   ros2_ws              main @ 597d59f4f7 (last tag: v1.2.0) [clean]
+#   codex-work           master @ 7c2a6a55d9 (last tag: sync-20261010-1540) [6 UNCOMMITTED — this image does NOT match any commit]
+#
+# --- flight controller (NOT on this SD card) ---
+#   firmware git hash    UNREAD (no MAVLink answer — FC down, or mavlink-router not running)
+#   Expected: a52c38b07d (tag pxlabs-v1.17.0-r2-Beta, our own build).
+#   A DIFFERENT hash means a reflash from upstream — the FC hardfault class returns.
+#   PX4 PARAMETERS LIVE ON THE FC, NOT HERE. Cloning this image does not capture them
+#   and restoring it does not put them back. Verify params on the FC separately.
+#
+# --- units enabled at boot (one image, two airframes — check before flight) ---
+#   rover-odometry         enabled
+#   rover-camera           enabled
+#   rover-scan             enabled
+#   rover-scan-3d          enabled
+#   rover-autonav-mode     enabled
+#   rover-ekf-bridge       disabled
+#   rover-nav2             disabled
+#   tfmini                 disabled
+#   ldlidar                disabled
+#   ext5v-logger           enabled
+#   microxrce-agent        enabled
+#   mavlink.router         enabled
+#   vision_streaming       disabled
+# >>> END AUTOGEN — hand-written changelog follows <<<
 
 Version Updates
 

@@ -442,7 +442,7 @@ is camera → scan → scan-3d → odometry, in that order.
   - `/etc/mavlink-router/main.conf`
   - `/etc/vision_streaming.conf` + `.bak`
   - `/etc/wifibroadcast.cfg` + `/etc/wifibroadcast.cfg.default` (QGC *Restore Default* baseline)
-  - `/etc/sid.conf`, `/etc/gnutls/config`
+  - `/etc/sys_version` (image changelog; was `/etc/sid.conf` until 10/10/2026 — compat symlink left in place), `/etc/gnutls/config`
   - `/etc/pam.d/sshd`
   - `/etc/drone.key`, `/etc/gs.key`
   - `/etc/sudoers`
@@ -865,8 +865,8 @@ All backup files are stored under `System_files` in the Codex repo and mirror th
 - `System_files/etc/mavlink-router/main.conf`
 - `System_files/etc/vision_streaming.conf`
 - `System_files/etc/vision_streaming.conf.bak`
-- `System_files/etc/sid.conf`
-- `System_files/etc/sid.conf.save`
+- `System_files/etc/sys_version`
+- `System_files/etc/sys_version.save`
 - `System_files/etc/wifibroadcast.cfg`
 - `System_files/etc/default/wifibroadcast`
 - `System_files/etc/default/wifibroadcast.dpkg-old`

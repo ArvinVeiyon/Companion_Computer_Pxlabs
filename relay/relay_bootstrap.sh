@@ -280,7 +280,7 @@ printf 'PI_MODEL="%s"\nPI_GEN=%s\nARCH=%s\nKERNEL=%s\nPROVISIONED=%s\n' \
 # mavlink-router
 install -m 0644 -o root -g root "$PL/etc/mavlink-router/main.conf" /etc/mavlink-router/main.conf
 sed -i "s/^Address=10\.5\.6\.50/Address=${GCS_IP}/" /etc/mavlink-router/main.conf || true
-install -m 0644 -o root -g root "$PL/etc/sid.conf" /etc/sid.conf 2>/dev/null || true
+install -m 0644 -o root -g root "$PL/etc/sys_version" /etc/sys_version 2>/dev/null || true
 
 # systemd units
 install -m 0644 -o root -g root "$PL/etc/systemd/system/mavlink.router.service"         /etc/systemd/system/

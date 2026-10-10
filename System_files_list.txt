@@ -19,7 +19,7 @@ etc/systemd/system/ros2_external_node_reg.service
 etc/systemd/system/vision_streaming.service
 etc/vision_streaming.conf
 etc/vision_cameras.yaml
-etc/sid.conf
+etc/sys_version
 etc/sudoers
 etc/sudoers.d
 etc/gs.key
