@@ -1,11 +1,11 @@
 ---
 name: vesc-can-flashing
-description: "RC brake on the 4 VESCs - DONE and bench-tested 09-09. Companion CAN integration DROPPED. Pointers to the three docs that hold the detail."
+description: "RC brake REMOVED 10-24: all four VESCs reflashed to the r1 brake-free build and PX4's FUNC5/6 cleared. 🔴 THE r1 RELEASE BINARY IS NOT A BUILD OF THE r1 TAG - verify by embedded hash, the version string cannot tell them apart. Companion CAN integration DROPPED."
 metadata:
   node_type: memory
   type: project
   originSessionId: b7052c6e-f42f-48fd-9d7e-c0dffff0ecc5
-  modified: 2026-09-13T18:41:30.309Z
+  modified: 2026-10-24T09:41:24.775Z
 ---
 
 **POINTER FILE. The detail lives in three documents — open them, do not work from this summary.**
@@ -19,6 +19,43 @@ motor-side; its filename says "bench" and that is WRONG — it was loaded too, s
 companion at driver level, and how to finish reverting it.
 📐 **`~/codex-work/rc_configuration.md` §6** — the step-by-step procedure for configuring PX4 RC on
 this rover. Follow it rather than re-deriving.
+
+## ✅✅ BRAKE REMOVED 2026-10-24 — ALL FOUR REFLASHED TO r1, AND THE RELEASE BIN IS *NOT* THE TAG
+
+⛔ **The "all four on `a75a0dbf`" line below is HISTORY.** Operator decision: the RC brake is not
+wanted. All four flashed **over USB** (`vesc_tool_7.01 --offscreen --vescPort /dev/ttyACMn
+--uploadFirmware <bin>`), each board re-identified by `controller_id` *immediately before its own
+flash*. ⛔ **Never key a flash to a ttyACM number — it reshuffled THREE times in one session.**
+
+🔴🔴 **THE r1 RELEASE BINARY IS NOT A BUILD OF THE r1 TAG.** Both builds embed their commit; read it
+with `strings <bin> | grep -E '[0-9a-f]{40}'`:
+- r1 **release asset** (what is now flashed) = **`67ca4de0…-dirty`**, branch `px4_uavcan_reversible`
+  — an *ancestor* of the r1 tag **plus uncommitted edits** ⇒ not reproducible from any commit.
+- r1 **tag** = `6fc2cf17337ce6d1e494c47a5969b93acac0661e`
+- r2-alpha1 bin = `a75a0dbf` (clean) = the brake commit itself.
+🔑🔑 **BOTH BUILDS REPORT `6.6 60_MK5` — THE VERSION STRING CANNOT TELL r1 FROM r2.** Verify by the
+embedded hash. Same lesson as [[fc_hardfaults]] for the FC firmware.
+✅ **The flashed build DOES carry the PX4 4096-neutral/disarm fix (`6c8f693`)** — float constants
+`4096.0f`/`4095.0f` present, and the embedded branch name matches that commit's subject. 🔑 Without
+it the old line was `raw_val = raw / 8192.0`, so PX4's neutral 4096 decodes as **+0.5 ⇒ ~4500 ERPM
+at idle in RPM mode**. That fix is the ONLY code commit r1 adds over the flashed base; the other
+three are docs and a bootloader folder added then deleted ⇒ a clean rebuild buys **provenance, not
+behaviour**.
+⏭ **OPEN — a clean build of the tag** (operator is doing it on a PC): `make arm_sdk_install` (pinned
+`gcc-arm-none-eabi-7-2018-q2-update`, a different compiler will not reproduce) then `make 60_mk5` →
+`build/60_mk5/60_mk5.bin`. 🔑 Target is the **TRAMPA `60_mk5`**, not `flipsky_60_mk5` — `PROJECT`
+sets the output filename, and the asset is named `60_mk5.bin`. Build from a checkout with
+`git status --porcelain` EMPTY or you get another `-dirty`.
+⛔ **r1 has NO prebuilt artifact in the repo** — zero `.bin/.hex/.elf` tracked at that tag, and
+`build/` is gitignored. `Testing_Bin/60_mk5.bin` belongs to **r2-alpha1 and is the BRAKE build.**
+
+🔑 **CONFIGS SURVIVE A FLASH.** appconf read back **byte-identical** on all four against the
+pre-flash backup; mcconf differed only in the six self-calibrating
+`foc_offsets_current/voltage__0..2`, which the firmware rewrites at startup via the `m_dccal_done`
+path in `motor/mcpwm_foc.c`. ⛔ **Never read those six as a failed restore.**
+🔑 **PX4 side: `UAVCAN_EC_FUNC5`/`FUNC6` cleared to 0** (were 407/301) so the FC and firmware agree.
+⇒ RawCommand now sizes to **4** entries not 6 (`min_size` = highest non-zero FUNC index + 1); ESC
+indices are 0-3 and the guard is `cmd.cmd.len > uavcan_esc_index`, so all four stay addressable.
 
 ## Status, 2026-09-09
 

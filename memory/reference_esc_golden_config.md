@@ -1,11 +1,11 @@
 ---
 name: esc_golden_config
-description: "Which ESC settings are OURS and which 24 the VESC wizard owns, where the machine-readable baseline lives, and the three traps that cost 2026-10-20: CAN fighting detection, an identity swap between wheels, and a float-format false READBACK MISMATCH."
+description: "Which ESC settings are OURS and which 24 the VESC wizard owns, where the machine-readable baseline lives, the three traps that cost 2026-10-20, and the 10-24 four-way alignment audit - including why a MAJORITY VOTE across wheels is not a ruler (si_wheel_diameter: the three that agree are the wrong ones)."
 metadata: 
   node_type: memory
   type: reference
   originSessionId: ba4f4888-e93e-43d7-9ba3-d0717e129258
-  modified: 2026-10-24T05:41:45.196Z
+  modified: 2026-10-24T09:55:19.310Z
 ---
 
 # ESC config — ours vs the wizard's, and how to check a board in one command
@@ -93,6 +93,48 @@ RL 1.1809/1001.80. ⛔ never copy a neighbour's kp/ki.
 🔑 **`l_watt_max` 350 BINDS BEFORE `l_in_current_max` 15 A** — at 24.6 V, 350 W = 14.2 A battery-side,
 so each wheel is power-limited at nameplate. Whether that is permanent or break-in is STILL the
 operator's open decision.
+
+## ✅✅ FOUR-WAY ALIGNMENT AUDIT, 2026-10-24 (post-reflash) — 2 FIELDS WERE OFF, BOTH NOW FIXED
+
+Method worth reusing: read live appconf+mcconf off **all four at once**, diff every field across
+wheels, and **classify** each difference as *expected-per-wheel* or *unexpected*. That separates the
+~20 fields that MUST differ (the wizard's 24, `m_invert_direction`, the ADC offsets, the identity
+pair) from real drift, which is otherwise invisible in a per-board audit like `check_ours.py`.
+
+✅ **Confirmed aligned:** `si_motor_poles` **14 on all four** · `uavcan_esc_index` 0/1/2/3 correctly
+paired to `controller_id` 10/11/12/13 · `uavcan_raw_mode` 3 and `can_baud_rate` 3 (=1 Mbit) on all
+four · `m_invert_direction` correctly **mirrored** (FR 0, RR 0 / FL 1, RL 1).
+
+🔴🔴 **`si_wheel_diameter` — FL 0.155, the other three 0.165. THE MAJORITY IS WRONG.** 0.155 is the
+**measured, documented** wheel (see the FL section below, and
+`ros2_ws/src/rover_odometry/config/rover_odometry.yaml:25-57`) ⇒ **FL is the correct board and
+FR/RR/RL drifted up.** ⛔⛔ **DO NOT "FIX" FL TO MATCH THE OTHER THREE** — I proposed exactly that
+from a three-against-one count and it was backwards. 🔑🔑 **A MAJORITY VOTE IS NOT A RULER WHEN A
+MEASURED VALUE IS ALREADY ON RECORD — check the record first.** ⚠️ Cosmetic either way: this field
+reaches nothing we consume (only `si_motor_poles` enters CAN rpm), which is why it drifted unseen.
+✅✅ **RESOLVED 10-24 — FR/RR/RL WRITTEN DOWN TO 0.155, ALL FOUR NOW AGREE.** 🔑🔑 **THE TIRE IS
+6 INCH AND THAT ARITHMETIC IS THE RULER THAT SETTLED IT:** 6″ nominal = **0.1524 m**, so 0.155 is a
+plausible measured OD just over nominal — while **0.165 is exactly 6.5″** (6.5 × 25.4 = 165.1 mm),
+i.e. a DIFFERENT WHEEL SIZE, not a measurement of this one. ⇒ the three agreeing boards carried a
+spec for a wheel the rover does not have.
+
+⚠️ **`can_status_msgs_r1` — FR 9, the other three 1** (firmware default is **0**, so 1 is the house
+value). Bitmask gating the extra VESC-specific RtData broadcasts below the esc.Status send, so FR
+emits one message type the others do not. Harmless to control; it is extra bus traffic.
+🔑 It **survived the reflash** because the restore faithfully wrote back the pre-flash value — a
+restore propagates drift, it does not clean it.
+✅ **FIXED 10-24 → 1 on all four**: `diag/set_appconf_field.py <port> --expect-id 10 can_status_msgs_r1 1`.
+
+✅✅ **POST-FIX RE-AUDIT: ZERO unexpected differences in BOTH appconf and mcconf across all four**
+(`si_wheel_diameter` 0.155 · `can_status_msgs_r1` 1 · `si_motor_poles` 14, everywhere). ⚠️ The
+`*_1524_*_pre.xml` per-field backups in `configs_live/` are the as-found values if this needs undoing.
+⛔ **This did NOT change odometry** — `erpm_to_ms` = 0.003900 is tape-verified and stays CLOSED;
+`si_wheel_diameter` reaches nothing we consume. ⛔ Do not let a tire measurement reopen that scale.
+
+🔑 **The field-setters are the safe path and they self-guard:** they read the target's OWN config,
+edit only the named fields, write the rest back byte-identical, and **refuse if `controller_id` does
+not match `--expect-id`** — so a reshuffled ttyACM cannot hit the wrong motor. Both have `--dry-run`,
+which is what caught the `si_wheel_diameter` mistake above before anything was written.
 
 ## FL's 350 W swap — closed 2026-10-20 01:57 (⚠️ NOW HISTORY, see the 10-24 section above)
 

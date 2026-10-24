@@ -1,6 +1,42 @@
 # 350 W 14-pole geared — the live config set
 
-## The set to restore from: `20261024_1102`
+## ⚠️ UNDER TESTING — the current set: `20261024_1527_undertesting`
+
+**This is the only config set to use right now, and it is UNDER TESTING — not a proven restore
+point yet.** Read off all four boards at 15:27 on 2026-10-24, after reflashing every ESC to the
+brake-free **r1** build and after that afternoon's two alignment fixes. A four-way field-by-field
+audit of this set reports **zero unexpected differences** in both appconf and mcconf — the only
+remaining cross-wheel differences are the ones that must differ (the wizard's 24, the mirrored
+invert flag, the ADC offsets, and the `controller_id`/`uavcan_esc_index` identity pair).
+
+⚠️ **It has not been driven under load in this state.** Until it has, `20261024_1102` below remains
+the last set that was proven on the floor.
+
+| wheel | node | files | `m_invert_direction` |
+|---|---|---|---|
+| FR | 10 | `FR_350W_14pole_geared_20261024_1527_undertesting_{mcconf,appconf}.xml` | **0** (right side) |
+| FL | 11 | `FL_..._20261024_1527_undertesting_*` | 1 (left side) |
+| RR | 12 | `RR_..._20261024_1527_undertesting_*` | **0** (right side) |
+| RL | 13 | `RL_..._20261024_1527_undertesting_*` | 1 (left side) |
+
+### Firmware that goes with this set
+
+All four ESCs run the **r1 brake-free build**, flashed over USB on 2026-10-24, each board
+re-identified by `controller_id` immediately before its own flash.
+
+🔴 **The r1 *release binary* is NOT a build of the r1 tag.** It embeds
+`67ca4de09604a0a2201c597700590dada55f6204-dirty` (branch `px4_uavcan_reversible`) — an *ancestor* of
+the tag plus uncommitted edits — while the tag itself is `6fc2cf17337ce6d1e494c47a5969b93acac0661e`.
+🔑 **Both builds report `6.6 60_MK5`, so the version string cannot distinguish them.** Read the
+embedded commit instead: `strings <bin> | grep -E '[0-9a-f]{40}'`. A clean build of the tag is
+pending (`make arm_sdk_install` then `make 60_mk5` — the **Trampa** target, not `flipsky_60_mk5`).
+⛔ `Testing_Bin/60_mk5.bin` in the firmware repo is the **r2-alpha1 brake build** (`a75a0dbf`), not
+this one.
+
+PX4 side to match: **`UAVCAN_EC_FUNC5`/`FUNC6` cleared to 0** (were 407/301), so no brake demand is
+sent and RawCommand now sizes to 4 entries instead of 6.
+
+## The previous set: `20261024_1102`
 
 Read off all four boards on 2026-10-24 at 11:02, immediately after the two fixes of that day and
 with `check_ours.py` reporting **0 functional deviations on every wheel**. This is the restore
@@ -45,6 +81,20 @@ which is exactly why the per-wheel files are the only form kept here.
    were in RPM mode, so the FC's four setpoints did not mean the same thing on every wheel.
 3. **`ours.json` corrected** — it still described FR/RR/RL as 250 W with 25 A limits, so it was
    reporting four *false* functional deviations per wheel. The boards were right; the file was stale.
+4. **All four reflashed to the brake-free r1 build** (15:00–15:10), configs backed up first and
+   restored after. appconf came back byte-identical on every board; mcconf differed only in the six
+   `foc_offsets_current/voltage__0..2`, which the firmware **rewrites at startup** via the
+   `m_dccal_done` path in `motor/mcpwm_foc.c`. ⛔ Never read those six as a failed restore.
+5. **Two alignment fixes** (15:24), each written with `--expect-id` and verified by readback:
+   - `si_wheel_diameter` **0.165 → 0.155 on FR, RR and RL.** FL was already correct. 🔑 The tire is
+     **6 inch** = 0.1524 m nominal, so 0.155 is a measured OD just over nominal, whereas **0.165 is
+     exactly 6.5″** (6.5 × 25.4 = 165.1 mm) — a different wheel size the rover does not have.
+     🔴 **The three boards that agreed were the wrong ones** — a majority vote across wheels is not
+     a ruler when a measured value is already on record.
+   - `can_status_msgs_r1` **9 → 1 on FR** (firmware default is 0; the other three read 1). It gates
+     the extra VESC-specific RtData broadcasts, so FR was emitting a message type the others did
+     not. It survived the reflash because the restore faithfully replayed the pre-flash value — a
+     restore propagates drift, it does not clean it.
 
 ## Verified this day: node ↔ corner
 
@@ -68,5 +118,9 @@ that board's own USB port — `diag/spin_one_wheel.py`, which keeps the FC out o
   RR 1.0054/830.60 · RL 1.1809/1001.80.
 - **`l_watt_max` 350 / 14 A**: still undecided whether that is the permanent rating or a break-in
   rating.
-- `si_wheel_diameter` reads 0.165 against our 0.155 on FR/RR/RL. Cosmetic — it reaches nothing we
-  consume.
+- ~~`si_wheel_diameter` reads 0.165 against our 0.155 on FR/RR/RL.~~ **CLOSED 2026-10-24** — all
+  four written to 0.155, confirmed against the 6-inch tire. Was cosmetic (it reaches nothing we
+  consume); ⛔ it did **not** change odometry — `erpm_to_ms` = 0.003900 stays tape-verified and
+  closed.
+- ⏭ **This set has not been driven under load.** That is the test that would promote
+  `20261024_1527_undertesting` from "under testing" to the restore point.
