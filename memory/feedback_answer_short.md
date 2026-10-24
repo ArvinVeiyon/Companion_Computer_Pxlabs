@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 42e05df1-d455-448f-b77b-66b31270019f
-  modified: 2026-08-29T03:29:55.427Z
+  modified: 2026-10-24T17:55:06.637Z
 ---
 
 **Keep replies SHORT. For a status check or a "did it pass yet" question, ONE LINE is the whole answer** — the number and the verdict. No restating the plan, no re-explaining caveats already agreed, no re-listing what is ready to send. Said verbatim 2026-08-29 ("just one line is enough") after several long status updates during the FC hardfault soak.
@@ -25,3 +25,18 @@ Verbatim: **"you always speak a lot it hard to read all"** and **"you are over t
 **How to apply — the bench mode:** while the operator is physically working on hardware, replies are **one short paragraph or a 3-line list**. Give the number, the verdict, and the next action. Save the reasoning for when he asks "why" (he does ask — `why i need headroom for what purpose`, `can you revisit how vesc rpm setting work` — and *those* deserve a full answer). 🔑 **A safety point is made ONCE, with the number; if he restates his choice, do it and stop.**
 
 ⚠️ Long-form is still right for: a config review he asked for, a from-source finding, a memory write-up. The rule is about conversational turns during hands-on work.
+
+## 2026-10-24 — **SAID A THIRD TIME: "Speak less"**
+
+Came after the 350 W / T3 session, during which he was **venting about a month of exhausting
+physical work** — frame rebuild, 12 AWG soldering, CAN connectors, 30 km round trips. I answered
+those turns with **three and four paragraphs each**, including unasked-for engineering notes (washers
+under the suspension bolts, re-taping the footprint). The content was fine; the VOLUME was the
+problem, and it was worst exactly when he was tired.
+
+🔑🔑 **WHEN HE IS VENTING OR EXHAUSTED, SHORTER — NOT LONGER.** A long sympathetic reply is still a
+wall of text to read. Two or three sentences carry the whole acknowledgement.
+🔑 **ONE forward-looking note per turn, maximum — and only if it is load-bearing.** I stacked a
+washer tip, a footprint re-tape, and a relocalization pointer into consecutive replies.
+🔑 **Reporting finished work: the outcome and the sha. Not the reasoning, not the caveat tour.**
+He can open the commit. ⛔ Don't re-explain what the commit message already says.
