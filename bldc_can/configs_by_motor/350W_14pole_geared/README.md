@@ -1,23 +1,32 @@
 # 350 W 14-pole geared — the live config set
 
-## ⚠️ UNDER TESTING — the current set: `20261024_1527_undertesting`
+## ✅ THE RESTORE POINT — the current set: `20261024_1527`
 
-**This is the only config set to use right now, and it is UNDER TESTING — not a proven restore
-point yet.** Read off all four boards at 15:27 on 2026-10-24, after reflashing every ESC to the
-brake-free **r1** build and after that afternoon's two alignment fixes. A four-way field-by-field
-audit of this set reports **zero unexpected differences** in both appconf and mcconf — the only
-remaining cross-wheel differences are the ones that must differ (the wizard's 24, the mirrored
-invert flag, the ADC offsets, and the `controller_id`/`uavcan_esc_index` identity pair).
+**This is the set to use, and it is floor-proven.** Read off all four boards at 15:27 on 2026-10-24,
+after reflashing every ESC to the brake-free **r1** build and after that afternoon's two alignment
+fixes. A four-way field-by-field audit of this set reports **zero unexpected differences** in both
+appconf and mcconf — the only remaining cross-wheel differences are the ones that must differ (the
+wizard's 24, the mirrored invert flag, the ADC offsets, and the `controller_id`/`uavcan_esc_index`
+identity pair).
 
-⚠️ **It has not been driven under load in this state.** Until it has, `20261024_1102` below remains
-the last set that was proven on the floor.
+✅ **PROMOTED 2026-10-24 — driven on the floor under load, all four wheels, operator reports it
+works seamlessly.** That was the one outstanding condition for promotion and it is met, so this set
+replaces `20261024_1102` as the restore point.
+
+⚠️ **The evidence is the operator's floor report, not a logged capture.** No CSV was taken on this
+run, so there is no per-wheel number behind it — nothing here is contradicted by that, but ⛔ do not
+cite this promotion as measured data. The cross-wheel agreement capture is still worth taking.
 
 | wheel | node | files | `m_invert_direction` |
 |---|---|---|---|
-| FR | 10 | `FR_350W_14pole_geared_20261024_1527_undertesting_{mcconf,appconf}.xml` | **0** (right side) |
-| FL | 11 | `FL_..._20261024_1527_undertesting_*` | 1 (left side) |
-| RR | 12 | `RR_..._20261024_1527_undertesting_*` | **0** (right side) |
-| RL | 13 | `RL_..._20261024_1527_undertesting_*` | 1 (left side) |
+| FR | 10 | `FR_350W_14pole_geared_20261024_1527_{mcconf,appconf}.xml` | **0** (right side) |
+| FL | 11 | `FL_..._20261024_1527_*` | 1 (left side) |
+| RR | 12 | `RR_..._20261024_1527_*` | **0** (right side) |
+| RL | 13 | `RL_..._20261024_1527_*` | 1 (left side) |
+
+🔑 **The `_undertesting` suffix was dropped from the filenames on promotion.** A name that claims a
+status goes stale the moment the status changes — same trap as the firmware version string that
+cannot tell r1 from r2. The timestamp identifies the set; this README says what it is worth.
 
 ### Firmware that goes with this set
 
@@ -39,9 +48,10 @@ sent and RawCommand now sizes to 4 entries instead of 6.
 ## The previous set: `20261024_1102`
 
 Read off all four boards on 2026-10-24 at 11:02, immediately after the two fixes of that day and
-with `check_ours.py` reporting **0 functional deviations on every wheel**. This is the restore
-point. Taken deliberately **before a power cycle**, so it also serves as the proof of what was in
-flash beforehand.
+with `check_ours.py` reporting **0 functional deviations on every wheel**. It was the restore point
+until `20261024_1527` was floor-proven later the same day; keep it as the fallback. Taken
+deliberately **before a power cycle**, so it also serves as the proof of what was in flash
+beforehand.
 
 | wheel | node | mcconf | appconf | `m_invert_direction` |
 |---|---|---|---|---|
@@ -118,5 +128,10 @@ that board's own USB port — `diag/spin_one_wheel.py`, which keeps the FC out o
   four written to 0.155, confirmed against the 6-inch tire. Was cosmetic (it reaches nothing we
   consume); ⛔ it did **not** change odometry — `erpm_to_ms` = 0.003900 stays tape-verified and
   closed.
-- ⏭ **This set has not been driven under load.** That is the test that would promote
-  `20261024_1527_undertesting` from "under testing" to the restore point.
+- ~~**This set has not been driven under load.**~~ **CLOSED 2026-10-24** — driven on the floor under
+  load, works seamlessly per the operator, and `20261024_1527` is now the restore point.
+- ⏭ **No logged capture of that floor run.** The promotion rests on the operator's report. The
+  capture still worth taking is cross-wheel speed agreement at **0.25 and then 0.75 m/s** — with
+  four matched 350 W windings that spread should finally be tight, and it is the same metric that
+  found the 09-14 and 09-16 faults. 🔴 `esc_status` is currently sending nothing to the FC over
+  DDS, so that capture has to come off USB via `read_values.py`, not the DDS path.
