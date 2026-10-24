@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 3d6fddee-7330-454a-a767-3665b8dfbebf
-  modified: 2026-09-20T12:19:46.948Z
+  modified: 2026-10-24T05:42:26.530Z
 ---
 
 # ESC / DroneCAN telemetry — how to read it, and what it does NOT mean
@@ -13,6 +13,32 @@ metadata:
 Consolidated 2026-09-11 out of four overlong `MEMORY.md` lines. `MEMORY.md` keeps only the
 traps; the reasoning lives here. Related: [[project_vesc_can_flashing]], [[rover_odometry]],
 `codex-work/rc_configuration.md` §6, `codex-work/px4_vesc_dronecan_implementation.md`.
+
+## 🔴🔴 OPEN FAULT 2026-10-24 — `esc_status` IS SILENT, AND IT IS THE *TELEMETRY* DIRECTION ONLY
+
+**0 messages in 30 s** on `/fmu/out/esc_status` while `/fmu/out/vehicle_status_v1` flowed normally
+in the same process, same QoS. ⛔ **I first called this "the FC↔ESC CAN path is down" and THAT WAS
+WRONG** — the operator corrected it: **the rover drives from RC**, so the FC→ESC *command*
+direction works. 🔑🔑 **COMMAND AND STATUS ARE TWO DIRECTIONS ON ONE BUS — NAME WHICH ONE BEFORE
+CONCLUDING ANYTHING.** Only ESC→FC status is missing.
+
+**Ruled out as causes:** the topic IS bridged (it appears in `ros2 topic list`, the agent created
+its datawriter); the agent is `active`; the subscriber works (`vehicle_status` arrived on it); the
+ESCs are **powered and healthy** (24.5-24.8 V, fw V6.06/60_MK5, FETs 39-41 °C, all four answering
+on USB); `can_mode` 1 and `can_baud_rate` 3 on all four; `uavcan_raw_mode` 3 on all four after the
+10-24 fix. ⚠️ A 30 s watch with "drive now" was inconclusive — **unconfirmed whether the operator
+actually drove inside the window.** Re-run that first, it is free.
+**Operator's hypothesis, untested: the ESC-side DroneCAN driver itself.** Source IS on this box at
+`~/apps/bldc_vesc6_mk5/libcanard/canard_driver.c`. Also unexamined: `can_status_rate_1` 50 /
+`can_status_msgs_r1` 1 / `can_status_rate_2` 5 / `can_status_msgs_r2` 0 / `uavcan_status_current_mode`
+0 — these are the VESC-native CAN status fields and it is **not established** that they gate the
+DroneCAN broadcast.
+⛔ **Do NOT spend the one-per-FC-boot `mavlink_shell` on `uavcan status` without asking** —
+[[mavlink_shell_session_exhaustion]]. ⛔ can0 on the companion is NOT the route; that integration
+is dropped ([[project_vesc_can_flashing]]).
+⇒ **Consequence while this lasts: every per-wheel diagnostic that reads `esc_status` is blind**,
+including the `esc_online_flags` method below and anything keyed on `esc_rpm`. Use
+`diag/read_values.py` over USB as the substitute ruler.
 
 ## 🔴 READING `esc_status` — three things that are routinely got wrong
 
@@ -59,8 +85,13 @@ showing and a genuine failure does not stand out. **Read `esc_online_flags` bit-
 Fixed 2026-09-11 in `tools/l2_test.py` and `tools/yaw_response_log.py`; `wheel_erpm_log.py`,
 `odom_scale_measure.py`, `speed_command_test.py`, `s1_kill_test.py`, `t2_straight_goal_test.py`
 and `collision_standoff_test.py` already did it correctly.
-⚠️ The drive addresses are **10, 11, 12, 13**, but that is a **stable ordering only** — the
-address ↔ wheel-corner mapping **has never been verified against one turning wheel.**
+✅✅ **ADDRESS ↔ CORNER IS VERIFIED — 2026-10-24, each wheel spun ALONE and named by the operator:
+`10 = FR · 11 = FL · 12 = RR · 13 = RL`.** Exactly as `MOTOR_MAP.md` and the appconfs said. The
+long-standing "never verified against one turning wheel" caveat is **CLOSED**; stop hedging it.
+🔑 **HOW, because PX4 cannot do it:** `UAVCAN_EC_FUNC1/3` are both Motor1 and `2/4` both Motor2, so
+every FC-side command reaches **two wheels**. One wheel alone needs `COMM_SET_RPM` straight down
+that ESC's own USB port — `codex-work/bldc_can/diag/spin_one_wheel.py`, FC entirely out of the
+loop, so no arming and no EKF bridge. → [[vesc-tool-cli]]
 
 ## 🔑🔑 "ESC 1" / "ESC 2" IN A PX4 MESSAGE NAMES A **SIDE**, NOT A WHEEL — and 3/4 CANNOT EXIST
 

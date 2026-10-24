@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: b8919666-0419-4c4f-88ea-cd8bff5f8e34
-  modified: 2026-09-13T08:13:37.191Z
+  modified: 2026-10-24T05:42:04.439Z
 ---
 
 **As of 2026-09-13 the companion can read and write any ESC setting itself, over USB, with no GUI
@@ -51,8 +51,26 @@ exists**; the first attempt "succeeded" while the build had failed.
 
 🔑 **A VESC's USB only enumerates when the board is POWERED** — no `/dev/ttyACM0` means check
 power before suspecting the cable. Appears as `0483:5740`. `roz` is in `dialout`, so no sudo.
-⛔ **One ESC per session — there is no multi-drop.** CAN forwarding is gated on
-`can_mode == CAN_MODE_VESC` and ours is UAVCAN. Move the cable, one wheel at a time.
+⛔ **One ESC per *link* — there is no multi-drop.** CAN forwarding is gated on
+`can_mode == CAN_MODE_VESC` and ours is UAVCAN, so one USB link reaches exactly one board.
+✅✅ **BUT ALL FOUR CAN BE CABLED AT ONCE — verified 2026-10-24: `/dev/ttyACM0..3`, four boards
+live simultaneously.** ⛔ **"Move the cable, one wheel at a time" is OBSOLETE.** 🔴 **PORT ORDER IS
+NOT NODE ORDER and shifts on replug** — that day it was ACM0=13, ACM1=10, ACM2=12, ACM3=11.
+⇒ **ALWAYS pass `--expect-id`** to the field-setters; they read `controller_id` off the board and
+refuse on mismatch, so a reshuffled ACM number cannot hit the wrong motor.
+
+## 🔑🔑 SPINNING ONE WHEEL — `diag/spin_one_wheel.py` (written 2026-10-24)
+
+**PX4 CANNOT DRIVE A SINGLE WHEEL.** `UAVCAN_EC_FUNC1/3` are both Motor1 and `2/4` both Motor2, so
+every FC-side command reaches **two wheels**. One wheel alone needs the VESC serial protocol down
+that board's own USB port: `COMM_SET_RPM` (id **8**; `COMM_FW_VERSION` 0, `COMM_GET_VALUES` 4),
+framed `0x02 len payload crc16-xmodem 0x03`. **The FC is entirely out of the loop ⇒ no arming, no
+EKF bridge, no external mode.** In `GET_VALUES` the rpm field is at payload offset 23 (int32, big
+endian) and `v_in` at 27 — `diag/read_values.py` parses them.
+🔑 **IT STOPS BY STOPPING** — stop sending and the VESC's own `timeout_msec` 300 applies
+`timeout_brake_current` 2 A. ⛔ **Never write a 0 setpoint to stop it**; killing the script is a
+clean stop. ⚠️ `COMM_SET_RPM` is `set_pid_speed`, i.e. the same speed loop the rover drives on.
+🔑 **`v_in` is the discriminator for "board alive on USB 5 V vs pack ON"** — ask it before blaming CAN.
 ✅ Leaving USB connected while driving is harmless (both ends ride on the rover) — USB and the
 DroneCAN control path are independent. Keep the cable clear of the wheels.
 
