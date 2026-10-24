@@ -146,6 +146,29 @@ def put(text, key, value):
     return re.sub(rf'<{key}>[^<]*</{key}>', f'<{key}>{value}</{key}>', text, count=1)
 
 
+def same(a, b):
+    """True if two XML field values mean the same thing. The device re-serialises floats on the
+    way out -- 8370000 comes back as 8.37e+06, 1023.40 as 1023.4 -- so compare numerically when
+    both sides parse as numbers, and exactly when they do not."""
+    if a == b:
+        return True
+    try:
+        fa, fb = float(a), float(b)
+    except (TypeError, ValueError):
+        return False
+    return abs(fa - fb) <= 1e-9 * max(1.0, abs(fa), abs(fb))
+
+
+def verify(sent, readback):
+    """Fields where the readback genuinely differs from what we sent. Returns [(key, sent, got)]."""
+    out = []
+    for key, val in re.findall(r'<([A-Za-z0-9_]+)>([^<]*)</\1>', sent):
+        got = get(readback, key)
+        if not same(val, got):
+            out.append((key, val, got))
+    return out
+
+
 def write_conf(port, which, path):
     out = run(['--vescPort', port, f'--set{which}Conf', str(path)])
     if 'write OK' not in out:
@@ -175,10 +198,12 @@ def apply(port, which, path_pre, targets, dry):
 
     write_conf(port, which, path_post)
     path_rb = pathlib.Path(str(path_pre).replace('_pre.xml', '_readback.xml'))
-    read_conf(port, which, path_rb)
-    if path_rb.read_text() != new_text:
-        sys.exit(f'READBACK MISMATCH on {which}Conf -- the device does NOT hold what we sent.\n'
-                 f'Compare {path_post} against {path_rb}. Aborting; do not drive.')
+    rb = read_conf(port, which, path_rb)
+    bad = verify(new_text, rb)
+    if bad:
+        sys.exit(f'READBACK MISMATCH on {which}Conf -- the device does NOT hold what we sent:\n'
+                 + '\n'.join(f'  {k}: sent {v}, device reads {got}' for k, v, got in bad)
+                 + f'\nCompare {path_post} against {path_rb}. Aborting; do not drive.')
     for k, o, v in changes:
         print(f'  {which}Conf: {k} {o} -> {v}  [verified on device]')
     return changes

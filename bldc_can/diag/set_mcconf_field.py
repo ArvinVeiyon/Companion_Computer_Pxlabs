@@ -59,8 +59,9 @@ post.write_text(new_text)
 t.write_conf(a.port, 'Mc', post)
 
 rb = t.LIVE / f'vesc_mcconf_{wheel}_{stamp}_{tag}_readback.xml'
-t.read_conf(a.port, 'Mc', rb)
-if rb.read_text() != new_text:
-    sys.exit('READBACK MISMATCH -- device does not hold what we sent. Do not drive.')
+bad = t.verify(new_text, t.read_conf(a.port, 'Mc', rb))
+if bad:
+    sys.exit('READBACK MISMATCH -- device does not hold what we sent. Do not drive.\n'
+             + '\n'.join(f'  {k}: sent {v}, device reads {got}' for k, v, got in bad))
 for k, o, v in changes:
     print(f'  {k}: {o} -> {v}  [verified on device]')
