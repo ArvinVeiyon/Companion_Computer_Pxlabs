@@ -184,6 +184,29 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
+## ✅✅ 2026-10-24 — **T3 IS FINISHED (operator). CLOSED AT `ObstacleFootprint.scale` 32.0.**
+
+**Operator's report, 10-24: "T3 are finnished."** ⇒ T3 closes at the **ORIGINAL pass value, 32.0**.
+
+🔑🔑 **THE "TRY 10-15" PLAN WAS NEVER RUN — VERIFIED FROM THE CONFIG, NOT ASSUMED.**
+`src/rover_nav2/config/nav2_forward_flat.yaml:171` still reads `ObstacleFootprint.scale: 32.0`, the
+file's only commit is **`79c82bf` (09-20)**, and `git status` on `src/rover_nav2/` is clean. So no
+value between 10 and 15 was ever tried and the rejoin question was never reopened — ⛔ **do not go
+looking for a tuning session that does not exist.** The 09-19 note below ("TRY 10-15, THEN THREE RUNS
+UNCHANGED") is a **PLAN, NOT A RESULT** — I quoted it at the operator as if it were an open action a
+month after he had moved on.
+
+⬜ **NOT CAPTURED, and the operator was not pressed for it while exhausted:** whether the closing
+runs were n=3, how the **rejoin** behaved at 32 (09-19 recorded 32 as "avoids cleanly but NEVER
+rejoins"), and the adjudication method. ⇒ **T3 is closed on the operator's word, which is the
+authority here — but there is no logged capture behind it.** ⛔ Do not cite it as measured.
+
+⚠️⚠️ **T3 WAS TUNED ON THE OLD FRAME.** The frame was rebuilt tube → **6 mm L angle** over the
+following month (stripped threads at the old mounts), plus bottom-plate holes opened up and all four
+motors swapped to 350 W. `ObstacleFootprint` scores the **actual footprint polygon**, so it is a
+GEOMETRIC parameter: 🔑 **re-tape the footprint (recorded 0.73 × 0.450 m) and the wheel track before
+T4/T5 or anything else leans on 32.0.** The chain is reusable; the number is frame-specific.
+
 ## ✅✅ 2026-09-19 (night) — **T3 AVOIDANCE REPRODUCED. ONE NUMBER LEFT: `ObstacleFootprint`.**
 
 ✅ **Controlled run (config + distance 1.360 m bumper + scene + CLEARED costmaps all pinned): drove
