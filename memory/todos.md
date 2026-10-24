@@ -184,6 +184,31 @@ Paper only; nothing on the vehicle moved and no param was written. Three things 
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
+## 🔧🔧 2026-09/10 — **THE FRAME WAS REBUILT. EVERY GEOMETRY NUMBER ON RECORD IS NOW SUSPECT.**
+
+Operator's account, 10-24, of roughly a month of solo work (⚠️ not witnessed by me, not measured):
+
+- **Frame: TUBE → 6 mm L ANGLE** at the mounts. Reason: **the threads had stripped out** — a tube
+  wall gives barely a millimetre and a half of engagement under a suspension mount with vibration,
+  so the joint was always going to fail. 6 mm gives engagement greater than the fastener diameter.
+  🔑 **This was a root-cause fix, not a patch.**
+- **Bottom-plate holes ENLARGED** — screws did not match after the modification. ⚠️ That plate
+  **carries the suspension**, so enlarged holes lose bearing area and edge distance. ⬜ **Unchecked:
+  whether any hole ended up materially larger than its screw. A plain washer under the head restores
+  the bearing area** — cheap insurance on the only joint seeing road load.
+- **All four motors → 350 W** (closes the RR demagnetisation, which no config could fix).
+- Context that explains the pace: **~30 km round trips** per frame change, because an apartment has
+  no workshop and 6 mm angle is not cut or drilled by hand. **No second pair of hands.**
+
+🔴🔴 **CONSEQUENCE — RE-TAPE BEFORE TRUSTING ANY OF THESE:**
+**footprint `0.73 × 0.450 m`** · **`RD_WHEEL_TRACK` 0.31** · **`wheelbase` 0.430** · **ride height**.
+They all predate the rebuild. 🔑 `ObstacleFootprint` scores the **real footprint polygon**, so T3's
+32.0 is frame-specific; the reflex corridor `|y| ≤ 0.275 m` and the bumper/raw 0.337 m offset are
+geometric too. ⛔ **Do not debug a geometry change as a controller fault** — that is the expensive
+failure mode here.
+⚠️ **The old "rear sits LOWER ⇒ rear axle carries more stress" observation may no longer hold** — it
+was a suspension/ride-height note taken before the rebuild. Re-observe, do not quote.
+
 ## ✅✅ 2026-10-24 — **T3 IS FINISHED (operator). CLOSED AT `ObstacleFootprint.scale` 32.0.**
 
 **Operator's report, 10-24: "T3 are finnished."** ⇒ T3 closes at the **ORIGINAL pass value, 32.0**.
