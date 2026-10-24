@@ -108,10 +108,6 @@ that board's own USB port — `diag/spin_one_wheel.py`, which keeps the FC out o
 
 ## Still open
 
-- **ESC → FC telemetry is silent.** `esc_status` published 0 messages in 30 s over DDS while
-  `vehicle_status_v1` flowed normally. The command direction works (the rover drives from RC), so
-  this is the **status-broadcast direction only**. Not yet diagnosed; the DroneCAN driver source is
-  at `~/apps/bldc_vesc6_mk5/libcanard/canard_driver.c`.
 - **Current loops sit below our bandwidth.** ω measures 833 (FR), 833 (FL), 1000 (RR), 1667 (RL)
   against our 2000 rad/s. `foc_current_kp/ki` must be **recomputed per board** from that board's own
   L and R — never copied from a neighbour. Values ready: FR 1.0191/1114.80 · FL 1.1205/986.00 ·
