@@ -70,17 +70,6 @@ Not late — **never filed.** These are the actual product, and none of them is 
   (`health_and_arming_checks.cpp:90`) = the "recurring 4 s abort"; PX4 won't re-register while armed.
   ⏭ **Test: floor, crawl, `kill -9` autonav_mode, time to wheels stopped (tape/`/scan`, not rpm).**
   No PX4 source on this box (bins only) ⇒ only a floor test settles it.
-- **N10. 🔴 CAMERA USB DROP LOOP after the frame rebuild (found 10-29) — BLOCKS ALL NAV2 VALIDATION.**
-  Gemini 336L on Pi 5 USB3 (bus 5) drops every ~3 s, NEVER streamed this boot. 🔑 Discriminator:
-  driver STOPPED = 0 drops/15 s; driver STARTED = 12 drops/40 s ⇒ fails when streams start ⇒ POWER or
-  marginal link under load, not software. Cable reseat did NOT fix. 5 V rail 5.04 V, `0x0`, no over-current
-  in dmesg; `usb_max_current_enable=0` (600 mA cap unless 5 A PSU) — unchanged, so suspect only if the
-  rebuild changed Pi/camera power. Operator to try (10-30): power wiring changed? → other USB3 port →
-  short known-good cable → powered hub. Re-test: stop/start `rover-camera`, count `usb 5-1: USB disconnect`.
-  Then: restart camera→scan→scan-3d→autonav-mode, probe rates (scratchpad `nav2_probe.py` pattern),
-  re-tape cam height (static TF still 0.305 m / pitch ~1.4°, PRE-REBUILD), `preflight_scan_check.py`.
-  Passing now: `/odom` 96 Hz, `esc_status` 90 Hz, FC DDS. Also seen 10-29: FC left ARMED in Manual
-  ⇒ autonav-mode hit 10× "Registration failed" → systemd start-limit → `failed`. Disarm, then restart it.
 - **N8. Reflex partial-blind fail-open (review S11, 2026-10-29).** Health gate counts the WHOLE scan;
   centre blind + sides healthy ≈ 53% valid passes 0.35, corridor empty ⇒ clearance inf ⇒ UNBLOCKED
   (e.g. obstacle inside the 0.308 m depth min). ⏭ add a CORRIDOR-validity gate relative to whole-scan.
