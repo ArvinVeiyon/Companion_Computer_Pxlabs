@@ -66,6 +66,32 @@ Not late — **never filed.** These are the actual product, and none of them is 
   → stop+hold **does not exist** · no-route-to-goal **does not exist** · battery-low → return
   **not configured**. → `autonomy_plan.md` §6.
 - **N6. R5.5 companion-crash disarm** — PX4 offboard-timeout behaviour, never bench-tested.
+  2026-10-29: px4_ros2 EXITS the node itself after 4 s with no FMU request
+  (`health_and_arming_checks.cpp:90`) = the "recurring 4 s abort"; PX4 won't re-register while armed.
+  ⏭ **Test: floor, crawl, `kill -9` autonav_mode, time to wheels stopped (tape/`/scan`, not rpm).**
+  No PX4 source on this box (bins only) ⇒ only a floor test settles it.
+- **N10. 🔴 CAMERA USB DROP LOOP after the frame rebuild (found 10-29) — BLOCKS ALL NAV2 VALIDATION.**
+  Gemini 336L on Pi 5 USB3 (bus 5) drops every ~3 s, NEVER streamed this boot. 🔑 Discriminator:
+  driver STOPPED = 0 drops/15 s; driver STARTED = 12 drops/40 s ⇒ fails when streams start ⇒ POWER or
+  marginal link under load, not software. Cable reseat did NOT fix. 5 V rail 5.04 V, `0x0`, no over-current
+  in dmesg; `usb_max_current_enable=0` (600 mA cap unless 5 A PSU) — unchanged, so suspect only if the
+  rebuild changed Pi/camera power. Operator to try (10-30): power wiring changed? → other USB3 port →
+  short known-good cable → powered hub. Re-test: stop/start `rover-camera`, count `usb 5-1: USB disconnect`.
+  Then: restart camera→scan→scan-3d→autonav-mode, probe rates (scratchpad `nav2_probe.py` pattern),
+  re-tape cam height (static TF still 0.305 m / pitch ~1.4°, PRE-REBUILD), `preflight_scan_check.py`.
+  Passing now: `/odom` 96 Hz, `esc_status` 90 Hz, FC DDS. Also seen 10-29: FC left ARMED in Manual
+  ⇒ autonav-mode hit 10× "Registration failed" → systemd start-limit → `failed`. Disarm, then restart it.
+- **N8. Reflex partial-blind fail-open (review S11, 2026-10-29).** Health gate counts the WHOLE scan;
+  centre blind + sides healthy ≈ 53% valid passes 0.35, corridor empty ⇒ clearance inf ⇒ UNBLOCKED
+  (e.g. obstacle inside the 0.308 m depth min). ⏭ add a CORRIDOR-validity gate relative to whole-scan.
+  Checked all records 10-29: NEVER TESTED. Only evidence = 08-10 occlusion run, hand in TRANSITION read
+  **51.2%** (`autonav_reference.md:350`) — ABOVE 0.35, i.e. half-covered PASSES. Steady centre-only cover never run.
+- **N9. Standoff at Nav2 speed.** Armed Nav2 runs `max_vel_x` **0.35**, above every passing standoff
+  run (~0.14 m/s true). `standoff_20260812_002147.json` (cmd 0.25, ~0.9 true, torque era) hit the
+  wall with 0.020 m left. ⏭ `collision_standoff_test.py` at 0.35 — same live item as §3/G3 note.
+  Checked all records 10-29: NEVER RUN. Last standoff commit `40e0b0b` 08-12; the SPEED LADDER
+  (0.25/0.45/0.75) is planned as SESSION B paired with T4 (this file, ~line 404) — neither run.
+  T2 + T3 do not count: reflex SILENT on both.
 - **N7. R6 total CPU budget** — measure the whole stack against ≤2.0 cores **before** adding
   RTAB-Map or the voxel layer. ⚠️ **budget for `claude` itself: 55-86% of a core.**
 
