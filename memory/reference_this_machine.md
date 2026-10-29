@@ -121,3 +121,14 @@ completely convincing "service up 11 hours" on a unit that was **4 minutes old**
 ⛔⛔ **CHECK `/proc/uptime` BEFORE READING ANY DURATION OFF A TIMESTAMP.**
 🔑 Same family as the other ruler traps here: `active` proves nothing, `is-active` proves nothing,
 and a quiet topic is not evidence — prove a non-zero baseline first.
+
+## 🧹 2026-10-30 CLEANUP (operator-approved, each item checked unreferenced/not running first)
+- **Deleted from `ros2_ws`:** `rc_control/camera_sw_node_obsolute.py` (`063c614`) · `shutdown_reboot_node_obsolute.py`
+  (`4259557`) · `shutdown_reboot_node.py.save` (`1b14f6b`) · 4 stale `.save`/`.swp` in `collision_manual_mode` +
+  `obstacle_distance` (`88c6408`) + their `build/` copies. ✅ **RC CH10 shutdown/reboot is LIVE in
+  `rc_control_node.py`** (reads `rc_mapping.yaml` `shutdown_reboot_node:` section — a label, not the deleted file).
+- **Deleted from the system:** `/var/lib/aide/aide.db.feb22.bak` + `aide.db.new` (~240 MB; live `aide.db` kept) ·
+  `/etc/sys_version.save` · `/etc/vision_streaming.conf.bak` (+ `codex-work/System_files` copies, `8196412`).
+- **Docs:** `ros2_ws/docs/ros2_architecture.md` → `docs/archive/` (`28ec54f`). `todos.md` swept of done items.
+- **Claude Code:** synced plugins `carta-investors`/`engineering`/`cowork-plugin-management` disabled → `reference_services`.
+- Checked and clean: no orphan pkgs in `build`/`install` (731 M / 365 M, all have src).
