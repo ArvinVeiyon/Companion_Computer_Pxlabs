@@ -23,10 +23,6 @@
 | **R1-R7** (`rover_autonav_requirements.md` §3) | **the requirements themselves** | ✅ authoritative |
 | ~~L0-L7~~ (`rover_autonav_requirements.md` §4 build order) | env-first bring-up order | 🗄 **RETIRED — it is the third scheme.** L0-L4 all closed; its L5/L6/L7 are just M2/M3/the S+T tests. Do not plan off it. |
 
-✅ **DOC FAULT CLOSED 09-04: "the L0-L5 ladder appears TWICE in `autonomy_plan.md`" (flagged 08-10)
-is NOT a duplication.** Appendix A = *what to build*, Appendix B = *definition of done*. They agree
-layer-for-layer (L0 ✅ · L1 🔧 · L2-L5 ❌). Nothing to resolve, nothing to delete.
-
 ## 1. WHERE WE ACTUALLY ARE AGAINST THE REQUIREMENTS
 ⚠️ **Table re-stated 2026-09-19. It had been frozen at its 09-04 wording for two weeks while G0, G2
 and G3 all closed underneath it** — R4 still read "not honoured", R7 still read "launch file stale".
@@ -44,12 +40,6 @@ and G3 all closed underneath it** — R4 still read "not honoured", R7 still rea
 
 🔑 **R1's stated acceptance ("<0.3 m over a 20 m loop") CANNOT BE RUN HERE** — same room constraint
 that blocks T2. It needs a corridor or a re-scope; that is an operator decision, see **G3**.
-✅ **R1 doc conflict — CLOSED 2026-09-10, it was already fixed and this note was the stale one.**
-`rover_autonav_requirements.md` carries the `slam_toolbox` line **struck through** with
-*"🔴 SUPERSEDED 2026-08-01 — the map/localization source is RTAB-Map, not slam_toolbox"*. Nothing to
-do. ⚠️ Remaining `slam_toolbox` mentions there are in the **retired** L0-L7 ladder and in install
-inventories, which are factual.
-
 ## 2. 🔴 REQUIREMENTS THAT WERE TRACKED **NOWHERE** UNTIL NOW
 Not late — **never filed.** These are the actual product, and none of them is a hardware problem:
 - **N1. `/rover_health` monitor (L2, A9).** Level + reason string, never a bare boolean. Every row of
@@ -147,11 +137,9 @@ Nav2; decide it consciously **before** building, it sets whether RTL is PX4's or
 ## 4. ⏸ PARKED — real, but NOT on the requirements critical path. Do not let these set the agenda.
 WFB block (**only action left is HW: reseat drone NIC-A ant0 = #22**) · vision_streaming node fixes
 (8b, 07-30 item 3) · camera bitrate / v2.3.0 · multicam Phase D · doc-fix #5 (ch157→ch161) ·
-#7 aide.db (⚠️ **still present, 117 MB, verified 09-19**) · #17 delete `camera_sw_node_obsolute.py`
-(⚠️ **still present, verified 09-19 — path corrected below**) · #14 PAT rotation
-(🔴 **except the operator browser-revoke, which stays live**).
-*(P5 kill-switch doc-fix was here — ✅ DONE 09-12, `ros2_ws` `6506bdb`. Removed 09-19.)*
-
+#7 aide.db (⚠️ **still present, verified 10-30: `feb22.bak` 112 MB + `aide.db.new` 129 MB**) · #17 delete `camera_sw_node_obsolute.py`
+(⚠️ **still present, verified 10-30**) · #14 PAT rotation
+(remote is SSH now; 🔴 **only the operator browser-revoke is left**).
 ---
 
 ## ⏸ PARKED 2026-09-09 BY THE OPERATOR — brake work, resume AFTER AutoNav
@@ -162,11 +150,7 @@ stick only): 0.52 s / 0.19 m / 1.28 m/s².** ⛔ Do not quote the 09-09 numbers.
 → `codex-work/bldc_can/evidence/brake_floor_test_20260909.md` is the OLD run; the 09-13 numbers live
 in `esc_config_audit` §THE BRAKE PATH. Loose ends, none blocking AutoNav:
 
-1. **`codex-work` has unpushed/untracked work** — ⚠️ **re-checked 09-19: `master` is ahead of
-   `origin/master` by 1, plus ~20 untracked `bldc_can/configs_live/*.xml` ESC dumps from the 09-16/17
-   sessions.** (The old "5 modified + 11 new files" list was from 09-09 and no longer describes the
-   tree.) **The PXLABS firmware session cannot pull what is not pushed.** Commit + push when convenient.
-2. **One clean coast-to-stop** — still wanted, but the reason changed: the 09-12 floor run gave coast
+1. **One clean coast-to-stop** — still wanted, but the reason changed: the 09-12 floor run gave coast
    **0.46 m/s²** (0.70 m from 0.8 m/s) to a full stop, so the baseline is **n=1, not n=2**, and every
    brake-vs-coast ratio rests on it. Two minutes: spin up, throttle to neutral with ch3 at the bottom
    stop, roll out untouched.
@@ -174,26 +158,9 @@ in `esc_config_audit` §THE BRAKE PATH. Loose ends, none blocking AutoNav:
 *(Item "MAVLINK IS BACK" was here — ✅ closed 09-10, G2 has since closed entirely. Removed 09-19.
 ⚠️ the one fact worth keeping: the MAVLink outage's cause was NEVER identified, so it may recur.)*
 
-*(A line here claimed `MEMORY.md` was "19.8 kB against its own 17 kB cap" — **WRONG, removed 09-19.**
-17.1 kB is the recompaction TARGET, not the ceiling; the real cap is **24.4 kB and it truncates the
-tail silently**. See the 09-18/19 desk block below.)*
-
 ## 🗂 2026-09-18/19 — DESK SESSION, NO FLOOR TIME. **The AutoNav plan below is UNCHANGED — go to it.**
 
-Paper only; nothing on the vehicle moved and no param was written. Three things closed:
-
-1. ✅✅ **`RO_DECEL_LIM`=5 CLOSED BY ARITHMETIC — ⛔ DO NOT BOOK A FLOOR RUN FOR IT.**
-   slew = 5 ÷ 4.93 = 1.01/s ⇒ **0.057 m at 0.75 m/s**, worst case ~0.25 m vs the reflex's 0.69 m.
-   → `px4_rover_control_scope` §RAMP ARITHMETIC (which had already computed this on **09-14**).
-   ⚠️ **STILL OPEN AND OFTEN CONFUSED WITH IT: the ≥300 mm reflex standoff above ~0.11 m/s.**
-   That one is real, unmeasured, and needs `collision_standoff_test.py`.
-2. ✅ **MEMORY RECONCILED.** `#22/#25/#26/#27` now exist here (they were cited in `MEMORY.md` for
-   weeks while this file stopped at 21). Brake detail → `esc_config_audit` §THE BRAKE PATH; param
-   tooling → `px4_rover_control_scope`; boot-clock trap → `this_machine`.
-3. 🔴 **`MEMORY.md` HAS A HARD 24.4 KB CAP THAT TRUNCATES ITS TAIL SILENTLY** — no error, no marker.
-   17.1 KB was never a limit (it is 0.7 × cap, the recompaction target). Index is ~21.8 KB after
-   trimming; **⬜ still ~2 KB above the warn line.** Remaining fat: `[MOTION/SAFETY]`,
-   `[MEMORY_FILES]`, `[CURRENT STATE]`.
+Paper only. Its three closed items were removed 10-30 (`RO_DECEL_LIM` arithmetic is in G3 above · memory reconciled · `MEMORY.md` now ~20.5 KB).
 
 ⏭ **NEXT ON THE VEHICLE IS UNCHANGED: Phase 1 of the plan below.** ⛔⛔ **NEVER ARM WITH `voxel_layer`
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
@@ -644,7 +611,7 @@ From `~/ros2_ws/docs/vision_streaming.md`; all three were agreed/designed but ne
 
 ## [ROVER AUTONAV] — added 2026-07-20 (see project_rover_autonav.md)
 
-### 17. Delete camera_sw_node_obsolute.py (added 2026-07-21) — ⚠️ **STILL PRESENT, verified 09-19**
+### 17. Delete camera_sw_node_obsolute.py (added 2026-07-21) — ⚠️ **STILL PRESENT, verified 10-30**
 🔑 **Path corrected 09-19 — the one recorded here was wrong** (missing the inner package dir), which
 is why it may have looked done. It is at **`src/rc_control/rc_control/camera_sw_node_obsolute.py`**,
 with a stale build copy at `build/rc_control/build/lib/rc_control/`.
@@ -658,7 +625,7 @@ when the unused `ldlidar_stl_ros2` clone was removed the same day.
 ⚠️ **The "← NEXT ACTION" marker on this item was stale and has been removed** — it dated from
 2026-07-21 and the plan has moved to the G-gates. S3 (yaw open/closed loop) is already solved.
 This is a tuning refinement, not the next thing to do.
-**FIELD CHECKLIST tracked at `~/ros2_ws/docs/yaw_tuning_session.md` (ros2_ws main @ 8f84bf1)** — preconditions,
+**FIELD CHECKLIST tracked at `~/ros2_ws/docs/archive/yaw_tuning_session.md` (archived — superseded by `rover_yaw_response.md`)** — preconditions,
 bring-up, baseline-then-tune, opportunistic gyro-yaw + /scan checks, safety, teardown, results-log table.
 CONFIRMED NEEDED by the L2 run: armed yaw drove wheels MUCH harder (~700-850 rpm) than forward (~156 rpm).
 Those gains were tuned while `RD_WHEEL_TRACK` was 0.43 — a ~39% oversized track, which sized the
@@ -694,7 +661,7 @@ value, honestly:
 diagnostic. Defer (3). Drop (4).**
 
 ### 14. Rotate the GitHub PAT embedded in the codex-work remote URL
-`~/codex-work/.git/config` holds a plaintext `ghp_...` token. Rotate it and switch that remote to SSH.
+✅ **Remote switched to SSH — verified 10-30** (`git@github.com:…`). 🔴 **Still open: the operator must REVOKE the token(s) in a browser** (`~/git_key` is still on disk, root-owned).
 See `project_codexwork_token_in_remote.md`.
 
 ---
@@ -708,9 +675,9 @@ outdoor tasks come AFTER the indoor brain is proven (L5+L6). Both O1 and O2 need
 LDRobot STL-19: 360° 2D, **0.02-25 m, ~10 Hz** LaserScan; UART **ttyAMA3 @ 230400, RX-only** (lidar TX →
 RPi RX, no commands); `dtoverlay=uart3-pi5`, TF `base_link→base_laser` 0.18 m (re-measure mount).
 - Hardware went to another team 2026-04-17 → **need the physical unit back first**.
-- Driver `ldlidar_stl_ros2` (node LD19) already in `ros2_ws/src` with BOTH upstream fixes applied
-  (pthread include + hardcoded `/dev/ttyAMA3`). Local edits: `codex-work/ldlidar_stl_local_edits_20260417.patch`.
-- Steps: reconnect hw → enable `ttyAMA3` → build → install/enable `ldlidar.service` (unit template in
+- Driver `ldlidar_stl_ros2` (node LD19) is **NOT in `ros2_ws/src` any more** (removed 04-17, verified 10-30) — re-clone,
+  then apply `codex-work/ldlidar_stl_local_edits_20260417.patch` (pthread include + hardcoded `/dev/ttyAMA3`).
+- Steps: reconnect hw → re-clone + patch → enable `ttyAMA3` → build → install/enable `ldlidar.service` (unit template in
   `codex-work/ldlidar_stl19_install_guide.md`).
 - ⚠️ **`/scan` conflict**: lidar driver AND `depth_to_scan` both publish `/scan`. Fix: **lidar owns `/scan`**
   (SLAM + 360° costmap); remap depth to **`/scan_depth`** as a separate Nav2 costmap layer.
@@ -761,7 +728,7 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
    can they sleep again WHILE ARMED?** If so `/odom` drops out under the EKF bridge, in the safety
    path. 🔑 **`esc_online_flags` is the cheap check — read it before trusting per-wheel ESC data,
    and never read a missing ESC as a silent one.**
-7. **Delete `/var/lib/aide/aide.db.feb22.bak`** (117 MB) once the Feb baseline is definitely not wanted.
+7. **Delete `/var/lib/aide/aide.db.feb22.bak`** (112 MB, still there 10-30) once the Feb baseline is definitely not wanted.
 8. **Fix `system_files_sync`'s armed-skip** — it skips entirely when the FC reports armed, so it is
    an unreliable backstop during work sessions (this is how the WFB_NICS mitigation was lost on 07-25).
 
@@ -784,14 +751,7 @@ does a real **60 fps** at 720p MJPG over USB 2.0 — the 16 fps was auto-exposur
 **You do NOT need a blue USB3 port for full frame rate.** Correct this if it resurfaces anywhere.
 
 ### Opened today
-1. ✅ **Camera swap — SOAK PASSED 07-31 (compressed 09-19).** See3CAM_CU135 on port 6-2 streamed
-   1280x720 for a **continuous 41.8 min**: PID unchanged across 40 health samples, `NRestarts=0`,
-   **0 errors / 0 stalls / 0 dup-padding**, 62.6-65.3 °C, `throttled=0x0`, and the relay delivered
-   **234 331 of 234 362** video packets (99.99%) — so the picture genuinely moved, not just RTP.
-   ⏭ **ONLY THE REBOOT CHECK REMAINS.** ⚠️ Load avg 4-7 on 4 cores from software x264 — stable, but
-   it is why **CPU, not radio, is the real video constraint.**
-   ⚠️ **A packet-flow check is NOT sufficient proof on its own** — see opened-item 9.
-   ⚠️ **Since superseded in practice: the LG Smart Cam is the CURRENT FPV camera**, swapped from QGC.
+*(Item 1 — See3CAM soak — removed 10-30: passed 07-31, and the LG is now the FPV camera, so its reboot check is moot.)*
 2. **Discriminate LG-faulty vs connector-6-2-bad-under-load.** The swap confounds them: See3CAM
    100 mA vs LG 500 mA. Test = put the LG in the free port **`4-1`** (different host controller and
    power path) and soak. **Blocked: enclosure is assembled.** Do it next time it's open.
@@ -807,9 +767,6 @@ does a real **60 fps** at 720p MJPG over USB 2.0 — the 16 fps was auto-exposur
 *(Items 4 and 5 removed 09-19: **4** was a superseded copy of the antenna table that just pointed at
 W3 above, and **5** was the already-deleted "trim PX4 MAVLink stream rates" — ⛔ which stays deleted:
 it fixes nothing, downlink already delivers ~100%, and the bitrate item no longer depends on it.)*
-6. **Verify the hardcoded GS peer `10.5.6.50`** in `/etc/wifibroadcast.cfg` (`gs_video` :5600,
-   `gs_mavlink` :14550) — fixed IP on a subnet unrelated to the 10.5.5.0/24 tunnel. Wrong-IP
-   presents as "WFB broken" while the radio is flawless. Check as part of todo #4.
 7. **Boot-time clock is wrong until NTP steps it.** `systemd` claimed services started `Jul 29
    00:31`, `last -x reboot` said `Jul 25 11:36`, `uptime -s` said `Jul 30 22:41:45` — all three
    disagree on the same boot. **Journal timestamps around a boot are not trustworthy**; don't
@@ -824,13 +781,6 @@ it fixes nothing, downlink already delivers ~100%, and the bitrate item no longe
    the See3CAM** — it ran 11:49 clean and the user saw a normal moving picture throughout.
 
 ---
-
-## ✅ Historical completed/closed list — REMOVED 2026-09-10
-
-The 2026-08-13 dump of finished items has been deleted; it was a record of work already done and was
-not being read. ⚠️ **Its surviving note said "`#21 gyro-yaw` remains OPEN" — WRONG, corrected 09-19:
-`yaw_source: camera_gyro` shipped 08-09.** See item 21 above; only the DDS `vehicle_angular_velocity`
-bridge is left, and that needs an FC flash.
 
 ## 🔧 PX4 PARAMETER AUDIT — 2026-08-14
 > 📄 **FULL AUDIT + CHANGE LOG: `~/ros2_ws/docs/px4_param_audit.md`** (every value as read, the
@@ -922,17 +872,13 @@ back on the top plate. The remount landed ~1° different in each axis — ordina
 2026-09-10 to the measured values, **made live by the 2026-09-11 boot, and VERIFIED against a flat
 wall that night — both constants held to 4.6 mm on tape.** ✅ **This sub-item is now CLOSED.**
 
-### 📌 Surviving fact from the deleted 08-16 ESC experiment — ⚠️ **narrowed 09-19**
+### 📌 Surviving fact from the deleted 08-16 ESC experiment — ✅ **fully closed 10-24**
 🔑 **What IS proven: the LEFT/RIGHT allocation.** A 0.3 rad/s yaw drove the right pair (10, 12) and
 the left pair (11, 13) in opposite directions with the correct differential, matching
 `actuator_function` 102=right / 101=left, and the **addr-10 sign inversion is confirmed** (09-16: the
 old `-1` would have read HALF; it read 8% more).
-⚠️ **What is still NOT proven: FRONT vs REAR within a side.** The index map (**10=RF 11=FL 13=RL
-12=RR**) rests on config and docs, not on one turning wheel. The 08-16 episode is the warning — the
-operator called the removed node "right rear" while the address that left the bus was **10** = right
-**front**. ⇒ **Spin exactly one wheel before trusting any FRONT/REAR per-corner claim** — which is
-exactly what the `esc_config_audit` corner-collapse work depends on.
-
+✅✅ **FRONT vs REAR is now PROVEN too — 2026-10-24, each wheel spun ALONE and named by the operator:
+10=FR 11=FL 12=RR 13=RL.** → `esc_telemetry`.
 
 ---
 
