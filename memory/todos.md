@@ -32,7 +32,7 @@ and G3 all closed underneath it** — R4 still read "not honoured", R7 still rea
 |---|---|---|
 | **R1** localization | 🔴 **DEAD** — **0 accepted of 20 on the map's OWN bag** (09-12) ⇒ fails at **GEOMETRY, not appearance** | ⛔ the `camera_info`-vs-DB-calibration lead is **DEAD** — do not re-run it. Needs a fresh pipeline diagnosis → **G1** |
 | **R2** perception | ✅ `/scan` · 🔧 `/scan_3d` exists but **nothing consumes it** | voxel layer + reflex `scan_topic` (#27) → **G4** |
-| **R3** planning | ✅✅ **Nav2 RAN 09-17/18 — Phase 0 passed DISARMED**, full chain to `/cmd_vel`. **Never run ARMED.** | cap DWB in-place rotation + a preflight-clean start position → Phase 1 |
+| **R3** planning | ✅✅ **Nav2 DROVE ARMED** — Phase 1 09-19 (n=2, tape) · **T3 ✅ 10-24** (operator, old frame) | T4 + T5 → see START HERE 10-30. ⚠️ T4 needs the spin guard back first |
 | **R4** control bridge | ✅✅ **CLOSED 09-13 — speed commands ARE honoured, all four in RPM mode** (`RO_MAX_THR_SPEED` 4.93) | nothing. ⛔ Every torque-mode rule is history; don't quote them |
 | **R5** safety | ✅ 1,2,3 proven · 🔧 **R5.4 has NUMBERS** (09-13: 0.52 s / 0.19 m / 1.28 m/s²) but the **≥300 mm standoff above ~0.11 m/s is UNMEASURED** · ❌ **R5.5 companion-crash disarm NEVER TESTED** | `collision_standoff_test.py` as a speed ladder (Session B) / **G6** |
 | **R6** compute ≤2.0 cores | ❌ **never measured as a total** — and RTAB-Map + voxel go on top | **G4** gate |
@@ -161,7 +161,7 @@ in `esc_config_audit` §THE BRAKE PATH. Loose ends, none blocking AutoNav:
 
 Paper only. Its three closed items were removed 10-30 (`RO_DECEL_LIM` arithmetic is in G3 above · memory reconciled · `MEMORY.md` now ~20.5 KB).
 
-⏭ **NEXT ON THE VEHICLE IS UNCHANGED: Phase 1 of the plan below.** ⛔⛔ **NEVER ARM WITH `voxel_layer`
+⏭ **NEXT: see START HERE 2026-10-30 below.** ⛔⛔ **NEVER ARM WITH `voxel_layer`
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
@@ -213,52 +213,51 @@ motors swapped to 350 W. `ObstacleFootprint` scores the **actual footprint polyg
 GEOMETRIC parameter: 🔑 **re-tape the footprint (recorded 0.73 × 0.450 m) and the wheel track before
 T4/T5 or anything else leans on 32.0.** The chain is reusable; the number is frame-specific.
 
-## ✅✅ 2026-09-19 (night) — **T3 AVOIDANCE REPRODUCED. ONE NUMBER LEFT: `ObstacleFootprint`.**
+## ⏭⏭ START HERE — 2026-10-30. **M2 = T2 ✅ · T3 ✅ · T4 ❌ · T5 ❌. PLAN REVISITED.**
+Scope: finish M2, camera-only, **odom frame** (`nav2_forward_flat.yaml`). ⛔ NO LIDAR (STL-19 is the DRONE's).
+✅ **Already true 10-30:** `ad95d70` safety fixes LIVE (NaN gate, read-only `collision.*`, launch default `_flat`) ·
+3 old motors REPLACED (all 4 = 350 W) · ESC addr↔corner proven 10-24.
 
-✅ **Controlled run (config + distance 1.360 m bumper + scene + CLEARED costmaps all pinned): drove
-2.815 m of a 3.0 m goal, deviated 0.419 m right, CLEARED THE BAG — no contact.** ⛔ the earlier
-"accidental pass" verdict is WITHDRAWN.
-🔑🔑 **REMAINING GAP = THE REJOIN, and it is ONE NUMBER:** `ObstacleFootprint.scale` **0.02 ⇒ rejoins
-but HITS the bag** · **32 ⇒ avoids cleanly but NEVER rejoins** (returning means moving back toward
-the obstacle while alongside it). ⏭ **TRY 10-15, THEN THREE RUNS UNCHANGED.**
-🔑 **CLEAR BOTH COSTMAPS BEFORE EVERY RUN** (`clear_entirely_*_costmap`) — they retain old marks.
-🔑 **SAY WHICH RULER:** `t3r.py` logs **RAW**, preflight reports **BUMPER** (0.337 m apart).
-⛔ absolute odom heading is a RED HERRING — the SCENE is what matters.
+**ORDER (each unblocks the next):**
+0. ⬜ **OPERATOR: re-tape footprint (0.73 × 0.450), track, wheelbase on the REBUILT frame** → then update the
+   Nav2 footprint polygon + reflex corridor. `ObstacleFootprint` 32.0 is frame-specific. ⛔ don't skip.
+1. ⬜ **Yaw re-check in MANUAL** (`tools/yaw_response_log.py`, no eph cost). The 09-19 "0.4 weak · 0.7 strong ·
+   1.0 weak" was on the OLD motors — may be gone. ⛔ don't tune on top of it until re-measured.
+2. ⬜ **Spin guard back BEFORE T4.** 🔴 `nav2_forward_flat.yaml` comment says "PreferForward RE-ADDED at 15" but
+   the `critics:` list does NOT contain it (true since `79c82bf`) ⇒ **no spin guard today.** T4 = blocked
+   corridor = exactly the pivot case, and there is no side/rear sensing. Add `PreferForward` (⛔ NOT
+   `Twirling` — it kills useful arcs), YAML + restart, verify DISARMED (`/cmd_vel` shows no in-place rotation).
+3. ⬜ **SESSION B (one blocked-corridor rig)** — ⛔ first re-confirm **S1** (press **ch12**; settle kill ≠ disarm): `collision_standoff_test.py` speed ladder **0.25 / 0.35 / 0.45 /
+   0.75**, tape-adjudicated — 0.35 = armed Nav2 `max_vel_x`, closes **N9** — **then T4** same sitting.
+   ⛔ standoff and T3/T4 CANNOT share a run: standoff passes only if the reflex FIRES; T3 only if it stays SILENT.
+4. ⬜ **T5** dynamic obstacle · **N6** `kill -9` autonav_mode on the floor (time-to-stop by tape/`/scan`) ·
+   **N8** partly-blind corridor gate. ⇒ **M2 DONE.**
+⏭ **IN PARALLEL, DESK ONLY — THE ACTUAL PRODUCT BLOCKER: G1 relocalization (0/20 on its own bag).** Case B
+(pre-built map) cannot ship without it; M2 runs in the odom frame and does not touch it. → `indoor_mapping_slam` §17.
 
-## ✅ 2026-09-19 — **T3 PASSED ONCE (operator-adjudicated). FIX = `ObstacleFootprint` CRITIC.**
-
-🔴🔴 **THE RUN BEFORE IT "SUCCEEDED" AND STILL HIT THE OBSTACLE** — Nav2 said `GOAL SUCCEEDED`, the
-reflex was silent, and the **LEFT FLANK struck the bag** on the rejoin. ⛔⛔ **"REFLEX SILENT" = no
-contact IN THE FORWARD CORRIDOR ONLY. NO SIDE SENSING ⇒ a flank/rear strike is INVISIBLE. NEVER CALL
-T3/T4 FROM TELEMETRY — EYES OR TAPE.**
-🔑🔑 **ROOT CAUSE: `BaseObstacle` scores only the robot's CENTRE POINT — DWB was planning as a POINT
-ROBOT.** The centre cleared; the 0.73 m body did not (`base_link` is 0.385 m from the REAR, so a yaw
-swings the tail). **The operator spotted the geometry first.**
-✅ **FIX: `ObstacleFootprint` critic, scale 32** — scores the real footprint polygon swept along each
-trajectory. Stock plugin, no code.
-📋 **Conditions of the pass:** `ObstacleFootprint` 32 · `max_vel_theta` **0.7** · `max_vel_x` 0.35 ·
-`xy_goal_tolerance` 0.30 · **`yaw_goal_tolerance` 3.14 (heading IGNORED)** · progress 0.15 m/25 s ·
-⚠️ **`PreferForward`+`Twirling` still REMOVED — spin guard OUT.**
-📏 goal 2.2 m **STRAIGHT AHEAD** (⛔ don't set lateral goals — mine steered it into a wall; let Nav2
-pick the side): along-track 2.136 m, lateral −0.183 m, `angular.z` max 0.626, **no contact**.
-⏭ **n=1 only, distance odom-adjudicated, clearance eye-adjudicated — REPEAT n=3 + TAPE before
-closing T3.** ⏭ then T4, T5, and re-tune the removed critics.
-
-## ✅✅ 2026-09-19 (late) — **THE T3 BLOCKER WAS MY OWN CRITICS. DWB NOW TURNS.**
-
-🔑🔑 **Operator's call — "lift your constraint" — found it in one test.** `PreferForward` 50 +
-`Twirling` 20, which **I added that same morning** for blocker 3, were making every rotating
-trajectory score worse than creeping straight.
-**Removed (stock critic set) ⇒ `/local_plan` lateral 0.000 → −0.11 and `cmd_vel_nav` `angular.z`
-0.000 → 0.263 rad/s** (a ~0.95 m-radius arc — the gentle turn I had wrongly called impossible).
-⛔⛔ **RETRACT the evening's diagnosis: NOT `sim_time`, NOT `BaseObstacle`, NOT the costmaps, NOT the
-planner, NOT the vehicle. Do not re-run those.** 🔑 **When something breaks right after your own
-edit, suspect the edit first.**
-⚠️ **Blocker 3 re-opened in principle** (those critics were the spin guard) — but the 09-17 spin
-needed **`voxel_layer` ON**, which the flat config has OFF, and `max_vel_theta`/executor clamp are
-both 1.0. ⏭ **re-tune the critics properly (YAML + restart, ONE at a time), don't leave them out.**
-⏭⏭ **T3 IS NOW RUNNABLE AND UNTESTED ARMED** — goal 2.2 m ahead, 0.8 m RIGHT. **This is the next
-floor action.**
+### ⛔ RULES THAT SURVIVED THE 09-16…09-20 SESSIONS (history collapsed 10-30 → `project_rover_autonav` 09-16…09-20)
+- ⛔⛔ **ARMED = `nav2_forward_flat.yaml` ONLY** — `nav2_forward.yaml` has `voxel_layer` ON ⇒ sustained max-rate spin.
+  ⛔ `nav2_mapped.yaml` while localization is dead (plans against a pose that does not exist).
+- ⛔⛔ **DWB reads `sim_time` + every critic `scale` AT INITIALISE** — a live `param set` reads back the new
+  value and does NOTHING. **YAML + restart. One change at a time.** Restarting `rover-nav2` also clears costmaps.
+- ⛔⛔ **NEVER adjudicate T3/T4 from TELEMETRY.** "Reflex silent" = forward corridor only; a flank/rear strike is
+  invisible (09-19: `GOAL SUCCEEDED` + flank hit). **EYES OR TAPE.** Say which ruler: `t3r.py` logs RAW,
+  preflight reports BUMPER (0.337 m apart).
+- 🔑 **`BaseObstacle` scores the CENTRE POINT only** — `ObstacleFootprint` is what makes DWB plan a 0.73 m body.
+- 🔑 **When it breaks right after your own edit, suspect the edit** (09-19: my `PreferForward`+`Twirling` stopped
+  every turn). `Twirling` stays OUT.
+- ⛔ **Goals STRAIGHT AHEAD; let Nav2 pick the side** (a lateral goal steered it into a wall).
+- 🔑 **CLEAR BOTH COSTMAPS before every run** (`clear_entirely_*_costmap`, or restart `rover-nav2`).
+- ⛔⛔ **NO PIVOTS FROM REST** — hall hubs read 0 rpm from a stationary rotor (expected, not a fault). Arcs work
+  (0.16–0.22 rad/s at 0.25 m/s). ⛔ never derive a moving limit from a standstill test; ASK THE OPERATOR.
+- ✅ **Sign bug fixed 09-19** (`mode.hpp` negates `angular.z`: ROS FLU + = left, PX4 FRD + = right). ⛔ don't "fix" back.
+- ⛔⛔ `RO_YAW_RATE_I` STAYS 0. `RO_YAW_RATE_CORR` 7.4 in force; the 08-02 yaw curve died with the RPM migration.
+- ⚠️ **T4 passes trivially if the rover cannot pivot** — if run before yaw is sound, mark it a WEAK PASS.
+- 🔑 **OPS:** after `COM_DISARM_PRFLT` auto-disarm, **cycle ch5 DOWN then UP** · `eph` is on
+  `vehicle_local_position_v1` · **reboot FC + start bridge TOGETHER** (10 min apart ⇒ eph 238 m) · reflex corridor
+  is `|y| <= 0.275 m`. Speed/scrub data: `bldc_can/evidence/turn_asym_20260914.csv`, `turn_lr_20260914.csv`.
+- 🗄 Superseded, don't revive: Regulated Pure Pursuit swap (DWB turned once the critics were fixed) · "TRY
+  `ObstacleFootprint` 10-15" (never run; T3 closed at 32.0) · the 09-16 settings list (`nav2_forward.yaml`, 0.25 m/s).
 
 ## 🔧 2026-09-19 — REGISTRATION WATCHDOG / `autonav_manager` — STARTED, NOT FINISHED
 **Goal (operator): registration happens automatically at boot so ARMING is the only step for a test.**
@@ -275,127 +274,6 @@ object, which must answer the arming-check handshake). It **supervises only**.
 ⬜ **BLOCKED:** `/etc/sudoers.d/rover-autonav-watchdog` (NOPASSWD for exactly
 `systemctl restart rover-autonav-mode`) was written but **`visudo -c` was denied by the permission
 classifier — UNVERIFIED, treat as suspect.** ⏭ operator: approve the check, or run the service as root.
-
-## 🔴 2026-09-19 (evening) — **T3 FAILED 3×. THE BLOCKER IS DWB, NOT YAW.**
-
-⛔ **T3 DID NOT PASS — goal never reached.** All three armed runs ended `GOAL ABORTED`
-(`Failed to make progress`), stopping at 0.89-0.93 m. ⛔ **`angular.z` was EXACTLY 0.000 in all of
-them — the yaw axis was never commanded, so T3 tested nothing about yaw or the motors.**
-
-✅ **Ruled out by DISARMED probes (no motion, no eph cost):** obstacle IS in both costmaps (cost
-92-100) · the global planner DOES curve around it (0.80 m lateral) · that curve DOES reach DWB.
-🔴 **DWB chooses a DEAD-STRAIGHT trajectory and avoids the obstacle by SLOWING DOWN** (~0.14 m/s;
-armed runs: `linear.x` mean 0.116 vs max 0.250) until the reflex blocks it.
-
-🔴🔴 **REMEMBER THIS TRAP: DWB reads `sim_time` and every critic `scale` AT INITIALISE.** A runtime
-`ros2 param set` says "successful" and reads back the new value while the critic keeps the old one.
-⛔ **Only YAML + restart applies them — two of my experiments were meaningless because of this.**
-
-⏭ **NEXT, IN ORDER:** ① 🔑 **try Regulated Pure Pursuit instead of DWB** — it follows the path
-geometrically instead of sampling, which removes the whole critic-weighting question ② re-test the
-critic weights PROPERLY (YAML + restart, one at a time) ③ ⛔ **RETRACTED: the "cannot make gentle turns" claim was WRONG.** 0.67 rad/s
-is the STANDSTILL BREAKAWAY; while ROLLING the same day's arcs achieved **0.16 and 0.22 rad/s at
-0.25 m/s = 1.1-1.6 m radius**. Gentle arcs are demonstrated. ⛔ **Never derive a moving limit from a
-standstill measurement — and ASK THE OPERATOR, who drives it.**
-✅ Config REVERTED to the Phase-1-validated values and rebuilt. 📐 scan-derived plan view:
-`https://claude.ai/code/artifact/a715d45d-d10c-4958-8469-c2ce3c996842`
-→ full detail `project_rover_autonav` **2026-09-19 (evening)**
-
-## ⏭⏭ START HERE — 2026-09-19 (FLOOR). **PHASE 1 PASSED. A SIGN BUG IS FIXED. YAW IS THE BLOCKER.**
-**Scope: finish M2 (T3·T4·T5), camera-only. ⛔ NO LIDAR — the STL-19 is assigned to the DRONE.**
-
-✅✅ **PHASE 1 PASSED n=2, TAPE-ADJUDICATED — NAV2 DROVE AN ARMED ROVER.** 1.380 m tape vs a 1.5 m
-goal ⇒ **−0.120 m, inside ±0.20**; lateral +0.013/+0.017; **`angular.z` max 0.053, ZERO in-place
-rotation**; reflex silent. Config = **`nav2_forward_flat.yaml`** (voxel OFF + `PreferForward`/`Twirling`).
-✅ **Blocker 3 CLOSED for straight-line work** (a disarmed probe with `/odom` frozen commanded zero
-rotation for 21 s instead of spinning).
-
-🔴🔴 **SIGN BUG FOUND AND FIXED — `mode.hpp` passed `/cmd_vel` `angular.z` UNNEGATED.** ROS FLU (+ =
-LEFT) vs PX4 FRD (+ = RIGHT) ⇒ **every commanded turn went the WRONG WAY.** ⛔ **T3 would have steered
-INTO the obstacle.** Caught by the OPERATOR'S EYE, not a log. ✅ fixed, rebuilt, **verified on the
-floor** (gyro sign inverted; right-side-fast = left turn). ⚠️ straight-line results unaffected.
-
-🔴 **THE BLOCKER IS NOW YAW, AND IT IS NOT REPRODUCIBLE.** Same `RO_YAW_RATE_CORR` 7.4, single steps
-from rest: **0.4 weak · 0.7 STRONG (0.927 rad/s) · 1.0 weak (0.156)**, the 1.0 run drawing barely
-above idle ⇒ the setpoint reaching the ESCs was small. ⛔ **NOT heat** (ESC temps 43-47 °C, pack
-24.8 V; VESCs derate ~85 °C). **UNEXPLAINED — do not tune on top of it.**
-🔑🔑 **THE 08-02 YAW CURVE DIED WITH THE RPM MIGRATION.** `CORR` went 1.8 → 14.8 (restored the old FF
-*ratio* — right arithmetic, dead premise) → **7.4, in force**. ⛔⛔ `RO_YAW_RATE_I` STAYS 0.
-⏭ **Re-measure the plant in MANUAL (`tools/yaw_response_log.py`) — bypasses the rate controller and
-costs NO eph budget.**
-
-⛔⛔ **NO MORE PIVOTS FROM REST.** These are hall-sensored hubs: **zero rpm from a stationary rotor is
-EXPECTED, not a fault** — nothing for the halls to count, so the loop just pushes current (RR sat at
-0 rpm / 18.8 A for 3.5 s). ✅ **RR is LIVE in an ARC** (59→84 rpm) ⇒ **T3 may not be gated on motors.**
-🔧 **OPERATOR DECISION: replace the 3 old motors (RF, FL, RR).** RL was recently replaced and
-outperforms them on the same axle under the same load. ⚠️ **Rear suspension sits LOWER** ⇒ ride height
-is its own item; new motors will still carry that load.
-
-⏭ **NEXT, IN ORDER:** Manual yaw characterisation → **standoff speed ladder** (straight-line, closes
-the LAST open safety number: ≥300 mm above ~0.11 m/s) → T3 → T4 → T5.
-⚠️ **T4 would pass too easily today** — "does not spin" is trivial for an axis that cannot pivot.
-**Mark it a WEAK PASS if run before yaw is sound.**
-
-🔑 **OPS THAT COST US FOUR RUNS:** ⛔ **after `COM_DISARM_PRFLT` auto-disarms, ch5 STAYING UP WILL NOT
-RE-ARM — CYCLE IT DOWN THEN UP** · `eph` is on **`vehicle_local_position_v1`** (versioned, like
-`vehicle_status_v1`) · **eph sequencing: reboot the FC and start the bridge TOGETHER** (10 min apart
-gave eph 238 m; together gave 0.202 m — velocity aiding does not bound position, so it never
-converges back) · the reflex corridor test is **`|y| <= 0.275 m`, not a bare ±20° sector.**
-→ full detail: `project_rover_autonav` **2026-09-19**
-
-## ⏭⏭ START HERE — 2026-09-16. **G3 CLOSED. NEXT IS T3, AND T3 IS A FIRST NAV2 BRINGUP.**
-
-🔑🔑 **TONIGHT ALREADY PROVED HALF THE NAV2 CHAIN.** `t2_straight_goal_test.py` drives by publishing
-**`/cmd_vel`** (Twist), and `autonav_mode/mode.hpp:154` subscribes to exactly that, with the R5.3
-staleness watchdog and the reflex downstream. ⇒ **`/cmd_vel` → AutoNav → `RoverSpeedSetpoint` → PX4 →
-ESCs is PROVEN 4× under load on the floor.** ⛔ **What has NEVER RUN is Nav2 itself** — the planner,
-controller and costmap that *produce* `/cmd_vel`. `rover_nav2` written 2026-08-01, never launched.
-⇒ **T3's risk is ALL UPSTREAM of a link that already works.**
-
-### 📋 THE TWO-SESSION PLAN (agreed with the operator 2026-09-16)
-
-**SESSION A — one sitting, no teardown between steps:**
-1. **Phase 0 — Nav2 bringup DISARMED, no motion.** ⛔ NON-NEGOTIABLE FIRST. Launch
-   `nav2_forward.launch.py` disarmed; verify in order: lifecycle nodes reach `active` → costmap
-   populates from `/scan` → planner returns a path → controller emits `cmd_vel_nav` → smoother emits
-   `/cmd_vel`. **Eyeball `/cmd_vel` magnitudes BEFORE arming** — 🔴 **AutoNav holds zero until
-   `/cmd_vel` arrives, so a bad first `/cmd_vel` on an ARMED rover MOVES IT.** Costs nothing, needs
-   no vehicle motion, can be done at a desk.
-   ⚠️ **WATCH FOR THE COSTMAP SELF-MARKING** — with a 92° FOV the rover can mark its OWN footprint
-   lethal and then refuse to plan. `footprint_clearing_enabled` is set on both layers; Phase 0 is
-   where we find out if that is enough. (`nav2_forward.yaml` comments, corrected 2026-08-01.)
-2. **Phase 1 — armed, Nav2 drives a STRAIGHT goal, NO obstacle.** Same corridor, same 2 m. Isolates
-   "can Nav2 drive" from "can Nav2 avoid". 🔑 **Compare directly against 09-15/16**: expect ~2.0 m
-   arrival, lateral ~0.03 m. If it wanders, the fault is NAV2, and we know that before an obstacle
-   is involved.
-3. **Phase 2 = T3.** Walk out, place ONE offset obstacle, send the goal again. Nav2 routes around it
-   keeping inflation clearance.
-
-**SESSION B — block the corridor, then in this order:**
-4. **`collision_standoff_test.py` as a SPEED LADDER (0.25 / 0.45 / 0.75), tape-adjudicated.**
-5. **T4** — same obstacle, same sitting.
-🔑 **WHY THEY PAIR: T4 is a FULLY BLOCKED corridor, which is physically the same rig the standoff
-test needs.** The standoff data then arrives exactly when T4 needs it, instead of as a detour.
-
-⛔⛔ **THE STANDOFF TEST CANNOT BE FOLDED INTO T3 — STRUCTURALLY, NOT FOR CONVENIENCE.**
-**T3 passes only if the reflex STAYS SILENT** (Nav2 routes around; a firing reflex = the planner
-failed). **Standoff passes only if the reflex FIRES.** Same opposition as T2's two criteria; the
-tool's own docstring says it: *"the standoff test wants an obstacle and fails without one; this one
-wants a clear corridor and fails WITH one."* **One run cannot satisfy both.** Everything else in the
-plan CAN be folded — Phases 0/1/2 are one session with no teardown.
-
-### 🔧 SETTINGS AND TOOLING — decided, do not re-derive
-- ✅ **USE `nav2_forward.yaml`, ⛔ NOT `nav2_mapped.yaml`.** Localization is DEAD (0 accepted of 20 on
-  the map's own bag) ⇒ the mapped config would plan against a pose that does not exist. Odom frame only.
-- ✅ **0.25 m/s throughout — ALREADY THE CONFIG DEFAULT** (`max_vel_x: 0.25`, `max_vel_theta: 0.5`).
-  No tuning needed, **and it is the speed where the 09-15/16 data was cleanest** (odom scale exact,
-  wheels matched ±1.35%, guard well clear of the noise).
-- ✅ **NO NEW TOOL NEEDED.** T3 is a Nav2 goal — `ros2 action send_goal /navigate_to_pose` — not
-  another `t*_test.py`.
-- ⚠️ **Phase 2 is the FIRST TIME THE FOUR SPEED LOOPS MUST DISAGREE ON PURPOSE.** Every 09-15/16 run
-  was a straight line. This vehicle **scrubs hard in a spin** (2.6-7.2 m/s², 4 independent loops that
-  do not share load). **Read `bldc_can/evidence/turn_asym_20260914.csv` / `turn_lr_20260914.csv`
-  before setting yaw rate.**
 
 ### ⚠️ STANDING GATES EVERY ARMED SESSION
 `tools/preflight_scan_check.py` at the start position · `eph` vs the 5.0 m `COM_POS_FS_EPH` bar
