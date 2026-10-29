@@ -110,7 +110,7 @@ plan a measurement around them without checking `ros2 topic list` first.
 - ⛔ **`~/ros2_ws` and `~/codex-work` DID NOT MOVE** — systemd references them by absolute path.
 - 🔴 **THE MAP MOVED: `~/house_map_v4.db` → `~/rover_data/maps/house_map_v4.db`** (3 configs +
   3 tools updated, `ros2_ws` `2fa781a`). **Any doc still naming the old path is STALE.**
-- ✅ **DISK 61% (22 G free) as of 2026-10-29** (was 85% / 8.7 G); `rover_data/bags` now 6.6 G, journal capped 200 M. ⛔ `map_run_20260809_185011`
+- ✅ **DISK 61% (22 G free) as of 2026-10-29, re-checked 10-30** (was 85% / 8.7 G); `rover_data/bags` now 6.6 G, journal capped 200 M. ⛔ `map_run_20260809_185011`
   is NOT disposable — it is the replay adjudication bag. The two `mapping_run*_20260802` are
   false-map era.
 

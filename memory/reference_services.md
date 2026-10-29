@@ -175,3 +175,5 @@ lxd-installer. **Masked:** `fwupd`, `snapd`, `snapd.socket`. Journal capped `Sys
   camera container (~46%) and `wheel_odometry` (~40%). ⛔ Don't credit this for CPU headroom.
 - ⚠️ `/etc/netplan/50-cloud-init.yaml` is now a plain static file — nothing regenerates it.
 - 🔑 If something stops working after a reboot, check this list FIRST before debugging deeper.
+- ✅ **SURVIVED A REBOOT 10-30 00:00:** all 31 units still disabled/masked, 0 failed units, static netplan uplink `192.168.1.240` + `drone-wfb` up, journal at cap (197.9 M).
+- 🔌 **Claude Code synced plugins `carta-investors`, `engineering`, `cowork-plugin-management` DISABLED 10-30** (operator). Carta's `dispatch.sh` shipped without +x ⇒ SessionStart hook errors — NOT the trim (plugins synced 10-29 00:40, trim 23:56). Re-enable: `claude plugin enable <name>@synced`.

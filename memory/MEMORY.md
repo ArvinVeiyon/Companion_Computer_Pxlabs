@@ -17,7 +17,7 @@
 🔑 **A file this index does not name does not exist at session start** — 10 of the above were unreachable until 09-19.
 
 ## [WORKING ON THIS MACHINE]
-🗂️ **`$HOME` layout, the moved map, and the 85%-full disk → `this_machine`.** ⛔ `ros2_ws` + `codex-work` did NOT move.
+🗂️ **`$HOME` layout, the moved map, and the disk (61%, 10-29) → `this_machine`.** ⛔ `ros2_ws` + `codex-work` did NOT move.
 ⚠️ **sudo NEEDS the password:** `printf '1987\n' | sudo -S …`
 ⚠️ **`pkill -f <pat>` MATCHES MY OWN SHELL** (self-kill, exit 144). Use `pgrep -x` / `pgrep -f "[p]attern"` then `kill`.
 🔴 **I AM A MAJOR CPU CONSUMER:** `claude` runs 55-86% of a core. Power check `vcgencmd get_throttled` (0x0 clean).
