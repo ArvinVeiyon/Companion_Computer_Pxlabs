@@ -208,6 +208,21 @@ UXRCE_DDS_CFG  = 103      # uXRCE-DDS → TELEM3
 | `rover-ekf-bridge.service` | **installed but DISABLED on purpose** | EV velocity → EKF2. Wheels-up + closed-loop = self-sustaining limit cycle; start by hand only with the rover on the floor. **AutoNav cannot arm without it — that is deliberate, not a fault.** |
 | `rover-nav2.service` | **installed but DISABLED on purpose** (added 2026-09-20) | The six Nav2 servers — `controller_server` (DWB), `planner_server`, `behavior_server`, `bt_navigator`, `velocity_smoother`, `lifecycle_manager`. This is the unit that publishes `/cmd_vel`, so it is the unit that moves the rover: start it for a run, stop it after. **Restarting it is also the "clear both costmaps" step.** Params default to `nav2_forward_flat.yaml` (the armed-run config) via `Environment=NAV2_PARAMS=`; override with `systemctl edit rover-nav2`. ⛔ Never run `nav2_forward.yaml` armed — voxel layer active commanded a sustained max-rate spin. See `ros2_ws/docs/setup_manual.md` §C6b |
 
+### OS trim — stock Ubuntu services disabled *(2026-10-29)*
+Stock Ubuntu-server daemons with no job on this rover were disabled (tidying — ~120 MB RAM, ~0 CPU; **not** a performance fix). **Kept on purpose:** `avahi-daemon` (mDNS), `ollama` (Phi-3, left as it was — disabled, model kept).
+
+| Group | Units | Action |
+|---|---|---|
+| VM guest | `open-vm-tools`, `vgauth` | disabled |
+| Server storage | `multipathd`(+socket), `open-iscsi`, `iscsid.socket`, `lvm2-monitor`, `lvm2-lvmpolld.socket`, `dm-event.socket`, `udisks2` | disabled (root is plain `mmcblk0p2`, no LVM/SAN) |
+| Cloud | `cloud-init-local/-init/-config/-final`, `cloud-init-hotplugd.socket`, `pollinate`, `ubuntu-advantage`, `ua-reboot-cmds`, `ua-timer.timer` | disabled + `/etc/cloud/cloud-init.disabled`. ⚠️ `/etc/netplan/50-cloud-init.yaml` is now a **plain static file** — edit it by hand, nothing regenerates it |
+| Updates / noise | `fwupd` (**masked**), `fwupd-refresh.timer`, `snapd` + `snapd.socket` (**masked**, all `snapd.*` disabled — only snapd itself was installed), `motd-news.timer`, `update-notifier-*.timer`, `apport*`, `lxd-installer.socket` | disabled |
+| Other | `postfix`, `lttng-sessiond` | disabled |
+
+**Logs:** journal capped at **200 MB** via `/etc/systemd/journald.conf.d/size.conf` (`SystemMaxUse=200M`; was 593 MB). `~/.ros/log`, `ros2_ws/log` and `/var/crash` cleared the same day — safe to clear again any time.
+
+Undo any unit: `sudo systemctl unmask <u>; sudo systemctl enable --now <u>`; cloud-init: `sudo rm /etc/cloud/cloud-init.disabled`.
+
 **Video Pipeline:**
 ```
 FPV cam (LG, by-id → /dev/videoN) ─► FFmpeg (libx264 ultrafast) ─► RTP → 127.0.0.1:5602 ─► WFB-NG ─► GS 10.5.6.50:5600
@@ -554,6 +569,9 @@ sudo systemctl enable mavlink.router.service microxrce-agent.service \
   system_files_sync.timer wifibroadcast@drone.service
 sudo systemctl start mavlink.router.service microxrce-agent.service
 ```
+
+### Step 9b — OS trim (optional, after the network works)
+Apply the disable/mask list and the journal cap from §6 "OS trim" above. Do it **after** netplan is confirmed, since it stops cloud-init.
 
 ### Step 10 — Validate
 ```bash

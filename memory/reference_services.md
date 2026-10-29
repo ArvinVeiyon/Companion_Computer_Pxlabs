@@ -162,3 +162,16 @@ altered between Feb and Jul is baked in — acceptable given nothing was being c
   right; the earlier "no such unit" was a bad search, not a missing unit.
 - 🔴🔴 **`active` PROVES NOTHING.** 2026-09-04: all six units read `active` while depth, colour
   and `/scan` were all at **0.0 Hz**. **Measure rates, never `is-active`.**
+
+## 2026-10-29 — OS TRIM: stock Ubuntu daemons disabled (operator-approved)
+
+Disabled: VM tools, multipath/iSCSI/LVM/udisks2, cloud-init (+ `/etc/cloud/cloud-init.disabled`),
+pollinate/ubuntu-advantage/ua, apport, postfix, lttng-sessiond, motd/update-notifier timers,
+lxd-installer. **Masked:** `fwupd`, `snapd`, `snapd.socket`. Journal capped `SystemMaxUse=200M`
+(`/etc/systemd/journald.conf.d/size.conf`). **Kept on operator's word: `avahi-daemon`, `ollama`
+(stays disabled, model kept).** Full table + undo → `codex-work/system_companion.md` §6 "OS trim".
+
+- **Why:** tidying (~120 MB RAM, ~0 CPU), NOT a performance fix — the real CPU users are the
+  camera container (~46%) and `wheel_odometry` (~40%). ⛔ Don't credit this for CPU headroom.
+- ⚠️ `/etc/netplan/50-cloud-init.yaml` is now a plain static file — nothing regenerates it.
+- 🔑 If something stops working after a reboot, check this list FIRST before debugging deeper.
