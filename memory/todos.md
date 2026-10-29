@@ -137,8 +137,7 @@ Nav2; decide it consciously **before** building, it sets whether RTL is PX4's or
 ## 4. ⏸ PARKED — real, but NOT on the requirements critical path. Do not let these set the agenda.
 WFB block (**only action left is HW: reseat drone NIC-A ant0 = #22**) · vision_streaming node fixes
 (8b, 07-30 item 3) · camera bitrate / v2.3.0 · multicam Phase D · doc-fix #5 (ch157→ch161) ·
-#7 aide.db (⚠️ **still present, verified 10-30: `feb22.bak` 112 MB + `aide.db.new` 129 MB**) · #17 delete `camera_sw_node_obsolute.py`
-(⚠️ **still present, verified 10-30**) · #14 PAT rotation
+#7 aide (`feb22.bak` ✅ deleted 10-30; `aide.db.new` 129 MB remains) · #14 PAT rotation
 (remote is SSH now; 🔴 **only the operator browser-revoke is left**).
 ---
 
@@ -611,15 +610,8 @@ From `~/ros2_ws/docs/vision_streaming.md`; all three were agreed/designed but ne
 
 ## [ROVER AUTONAV] — added 2026-07-20 (see project_rover_autonav.md)
 
-### 17. Delete camera_sw_node_obsolute.py (added 2026-07-21) — ⚠️ **STILL PRESENT, verified 10-30**
-🔑 **Path corrected 09-19 — the one recorded here was wrong** (missing the inner package dir), which
-is why it may have looked done. It is at **`src/rc_control/rc_control/camera_sw_node_obsolute.py`**,
-with a stale build copy at `build/rc_control/build/lib/rc_control/`.
-`src/rc_control/camera_sw_node_obsolute.py` (node `camera_node_sw`) logged all 18 RC channels at INFO
-on every ~50 Hz callback — ~950 lines/s, which is where the 18 GB of `~/.ros/log` came from. It is not
-running (live `rc_control_node` is clean) but should be removed so it cannot be launched by accident.
-Local edits from the April STL-19 work were saved to `~/codex-work/ldlidar_stl_local_edits_20260417.patch`
-when the unused `ldlidar_stl_ros2` clone was removed the same day.
+### 17. ✅ DONE 2026-10-30 — `camera_sw_node_obsolute.py` deleted (`ros2_ws` `063c614`) + its build copy.
+Local edits from the April STL-19 work: `~/codex-work/ldlidar_stl_local_edits_20260417.patch`.
 
 ### 20. Revisit RO_YAW_RATE_P / RO_YAW_RATE_I after a real floor run (added 2026-07-21)
 ⚠️ **The "← NEXT ACTION" marker on this item was stale and has been removed** — it dated from
@@ -728,7 +720,7 @@ uneven terrain it can miss low obstacles or read a slope as a wall; the forward 
    can they sleep again WHILE ARMED?** If so `/odom` drops out under the EKF bridge, in the safety
    path. 🔑 **`esc_online_flags` is the cheap check — read it before trusting per-wheel ESC data,
    and never read a missing ESC as a silent one.**
-7. **Delete `/var/lib/aide/aide.db.feb22.bak`** (112 MB, still there 10-30) once the Feb baseline is definitely not wanted.
+7. ✅ **`/var/lib/aide/aide.db.feb22.bak` DELETED 10-30** (operator). `aide.db.new` (129 MB) is still there.
 8. **Fix `system_files_sync`'s armed-skip** — it skips entirely when the FC reports armed, so it is
    an unreliable backstop during work sessions (this is how the WFB_NICS mitigation was lost on 07-25).
 
