@@ -227,7 +227,7 @@ Scope: finish M2, camera-only, **odom frame** (`nav2_forward_flat.yaml`). ⛔ NO
    the `critics:` list does NOT contain it (true since `79c82bf`) ⇒ **no spin guard today.** T4 = blocked
    corridor = exactly the pivot case, and there is no side/rear sensing. Add `PreferForward` (⛔ NOT
    `Twirling` — it kills useful arcs), YAML + restart, verify DISARMED (`/cmd_vel` shows no in-place rotation).
-3. ⬜ **SESSION B (one blocked-corridor rig)** — ⛔ first re-confirm **S1** (press **ch12**; settle kill ≠ disarm): `collision_standoff_test.py` speed ladder **0.25 / 0.35 / 0.45 /
+3. ⬜ **SESSION B (one blocked-corridor rig)** — ⛔ first the **formal S1** (ch12 stopped it 09-19 but untaped; settle kill ≠ disarm, tape the stop): `collision_standoff_test.py` speed ladder **0.25 / 0.35 / 0.45 /
    0.75**, tape-adjudicated — 0.35 = armed Nav2 `max_vel_x`, closes **N9** — **then T4** same sitting.
    ⛔ standoff and T3/T4 CANNOT share a run: standoff passes only if the reflex FIRES; T3 only if it stays SILENT.
 4. ⬜ **T5** dynamic obstacle · **N6** `kill -9` autonav_mode on the floor (time-to-stop by tape/`/scan`) ·
@@ -303,8 +303,9 @@ Historical detail, if ever needed: `project_rover_autonav` 09-12 and 09-13.
 3. ⚠️ **T1 NEEDS RE-EXAMINING, NOT RE-TICKING.** Its recorded pass predates the RPM migration AND
    the odometry scale/sign fixes, so it was adjudicated with a ruler we have since replaced.
    ⛔ Do not treat that tick as evidence.
-4. ⬜ **S1 is INCONCLUSIVE, not failed — ch12 was never pressed.** Settle what S1 means first
-   (**PX4 kill ≠ disarm**), then run it and actually press **ch12**.
+4. 🔧 **S1 PARTLY DONE — ch12 WAS pressed 09-19 in armed AutoNav (T3 repeat 4): rover stopped, goal
+   cancelled, `arming_state` 1** (`project_rover_autonav` 09-19). ⛔ NOT a formal pass — no tape, no latency.
+   ⬜ Left: settle **PX4 kill ≠ disarm**, then a deliberate run at known speed, ch12, stop by TAPE/`/scan`.
 5. ⬜ The second coast run — tracked in the PARKED brake block above, not duplicated here.
 
 ### 🔑 MEASUREMENT RULES THAT OUTLIVED THE TORQUE ERA — read before any floor session
