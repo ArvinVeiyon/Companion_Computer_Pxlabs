@@ -146,3 +146,7 @@ together; still undecided whether that rating is permanent or break-in.
 🔑 **Gear ratio is 1 and the wheel is 0.155 m** — the Sep-26 files' 3 and 0.083 are a disproved
 drivetrain assumption (`ros2_ws/src/rover_odometry/config/rover_odometry.yaml:25-57`). Neither field
 reaches anything we consume; only `si_motor_poles` enters CAN rpm, and it stays **14** ([[rover_odometry]]).
+
+
+## Moved from the MEMORY.md index 2026-10-30
+- Ours vs the wizard's 24 fields; ω=2000; ⛔ halls WRAP. Majority-vote lesson: `si_wheel_diameter` — the 3 wheels that agreed were WRONG (closed 10-24).

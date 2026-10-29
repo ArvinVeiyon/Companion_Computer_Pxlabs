@@ -997,7 +997,7 @@ Indoor GPS-denied FIRST · Nav2 full stack · forward-only depth v1 (Gemini 336L
 ## Architecture in one line
 Orbbec depth → /scan → Nav2 (slam_toolbox map, global planner, local costmap/controller) → cmd_vel → `nav2_px4_bridge` custom PX4 mode "AutoNav" (px4_ros2 control interface, TrajectorySetpoint vel+yawrate) → PX4 rover-diff → VESC UAVCAN. Wheel odom (`rover_odometry`, math in [[rover-odometry]]) → /odom+TF → Nav2 AND → EKF2 via px4_ros2 `LocalPositionMeasurementInterface`.
 
-## Key facts verified 2026-07-19 (full detail: ros2_ws/docs/ros2_architecture.md)
+## Key facts verified 2026-07-19 (full detail: ros2_ws/docs/archive/ros2_architecture.md)
 - **FIRMWARE CORRECTION 2026-07-19**: FC actually runs **pxlabs-v1.17.0-2.0.0** @ a52c38b07d, built 2026-05-31 (NuttShell `ver all`) — NOT v1.16.0-rc1/c5b8445 as previously recorded. Pxlabs fork source NOT on companion → static msg check impossible; compat is RUNTIME-proven (DDS up, all topics flow) + lib's messageCompatibilityCheck gates at mode registration (M4).
 - **Pxlabs firmware source ON COMPANION since 2026-07-19**: repo https://github.com/ArvinVeiyon/PXLABS_PX4-Autopilot.git = remote `pxlabs` in ~/PX4-Autopilot; build commit a52c38b kept as local branch `pxlabs-fw`. Static msg checks now possible.
 - **px4_msgs RE-PINNED 2026-07-19 → release/1.17 @ 86d8239** (local branch `pinned-pxlabs-1.17`): check-message-compatibility.py vs REAL firmware a52c38b = **full exact match**. Old pin d2c9ff2 had ArmingCheckRequest v0 (2 fields) vs firmware v1 (+valid_registrations_mask) — would have broken px4_ros2 mode registration at M4. Workspace rebuild (px4_msgs + all dependents) launched in background 2026-07-19; VERIFY completion + live topics before relying on it.

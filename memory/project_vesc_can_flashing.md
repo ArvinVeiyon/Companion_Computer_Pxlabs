@@ -437,3 +437,9 @@ all four ESC grounds to the companion; isolators if it bites.
 confirmed against all three, its current loop is tuned to a resistance the others don't share;
 **re-detection is the fix**. And `l_temp_fet_start/end` **85/100 vs 75/90** on the other three, so
 it derates 10 °C later. ⚠️ `si_battery_cells` FL 6 vs 3 elsewhere — FL is correct, cosmetic.
+
+
+## Moved from the MEMORY.md index 2026-10-30 (was carried only there)
+- `60_mk5.bin` over DroneCAN = BRICK — flash over **USB ONLY**.
+- ✅ **10-24: brake REMOVED, all 4 ESCs on r1 · 4 motors 350 W · RR demag CLOSED · cfg `20261024_1527` = RESTORE POINT, floor-proven BY FEEL.**
+- 🔴🔴 **The r1 RELEASE bin ≠ the r1 TAG — `6.6 60_MK5` cannot tell them apart; read the EMBEDDED HASH.**
