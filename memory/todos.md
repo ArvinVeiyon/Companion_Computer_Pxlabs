@@ -213,6 +213,12 @@ motors swapped to 350 W. `ObstacleFootprint` scores the **actual footprint polyg
 GEOMETRIC parameter: 🔑 **re-tape the footprint (recorded 0.73 × 0.450 m) and the wheel track before
 T4/T5 or anything else leans on 32.0.** The chain is reusable; the number is frame-specific.
 
+## 🔧 2026-11-04/05 — ESC + POWER SESSION (desk). Open items:
+- ✅ **DONE 11-05 01:28: ESC current loops ω 2000 on all four** (was 833/833/1000/1667) — restore point `20261105_0130`, commit `0be5506`. → `esc_golden_config`
+- ⬜ **🔴 Pi 5 V RAIL REGRESSED** (mean 5.12→4.94 since 10-25, UV live) — operator DMM + fix, then verify. → `wfb_undervoltage_dead_nic` §2026-11-05. ⛔ no AutoNav/armed autonomy until fixed.
+- ⬜ **REAR WHEELS "UNDERPERFORMING" (operator, 11-05)** — symptom NOT yet described. Ask: what (speed/torque/lag/brake), stands or floor, since tonight's ω change? (fronts gained 2.4×, RL only 1.2× ⇒ could be RELATIVE.) Plan: log all four ESCs over USB (rpm, i_mot, duty) during an RC pattern — read-only, notify before recording. Seen at rest: ACM0/1 (=RR/RL as of 01:30) i_mot 1.3/1.6 A vs 1.2/0 A — weak, unproven.
+- ⬜ minor: `diag/config_audit.py` flags kp/ki/observer_gain as "NOT expected" — they're derived (L·2000, R·2000, 1000/λ²); teach the classifier.
+
 ## ⏭⏭ START HERE — 2026-10-30. **M2 = T2 ✅ · T3 ✅ · T4 ❌ · T5 ❌. PLAN REVISITED.**
 Scope: finish M2, camera-only, **odom frame** (`nav2_forward_flat.yaml`). ⛔ NO LIDAR (STL-19 is the DRONE's).
 ✅ **Already true 10-30:** `ad95d70` safety fixes LIVE (NaN gate, read-only `collision.*`, launch default `_flat`) ·

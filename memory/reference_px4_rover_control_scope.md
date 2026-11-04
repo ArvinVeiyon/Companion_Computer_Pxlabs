@@ -103,4 +103,5 @@ rule was WRONG; both tools' NOTE was corrected 09-12. ⚠️ Don't reboot within
 before concluding the link or the FC is at fault.
 
 ⚠️ `tools/set_param.py` is **FLOAT-ONLY** · INT32 → `diag/set_param_int.py` · reboot → `fc_reboot.py`.
+🔑 **`NAV_DLL_ACT` 0→1 (Hold) BY THE OPERATOR 2026-11-04** (`COM_DL_LOSS_T` 10 s). Verified: QGC closed ⇒ ARMING REFUSED. Before: arming with no GCS was allowed (the GCS-connected arming check only runs when NAV_DLL_ACT≠0). ⚠️ SHARED WITH THE DRONE · ⚠️ a >10 s WFB dropout now ⇒ Hold mid-drive (raise `COM_DL_LOSS_T` if it nags, don't disable).
 🔴 **`NAV_RCL_ACT` reads 1 (Hold), NOT 6 — RC loss will NOT disarm.**

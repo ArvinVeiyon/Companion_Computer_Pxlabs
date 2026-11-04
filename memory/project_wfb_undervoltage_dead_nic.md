@@ -143,3 +143,18 @@ Trigger: the RTL8821CU uplink (`wlx90de80d824d6`, bus 006) went LIVE this boot �
 
 ## Side observation
 `dtoverlay=disable-wifi` IS present in config.txt (line 65) and the Pi rebooted after, but `wlan0` (2c:cf:67:47:f7:37, a Raspberry Pi MAC) **still enumerates** — DOWN, but iw reports it parked on ch34/5170MHz. The overlay did not fully take. Contradicts the "radio gone" claim in [[project-external-wifi-uplink]]; worth re-verifying.
+
+## 🔴🔴 2026-11-05 — REGRESSED. THE RAIL HAS BEEN SLIDING FOR ~10 DAYS AND CROSSED THE KNEE 11-04.
+
+Per-day from `/var/log/ext5v/ext5v.csv*` (mean · min · % of samples <4.80 V · throttled):
+10-25 **5.12** · 5.00 · 0 % · 0x0 → 10-29 5.00 · 4.80 · 0 % → 10-30…11-03 4.97 · 4.75 · 0.3 % →
+**11-04 4.945 · 4.63 · 5.0 % · 0x50000** → **11-05 4.94 · 4.60 · 5.4 %**, and **0x50005 live** (UV NOW + throttled) at 01:35.
+🔑 **NOT LOAD-DRIVEN: corr(VDD_CORE_A, EXT5V) = 0.12** — dips are as deep at 0-2 A core as at 4 A. ⛔ Don't blame
+the Pi's CPU/the autonomy stack (all normal, nothing runaway). ⛔ Not the ESC USB cables (cabled 10-24/25 at the
+rail's BEST). ⇒ a DEGRADING PART: oxidising/loose 5 V or GND joint, XL4015 pot/caps drifting, or its input drooping.
+🔑 **The 11-04/05 ESC USB wedges began the SAME DAY the rail first crossed 4.80** — fits; see [[esc_golden_config]].
+⏭ **OPERATOR, HARDWARE:** DMM at XL4015 IN, XL4015 OUT, and Pi GPIO pin 2/4→6 under load; feel joints for heat.
+OUT sags ⇒ re-trim to 5.20 / replace with 8 A+ BEC · OUT ok but Pi low ⇒ re-make joints, use BOTH 5 V pins.
+Verify after fix + REBOOT (sticky bits): `ext5v-report 60` ⇒ mean ~5.1, 0 dips <4.80, `throttled=0x0`.
+⏭ THEN (operator yes only): EEPROM `PSU_MAX_CURRENT=5000` — not PD-powered ⇒ USB ports capped at 600 mA total.
+⛔ NOT before the supply is fixed — more USB current on a weak rail = deeper sag.
