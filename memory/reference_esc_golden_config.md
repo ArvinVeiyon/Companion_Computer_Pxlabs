@@ -87,9 +87,18 @@ no COMMON file and one was deleted on purpose:** 19 of 21 fields are identical b
 and `uavcan_esc_index` differ, so a shared file makes every board claim one node (and address 10 is
 a RIGHT-side motor in PX4's mapping ⇒ drive hazard, not just a comms fault). → folder `README.md`
 
-⚠️ **Current loops are still BELOW ω 2000** — measured 833 (FR) · 833 (FL) · 1000 (RR) · 1667 (RL).
-Recomputed per board, ready to write: FR 1.0191/1114.80 · FL 1.1205/986.00 · RR 1.0054/830.60 ·
-RL 1.1809/1001.80. ⛔ never copy a neighbour's kp/ki.
+✅✅ **CURRENT LOOPS AT ω 2000 ON ALL FOUR — WRITTEN 2026-11-05 00:55-01:28, read back on all four.**
+Was 833 (FR) · 833 (FL) · 1000 (RR) · 1667 (RL) — each wheel's 350 W re-detection used a different
+time constant. Now kp/ki: FR 1.0191/1114.80 · FL 1.1205/986.00 · RR 1.0054/830.60 · RL 1.1809/1001.80.
+🔑 **2000 IS THE OPERATOR'S DECISION** ("350 W config = 250 W config except motor-tuning") — kp/ki are NOT
+"wizard fields to leave alone": the BANDWIDTH carries over, recomputed on each board's own L/R.
+(Left un-written 10-24→11-05 because this item lived only here, never in todos.md.) As-found
+backups: `configs_live/vesc_mcconf_*_20261105_*_foc_current_k*_pre.xml`. ⛔ never copy a neighbour's kp/ki.
+🔴🔴 **11-05: THE PI 5 V RAIL IS SAGGING (4.71 V, 43× "Undervoltage detected" since boot, throttled
+0x50000) — the likeliest cause of ESC USB wedges.** ESC hub (214b:7260) is now NOT 1-1.2: it was
+1-1.4, and was moved to Pi port **4-2** where all four enumerated cleanly. ⛔ My `authorized` 0/1 toggle +
+usbreset + uhubctl on 1-1.4 left ALL ports at error -71 and `lsusb` hanging — only a physical
+hub replug recovered it. 🔑 RR's hall table differs = hall A/C wires swapped vs the others (valid, ⛔ don't copy).
 🔑 **`l_watt_max` 350 BINDS BEFORE `l_in_current_max` 15 A** — at 24.6 V, 350 W = 14.2 A battery-side,
 so each wheel is power-limited at nameplate. Whether that is permanent or break-in is STILL the
 operator's open decision.
