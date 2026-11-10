@@ -11,6 +11,7 @@
     "2026-10-24: per_wheel 10/12/13 moved 250W -> 350W with limits 14/-14/20/15, matching FL. ALL FOUR MOTORS ARE NOW 350W -- measured, not assumed: flux_linkage reads 0.016191 (FR) / 0.015439 (FL) / 0.015730 (RR) / 0.016693 (RL), all clustered on FL's 350W signature 0.015632 and all ~40% above the 250W band 0.0104-0.0116. The boards already carried 14/-14/20/15; it was this file that was stale, so the four 'functional deviations' it reported on FR/RR/RL were false. Also 2026-10-24: m_invert_direction written 1 -> 0 on FR and RR (it was 1 on all four, so the right pair ran backwards against the left) -- confirmed twice, by the operator watching each wheel and by the mirroring rule here. Corner <-> node mapping VERIFIED against turning wheels for the first time this day: 10=FR 11=FL 12=RR 13=RL, each spun alone over its own USB port."
   ],
   "bandwidth": 2000,
+  "_bandwidth_warning": "DO NOT APPLY 2000 TO THE BOARDS. Operator 2026-11-11: at 2000 the rover would not pivot even on wet tile; reverted the same night (also worse 2026-11-05: more over-current trips). The boards run their wizard values (kp/L = ki/R = FR 833, FL 833, RR 1000, RL 1667). check_ours.py's CURRENT LOOP section will report them as off 2000 - that is expected, leave them.",
   "derived_mc": {
     "foc_current_kp": "foc_motor_l * bandwidth",
     "foc_current_ki": "foc_motor_r * bandwidth"
