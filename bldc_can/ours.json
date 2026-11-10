@@ -47,7 +47,7 @@
     "l_temp_motor_start": "85",
     "l_temp_motor_end": "100",
     "l_temp_accel_dec": "0.15",
-    "l_watt_max": "350",
+    "l_watt_max": "500",
     "l_watt_min": "-350",
     "l_max_erpm_fbrake": "300",
     "l_max_erpm_fbrake_cc": "1500",
@@ -82,40 +82,40 @@
       "uavcan_esc_index": "0",
       "m_invert_direction": "0",
       "motor": "350W",
-      "l_current_max": "14",
-      "l_current_min": "-14",
-      "l_abs_current_max": "20",
-      "l_in_current_max": "15"
+      "l_current_max": "25",
+      "l_current_min": "-25",
+      "l_abs_current_max": "35",
+      "l_in_current_max": "20"
     },
     "11": {
       "wheel": "FL",
       "uavcan_esc_index": "1",
       "m_invert_direction": "1",
       "motor": "350W",
-      "l_current_max": "14",
-      "l_current_min": "-14",
-      "l_abs_current_max": "20",
-      "l_in_current_max": "15"
+      "l_current_max": "25",
+      "l_current_min": "-25",
+      "l_abs_current_max": "35",
+      "l_in_current_max": "20"
     },
     "12": {
       "wheel": "RR",
       "uavcan_esc_index": "2",
       "m_invert_direction": "0",
       "motor": "350W",
-      "l_current_max": "14",
-      "l_current_min": "-14",
-      "l_abs_current_max": "20",
-      "l_in_current_max": "15"
+      "l_current_max": "25",
+      "l_current_min": "-25",
+      "l_abs_current_max": "35",
+      "l_in_current_max": "20"
     },
     "13": {
       "wheel": "RL",
       "uavcan_esc_index": "3",
       "m_invert_direction": "1",
       "motor": "350W",
-      "l_current_max": "14",
-      "l_current_min": "-14",
-      "l_abs_current_max": "20",
-      "l_in_current_max": "15"
+      "l_current_max": "25",
+      "l_current_min": "-25",
+      "l_abs_current_max": "35",
+      "l_in_current_max": "20"
     }
   },
   "wizard_mc": [
@@ -192,7 +192,7 @@
     "foc_offsets_cal_mode": "1",
     "foc_openloop_rpm": "1200",
     "foc_openloop_rpm_low": "0",
-    "foc_overmod_factor": "1",
+    "foc_overmod_factor": "1.15",
     "foc_phase_filter_disable_fault": "1",
     "foc_phase_filter_enable": "1",
     "foc_phase_filter_max_erpm": "4000",
