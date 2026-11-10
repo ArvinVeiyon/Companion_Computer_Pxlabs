@@ -8,6 +8,39 @@
 
 ---
 
+# 🎯🎯 AUTONAV GOAL — ORDER OF WORK. OPERATOR DIRECTION 2026-11-10 (AUTHORITATIVE) — **THIS IS THE AGENDA.**
+> 📗 **Full text: `ros2_ws/docs/autonav_goal.md`** (goal · IS / IS NOT · architecture decisions · corrected facts).
+> Where anything below disagrees with it, IT wins. M/L/R ladders + G-gates keep their numbering; this is the ORDER.
+> 🔑 **Architecture in one line:** QGC/G-Control = UI ONLY · companion plans (Nav2) · PX4 drives · Gemini 336L forward 92° =
+> terrain + obstacles ahead + visual localization · rolling map REMEMBERS passed areas, unknown = blocked, look before turning ·
+> a 2D 360 lidar WILL BE ADDED (side/rear, 360 stop, localization aid; camera stays primary for terrain) · a 2nd Pi takes telemetry + WFB only.
+> ⛔ **NOT NOW:** unattended exploring/mapping · person/object detection (Hailo later) · certified people-safety · RC-with-collision-stop as a product.
+
+| # | Step | State | Where the detail is |
+|---|---|---|---|
+| 1 | Finish 350 W motor tuning (incl. rear wheels) | 🔧 **IN PROGRESS** — 11-11 spec KEPT (overmod 1.15 · 500 W · 25/35 A · wizard ω, ⛔ never 2000); wet-tile pivot good. ⏭ dry pivot on the real floor | §2026-11-04/05 pivot item |
+| 2 | Yaw re-check in Manual; resolve heading | ⬜ | START HERE 10-30 step 1 · `tools/yaw_response_log.py` |
+| 3 | `PreferForward` spin guard back in `nav2_forward_flat.yaml` | ⬜ | START HERE 10-30 step 2 |
+| 4 | Session B standoff ladder → T4 → T5 ⇒ **M2 DONE** | ⬜ 🔴 armed runs HELD by the 5 V rail (fact 2) | START HERE 10-30 steps 3-4 · N6 N8 N9 |
+| 5 | DESK, IN PARALLEL: relocalization 0/20 diagnosis | ⬜ | G1 · `indoor_mapping_slam` §17 |
+| 6 | Fit lidar: Nav2 obstacle source → reflex → localization, ONE change at a time | ⬜ blocked on the purchase (RPLIDAR C1 or D500 / STL-19P) | O1 (rewritten) |
+| 7 | `/scan_3d` into the planner (G4) → height map + traversability cost; test course ramp / kerb / hole | ⬜ | G4 · #27 · N7 first |
+| 8 | Visual odometry for no-GPS outdoor; GPS as aid | ⬜ | `deployment_architecture` · MEMORY §CURRENT STATE |
+| 9 | M3 mapped patrol + health monitor + return to base | ⬜ | G5 (N1) · G6 (N2-N5) |
+| 10 | QGC map view and click-to-go | ⬜ | `gcs_companion_interface` |
+
+**Facts corrected by the direction:**
+- ✅ **DONE 11-11 — GEOMETRY CLOSED (operator):** the frame rebuild did NOT change geometry; footprint 0.73 × 0.450, track, wheelbase, `ObstacleFootprint` 32.0 and T3 STAND. HOW: every "re-tape" note in this file + `MEMORY.md` withdrawn in place; START HERE step 0 closed.
+- 🔴 **NOT CLOSED — PI 5 V RAIL (new TI synchronous DC-DC, set 5.2 V): VERIFICATION FAILED 11-11 01:05** on the 11-10 23:37 boot. `ext5v-report 60`: mean **4.915 V** (need ~5.1) · **223 dips <4.80** (need 0) · 568 <4.90 · low 4.698 · `get_throttled` **0x50000** (0x50005 live) · 142 kernel UV events. ⇒ ⛔ **"no armed autonomy" HOLD STAYS.** ⏭ operator: confirm the new converter is what feeds the Pi, DMM at the Pi header under load. ⚠️ window included RC driving + 4 ESCs on USB.
+- ✅ **DONE 11-11 — STL-19 GONE (operator):** given to a separate Ackermann rover project run by another person; not on the drone, not available here. HOW: `MEMORY.md`, START HERE, O1 and `deployment_architecture` corrected.
+
+**Housekeeping the direction asked for:**
+- ✅ DONE 11-11 — saved as `ros2_ws/docs/autonav_goal.md`, linked from `docs/README.md` (top), pushed `9a33d8c` → `main`.
+- ✅ DONE 11-11 — linked from `MEMORY.md` (§THE TWO MANUALS); this section added and the stale lines below corrected.
+- ⬜ memory mirror push (`codex-work/memory`) — operator runs it; my push of that file is blocked (password line in `MEMORY.md`).
+
+---
+
 # 🎯 REQUIREMENTS REALIGNMENT — 2026-09-04. **READ THIS BEFORE PICKING UP ANY ITEM BELOW.**
 > Why: the requirements live in `docs/rover_autonav_requirements.md` (R1-R7), the goals in
 > `docs/autonomy_plan.md` (M0-M4 modes, L0-L5 layers, A1-A9 features, S/T tests) — and **this file
@@ -32,7 +65,7 @@ and G3 all closed underneath it** — R4 still read "not honoured", R7 still rea
 |---|---|---|
 | **R1** localization | 🔴 **DEAD** — **0 accepted of 20 on the map's OWN bag** (09-12) ⇒ fails at **GEOMETRY, not appearance** | ⛔ the `camera_info`-vs-DB-calibration lead is **DEAD** — do not re-run it. Needs a fresh pipeline diagnosis → **G1** |
 | **R2** perception | ✅ `/scan` · 🔧 `/scan_3d` exists but **nothing consumes it** | voxel layer + reflex `scan_topic` (#27) → **G4** |
-| **R3** planning | ✅✅ **Nav2 DROVE ARMED** — Phase 1 09-19 (n=2, tape) · **T3 ✅ 10-24** (operator, old frame) | T4 + T5 → see START HERE 10-30. ⚠️ T4 needs the spin guard back first |
+| **R3** planning | ✅✅ **Nav2 DROVE ARMED** — Phase 1 09-19 (n=2, tape) · **T3 ✅ 10-24** (operator; geometry unchanged ⇒ stands, 11-10) | T4 + T5 → see START HERE 10-30. ⚠️ T4 needs the spin guard back first |
 | **R4** control bridge | ✅✅ **CLOSED 09-13 — speed commands ARE honoured, all four in RPM mode** (`RO_MAX_THR_SPEED` 4.93) | nothing. ⛔ Every torque-mode rule is history; don't quote them |
 | **R5** safety | ✅ 1,2,3 proven · 🔧 **R5.4 has NUMBERS** (09-13: 0.52 s / 0.19 m / 1.28 m/s²) but the **≥300 mm standoff above ~0.11 m/s is UNMEASURED** · ❌ **R5.5 companion-crash disarm NEVER TESTED** | `collision_standoff_test.py` as a speed ladder (Session B) / **G6** |
 | **R6** compute ≤2.0 cores | ❌ **never measured as a total** — and RTAB-Map + voxel go on top | **G4** gate |
@@ -165,7 +198,7 @@ Paper only. Its three closed items were removed 10-30 (`RO_DECEL_LIM` arithmetic
 ENABLED** (DWB commands a sustained max-rate spin) and ⛔ **cap DWB before any armed run.**
 🔑 **A silent reflex beyond ~3 m is BLIND, not clear.** → `project_rover_autonav` 09-17/18.
 
-## 🔧🔧 2026-09/10 — **THE FRAME WAS REBUILT. EVERY GEOMETRY NUMBER ON RECORD IS NOW SUSPECT.**
+## 🔧 2026-09/10 — THE FRAME WAS REBUILT. ✅ **GEOMETRY CLOSED 11-10 (operator): THE REBUILD DID NOT CHANGE IT — no re-tape, every number stands.**
 
 Operator's account, 10-24, of roughly a month of solo work (⚠️ not witnessed by me, not measured):
 
@@ -181,7 +214,8 @@ Operator's account, 10-24, of roughly a month of solo work (⚠️ not witnessed
 - Context that explains the pace: **~30 km round trips** per frame change, because an apartment has
   no workshop and 6 mm angle is not cut or drilled by hand. **No second pair of hands.**
 
-🔴🔴 **CONSEQUENCE — RE-TAPE BEFORE TRUSTING ANY OF THESE:**
+✅ **WITHDRAWN 11-10 (operator direction, `autonav_goal.md` fact 1) — these STAND, do NOT re-tape. The paragraph below is history:**
+~~CONSEQUENCE — RE-TAPE BEFORE TRUSTING ANY OF THESE:~~
 **footprint `0.73 × 0.450 m`** · **`RD_WHEEL_TRACK` 0.31** · **`wheelbase` 0.430** · **ride height**.
 They all predate the rebuild. 🔑 `ObstacleFootprint` scores the **real footprint polygon**, so T3's
 32.0 is frame-specific; the reflex corridor `|y| ≤ 0.275 m` and the bumper/raw 0.337 m offset are
@@ -207,7 +241,7 @@ runs were n=3, how the **rejoin** behaved at 32 (09-19 recorded 32 as "avoids cl
 rejoins"), and the adjudication method. ⇒ **T3 is closed on the operator's word, which is the
 authority here — but there is no logged capture behind it.** ⛔ Do not cite it as measured.
 
-⚠️⚠️ **T3 WAS TUNED ON THE OLD FRAME.** The frame was rebuilt tube → **6 mm L angle** over the
+✅ **WITHDRAWN 11-10 (operator): geometry did not change, 32.0 and T3 STAND, no re-tape.** *(history:)* T3 was tuned before the rebuild. The frame was rebuilt tube → **6 mm L angle** over the
 following month (stripped threads at the old mounts), plus bottom-plate holes opened up and all four
 motors swapped to 350 W. `ObstacleFootprint` scores the **actual footprint polygon**, so it is a
 GEOMETRIC parameter: 🔑 **re-tape the footprint (recorded 0.73 × 0.450 m) and the wheel track before
@@ -215,7 +249,7 @@ T4/T5 or anything else leans on 32.0.** The chain is reusable; the number is fra
 
 ## 🔧 2026-11-04/05 — ESC + POWER SESSION (desk). Open items:
 - ✅ **DONE 11-05 01:28: ESC current loops ω 2000 on all four** — ⚠️ **SUPERSEDED 23:30: RESTORED TO ORIGINAL 833/833/1000/1667** (see pivot item). → `esc_golden_config`
-- ⬜ **🔴 Pi 5 V RAIL REGRESSED** (mean 5.12→4.94 since 10-25, UV live) — operator DMM + fix, then verify. → `wfb_undervoltage_dead_nic` §2026-11-05. ⛔ no AutoNav/armed autonomy until fixed.
+- ⬜ **🔴 Pi 5 V RAIL REGRESSED** (mean 5.12→4.94 since 10-25, UV live) — operator DMM + fix, then verify. 🔴 **11-11: operator fitted a TI synchronous DC-DC @5.2 V; VERIFY FAILED (mean 4.915 · 223 dips <4.80 · 0x50000) → numbers in §AUTONAV GOAL above; NOT closed.** → `wfb_undervoltage_dead_nic` §2026-11-05. ⛔ no AutoNav/armed autonomy until fixed.
 - ⬜ **🔴 360 PIVOT DRIFT — DIAGNOSED 11-05 23:10-23:45 (4 logged pivots, ESC 43 Hz + RC stick), CAUSE NOT YET FOUND.** Logs + tools: `bldc_can/evidence/20261105_pivot/` (`log360.py` ESC, `logrc.py` stick, `cmp.py` compare).
   - ✅ **NOT the stick** — throttle reads exactly 0.00 in every spin; re-centres = all four equal rpm @ 1-2 A (straight driving is CLEAN).
   - ✅ **NOT bandwidth** — same stall pattern at ω 1000 / 2000 / original. Trips per equal spin effort: **2000 = 17 · 1000 = 11** ⇒ 2000 is WORSE. ⇒ **ESCs RESTORED to ORIGINAL kp/ki (= `20261024_1527`, ω FR 833 · FL 833 · RR 1000 · RL 1667) at 23:30, operator's call.**
@@ -235,14 +269,14 @@ T4/T5 or anything else leans on 32.0.** The chain is reusable; the number is fra
   - 🔑 if detection IS ever needed: operator runs the VESC Tool wizard (our headless CLI has NO detect command; `vesc_tool --tcpServer` lets a laptop GUI connect over the network), then re-apply our policy fields + `check_ours.py`.
 - ⬜ minor: `diag/config_audit.py` flags kp/ki/observer_gain as "NOT expected" — they're derived (L·2000, R·2000, 1000/λ²); teach the classifier.
 
-## ⏭⏭ START HERE — 2026-10-30. **M2 = T2 ✅ · T3 ✅ · T4 ❌ · T5 ❌. PLAN REVISITED.**
-Scope: finish M2, camera-only, **odom frame** (`nav2_forward_flat.yaml`). ⛔ NO LIDAR (STL-19 is the DRONE's).
+## ⏭⏭ START HERE — 2026-10-30. **M2 = T2 ✅ · T3 ✅ · T4 ❌ · T5 ❌. PLAN REVISITED.** *(= steps 2-5 of the 11-10 ORDER OF WORK at the top; step 1 motor tuning comes first)*
+Scope: finish M2, camera-only, **odom frame** (`nav2_forward_flat.yaml`). ⛔ NO LIDAR YET — a 2D 360 lidar is TO BE BOUGHT (step 6 of the 11-10 order); ⛔ the STL-19 is GONE (another person's Ackermann rover).
 ✅ **Already true 10-30:** `ad95d70` safety fixes LIVE (NaN gate, read-only `collision.*`, launch default `_flat`) ·
 3 old motors REPLACED (all 4 = 350 W) · ESC addr↔corner proven 10-24.
 
 **ORDER (each unblocks the next):**
-0. ⬜ **OPERATOR: re-tape footprint (0.73 × 0.450), track, wheelbase on the REBUILT frame** → then update the
-   Nav2 footprint polygon + reflex corridor. `ObstacleFootprint` 32.0 is frame-specific. ⛔ don't skip.
+0. ✅ **DONE 11-10 (operator direction): NO RE-TAPE NEEDED — the rebuild did not change geometry;** footprint 0.73 × 0.450, track,
+   wheelbase, Nav2 polygon, reflex corridor and `ObstacleFootprint` 32.0 all stand.
 1. ⬜ **Yaw re-check in MANUAL** (`tools/yaw_response_log.py`, no eph cost). The 09-19 "0.4 weak · 0.7 strong ·
    1.0 weak" was on the OLD motors — may be gone. ⛔ don't tune on top of it until re-measured.
 2. ⬜ **Spin guard back BEFORE T4.** 🔴 `nav2_forward_flat.yaml` comment says "PreferForward RE-ADDED at 15" but
@@ -564,7 +598,7 @@ Goal: rover drives itself to a **GPS waypoint** in open outdoor space, **360° o
 operator. Indoor GPS-denied (L0-L4 done, L5/L6 next) is the stepping-stone + GPS-loss fallback. These
 outdoor tasks come AFTER the indoor brain is proven (L5+L6). Both O1 and O2 need hardware the user is fitting.
 
-### O1. Re-integrate the STL-19 360° LiDAR (blocked on getting the unit back)
+### O1. Fit a 2D 360° LiDAR — ⛔ **THE STL-19 IS GONE (11-10: given to another person's Ackermann rover).** To buy: RPLIDAR C1 or D500 / STL-19P. Order: Nav2 obstacle source → reflex → localization. *(STL-19 notes below = reference for an LDRobot-family unit only)*
 LDRobot STL-19: 360° 2D, **0.02-25 m, ~10 Hz** LaserScan; UART **ttyAMA3 @ 230400, RX-only** (lidar TX →
 RPi RX, no commands); `dtoverlay=uart3-pi5`, TF `base_link→base_laser` 0.18 m (re-measure mount).
 - Hardware went to another team 2026-04-17 → **need the physical unit back first**.

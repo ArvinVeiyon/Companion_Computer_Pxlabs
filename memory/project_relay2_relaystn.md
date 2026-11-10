@@ -53,7 +53,7 @@ sudo resets PWD and wfb-ng's Makefile uses `ENV ?= $(PWD)/env` → empty PWD mad
 - Onboard `wlan0` = P2P GO for the GS: `p2p-wlan0-0` @ `10.5.6.101/24`, SSID/device_name
   `RELAY-STN01`. The P2P password lives in the network block of
   `/etc/wpa_supplicant/wpa_supplicant.conf` (like the Pi5): `psk="Nilan@2409"`, plus
-  `bssid=<own p2p MAC>`, mode=3, disabled=2. WPS PIN `1987` is also enabled via rely_p2p.sh.
+  `bssid=<own p2p MAC>`, mode=3, disabled=2. WPS PIN (→ `codex-work/relay/RELAY_STATION_SETUP.md` §5.2) is also enabled via rely_p2p.sh.
   `~/rely_p2p.sh` = Pi5 verbatim minimal script; `@reboot rely_p2p.sh` in root crontab.
   cloud-init net regen disabled. (NOTE: the Pi5's wpa_supplicant.conf DOES carry a static
   psk in its network block — do not assume WPS-PIN-only.)
@@ -75,11 +75,11 @@ Alt if plug-and-play wanted later: dnsmasq on p2p-wlan0-0 with reservation GS-MA
 (same latency; assignment is one-time, not in the data path).
 
 PENDING TEST (user testing 2026-07-13): join RELAY-STN01 (passphrase Nilan@2409 on Win/phone;
-WPS PIN 1987 for Direct clients), set GCS static 10.5.6.50, verify video :5600 + MAVLink :14550/tcp 5760.
+WPS PIN for Direct clients), set GCS static 10.5.6.50, verify video :5600 + MAVLink :14550/tcp 5760.
 
 STATE AT SHUTDOWN (2026-07-12 eve): relay cleanly powered OFF at end of session; OFF until
 physically powered on (Pi has no remote wake). On next boot everything auto-recovers: uplink
-netplan -> mgmt at `ssh vind-admin@192.168.1.221` (pass 1987), P2P RELAY-STN01 via @reboot
+netplan -> mgmt at `ssh vind-admin@192.168.1.221` (password: ask the operator, not stored here), P2P RELAY-STN01 via @reboot
 rely_p2p.sh, services enabled. Nothing left half-done; safe to resume from the pending-test step.
 
 Pending (hardware/other-side): plug RTL8812AU adapter + `wfb-rlyctl set-nics`; authorize
@@ -107,13 +107,13 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
 
 **Debug ACCESS PATH to RELAY-STN (Pi4) from the drone companion (Pi5) — reusable:**
 - Companion wlan0 uplink is on the SAME `Nilan` LAN: companion `192.168.1.241/24`, relay uplink
-  `192.168.1.221/24`. Reach relay: `sshpass -p 1987 ssh vind-admin@192.168.1.221` (sshpass IS
+  `192.168.1.221/24`. Reach relay: `sshpass -p '<pw>' ssh vind-admin@192.168.1.221` (sshpass IS
   installed on companion). Key auth is NOT set up for RELAY-STN (only vind-rly trusts the companion
   key) — consider copying companion pubkey to RELAY-STN to drop the password. Only works while the
   uplink (RTL8821CU) is UP — i.e. WFB/EU card unplugged.
 - WFB-link IP `10.5.5.77` from the companion = **vind-rly (Pi5 production relay), NOT this Pi4**
   (both relays share tunnel IP 10.5.5.77; vind-rly was the active ch161 GS). No WFB-path to the Pi4.
-- `sudo` on RELAY-STN needs password (1987) via `echo 1987 | sudo -S ...`; only wfb-rlyctl is
+- `sudo` on RELAY-STN needs the password (ask the operator, not stored here) via `echo '<pw>' | sudo -S ...`; only wfb-rlyctl is
   passwordless (see [[reference_wfb_rlyctl.md]]).
 
 ## 2026-08-23 — ⛔ PI ZERO 2 W IS NOT A VIABLE RELAY. REVERTED TO THE RPi5 SAME DAY.
@@ -318,7 +318,7 @@ into the Pi4 makes BOTH the WFB card AND the local-network uplink fail together.
   revert, then disarm only after proving health —
   `nohup setsid sh -c 'sudo -n wfb-rlyctl use-cluster; sleep 200; [ -f /tmp/cluster_ok ] || sudo -n wfb-rlyctl use-standalone' &`
   then `touch /tmp/cluster_ok`. ⚠️ `sudo -n` works for `wfb-rlyctl` only (scoped sudoers); **everything
-  else on the relay needs `printf '1987\n' | sudo -S`**.
+  else on the relay needs `printf '<pw>\n' | sudo -S`**.
 - ✅✅ **VERSION CONTROL RECONCILED 09-26 — relay == mirror == GitHub `master` == GitHub `release` ==
   `4137552`.** Releases run v1.0.0→**v1.0.7** (`7666a03` = the stable checkpoint: cluster verified,
   CPE610 backed up, repos reconciled, docs aligned; **v1.0.6** `60d063d` = first RF-verified cluster),

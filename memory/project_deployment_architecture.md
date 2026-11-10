@@ -36,8 +36,7 @@ metadata:
 * ✅ **Commonality argument (real):** a camera stack **transfers to the drone**, a 2D-LiDAR one does
   not, and the two vehicles **share the FC**. Rover alone indoors → LiDAR localizes better; rover +
   drone one stack → only the camera serves both.
-* ⏭ **OPEN:** the STL-19 is *"not fitted — allocated to the drone"*. If that is for **localization**
-  it is on the vehicle a 2D LiDAR helps **least**. **Check what job it was assigned.**
+* ✅ **CLOSED 11-10 (operator):** the STL-19 went to a separate Ackermann rover project run by another person — not on the drone, not available here. A 2D 360° lidar WILL be added to this rover (RPLIDAR C1 or D500 / STL-19P): side/rear obstacles, 360° stop, localization aid; camera stays primary for terrain. → `ros2_ws/docs/autonav_goal.md`
 
 ## The three distinctions that kept being re-argued — ⛔ do not re-open
 

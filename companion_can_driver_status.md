@@ -73,7 +73,7 @@ Full backups if you want the pre-hat file wholesale:
 Optional, only if you want the box completely clean:
 
 ```bash
-printf '1987\n' | sudo -S apt-get remove can-utils     # item 3
+printf '<pw>\n' | sudo -S apt-get remove can-utils     # item 3
 rm -rf ~/codex-work/bldc_can/venv                      # item 4
 ```
 
