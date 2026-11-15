@@ -479,10 +479,8 @@ software x264 already needs ~80-95% of a core, see `~/ros2_ws/docs/vision_stream
 
 ## [WFB-NG FIXES] — ⏸ PARKED (the "after OS backup" gate no longer applies)
 
-### 1. Fix GS clock / NTP for real (Relay station vind-rly) — RECURRED 2026-07-11
-2026-03-15 fix (`timedatectl set-ntp true` + restart timesyncd) did NOT hold: relay has no RTC and no internet uplink, so `systemd-timesyncd` can never reach `ntp.ubuntu.com` (DNS/network unreachable) and clock drifts to boot-default every power cycle.
-Real fix needs a **local NTP server** the relay can actually reach — companion (10.5.5.87) is reachable from relay (10.5.5.77) over the WFB tunnel and has real internet+correct time. Plan: install `chrony` on companion in server mode, allow 10.5.5.0/24, then point relay's `systemd-timesyncd` `NTP=` at 10.5.5.87.
-Attempted 2026-07-11, aborted mid-install — see `project_relay_ntp_setup.md` and `project_companion_network_degraded.md`.
+### 1. Fix GS clock / NTP for real (Relay station vind-rly) — ✅ DONE, verified 2026-11-15
+HOW: companion runs `chrony` as server (`conf.d/wfb-server.conf`: `allow 10.5.5.0/24` + `local stratum 10`); relay's `systemd-timesyncd` points at it (`timesyncd.conf.d/companion.conf`, `NTP=10.5.5.87`). Relay synced live, offset −3.6 ms. Companion RTC battery works since 11-15, so it serves correct time without internet. ⚠️ Relay's own RTC still does not hold (boots `Aug 23`) — fine while the companion link is up. → `project_relay_ntp_setup.md`
 
 ### 5. Fix channel reference in PXLABS_qgroundcontrol docs (local edit + push)
 ARCHITECTURE.md and DEVELOPMENT.md both say `ch157` — correct value is **ch161**.

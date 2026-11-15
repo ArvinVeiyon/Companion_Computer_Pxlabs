@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: ed82ad73-5296-4ccf-a23b-4d17a56b063d
-  modified: 2026-09-07T18:38:47.243Z
+  modified: 2026-11-15T16:23:00.135Z
 ---
 
 # Working on this machine — what the manuals do not cover
@@ -15,7 +15,7 @@ traps (sudo password, `pkill` self-kill, "I am a major CPU consumer") stayed in 
 everything below lives here.
 
 ## Measurement hygiene
-⚠️ **Boot clock is WRONG until NTP steps it** — don't correlate journals across a boot.
+✅ **Boot clock is RIGHT since 2026-11-15 — RTC battery fitted and verified** (kernel `rpi-rtc: setting system clock`, no chrony step). ⚠️ Boots BEFORE 11-15 still have a wrong start time (bogus `11-12 00:03` etc.) — don't correlate those journals across a boot. ⚠️ Long power-off holdover untested. The RELAY still boots wrong. → [[relay-ntp-setup]]
 🔑 **START A PERCEPTION MEASUREMENT, THEN GO QUIET.** Commanding throughout starved the camera
 on 08-09 and produced **two wrong answers**. Spikes vanish before `ps` can see them — use
 **`~/ros2_ws/tools/cpu_catcher.sh`**.

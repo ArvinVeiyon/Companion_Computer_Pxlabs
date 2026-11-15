@@ -24,7 +24,7 @@
 🔴 **I AM A MAJOR CPU CONSUMER:** `claude` runs 55-86% of a core. Power check `vcgencmd get_throttled` (0x0 clean).
 ✅ **I can read/write PX4 params myself** — `tools/set_param.py`. Don't ask the operator to read QGC.
 ⚠️ **ANYTHING THAT MAY RUN >30 s MUST SAY SO OR GO TO BACKGROUND** — a silent terminal reads as a dead box from the operator's chair. ⛔ never regex-sweep `~/.claude/projects/-home-roz/*.jsonl` (54 MB; one such grep took 2m11s).
-📄 **Measurement hygiene · `cpu_catcher.sh` → `this_machine`.** 🔴 **EVERY NIC NAME IN THE DOCS IS STALE** (`lsusb` first). ⚠️ Boot clock WRONG until NTP · replays `ROS_DOMAIN_ID=42`, live 0.
+📄 **Measurement hygiene · `cpu_catcher.sh` → `this_machine`.** 🔴 **EVERY NIC NAME IN THE DOCS IS STALE** (`lsusb` first). ✅ Boot clock RIGHT since 11-15 (RTC battery; older boots still wrong) · replays `ROS_DOMAIN_ID=42`, live 0.
 
 ## [CURRENT STATE]
 🔑 **NO VIO IS *RUNNING*** — position = wheel ERPM + camera gyro dead reckoning; RTAB-Map CONSUMES our TF odom. 🔴 **NOT a capability gap — `rgbd_odometry`/`icp_odometry` ARE installed and have run here; the blocker is CPU + the plate-in-frame problem.** ⛔ Don't say "we can't do VIO" — say what it costs. → §6
@@ -78,7 +78,7 @@ Both FPV-capable, port 6-2, **swap from QGC only**; LG Smart Cam current. ⛔ **
 ## [WFB_NG] → `wfb_ng` (**PARKED — only action left is HW: reseat drone NIC-A ant0 = #22**)
 **Video breaks with WFB's queue EMPTY ⇒ SUSPECT THE SOURCE.** ⚠️ the measurement METHOD cost a week — read the file first.
 ## [RELAY_STATION] → `relay2_relaystn`
-`vind-rly` RPi5 | `ssh vind-admin@10.5.5.77` | tunnel 2222→:22 | NO RTC. 🔴 **SD IS MARCH-VINTAGE, repo has NO REMOTE — a pull DEPLOYS NOTHING.** Cluster · CPE610 · ping traps → file.
+`vind-rly` RPi5 | `ssh vind-admin@10.5.5.77` | tunnel 2222→:22 | RTC doesn't hold (boots `Aug 23`); ✅ time = companion chrony → `relay_ntp_setup`. 🔴 **SD IS MARCH-VINTAGE, repo has NO REMOTE — a pull DEPLOYS NOTHING.** Cluster · CPE610 · ping traps → file.
 ## [REPOS / GCS]
 📗 **`codex-work/README.md` = THE COMPANION DOC INDEX — open it before hunting for a doc.** ⚠️ distinct from `ros2_ws/docs/README.md` (autonomy side).
 `codex-work` → Companion_Computer_Pxlabs, branch **master** (origin/main stale); **docs live at the ROOT — rover/DroneCAN docs belong HERE, not `ros2_ws`** | `codex-relay` on vind-rly → Relay_Station_Pxlabs | `ros2_ws` → ArvinVeiyon/ros2_ws, on `main`.
