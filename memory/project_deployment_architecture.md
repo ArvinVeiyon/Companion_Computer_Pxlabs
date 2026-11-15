@@ -184,3 +184,9 @@ metadata:
    relocalization fails at **geometry** on its own bag, and both would inherit the fault.
 2. **Option A once, as an experiment** (enable IR, measure bandwidth + CPU, A/B the relocalization).
 3. **Option B as the target**, gated on a LiDAR.
+
+
+## Index lines moved out of `MEMORY.md` at the 2026-11-15 compaction (verbatim, as they stood)
+- 🔑 **NO VIO IS *RUNNING*** — position = wheel ERPM + camera gyro dead reckoning; RTAB-Map CONSUMES our TF odom. 🔴 **NOT a capability gap — `rgbd_odometry`/`icp_odometry` ARE installed and have run here; the blocker is CPU + the plate-in-frame problem.** ⛔ Don't say "we can't do VIO" — say what it costs. → §6
+- 🔑 **PX4 NEVER KNOWS WHERE IT IS — BY CONFIG, NOT DESIGN.** `EKF2_EV_CTRL`=**4**=VELOCITY ONLY; position fusion (bit 0) OFF (target **9**=pos+yaw, in setup_manual §A7). ⛔ `EKF2_*` **SHARED WITH THE DRONE** ⇒ operator call. ✅ **DEPTH-CAM VIO → EKF2 IS THE STANDARD PX4 GPS-DENIED METHOD** (PX4's own example is a D455). 🔑🔑 **TWO CASES: a mission RELATIVE TO START needs NO map, NO relocalization ⇒ OPEN NOW; only a mission ON A SAVED MAP needs it (the 0/20 blocker).** ⛔ don't say "VIO isn't localization" — RTAB-Map is both halves, only relocalization is broken. ⚠️ state the bridge's state when quoting `v_xy_valid`. → `ros2_ws/docs/px4_companion_interface.md` §9
+- ✅✅ **PRODUCT SETTLED 09-21 — OPEN `deployment_architecture` BEFORE ANY SENSOR/SCOPE TALK:** Case B (mission on a **PRE-BUILT MAP**) at a bounded **SITE** (yard / manufacturing unit, **not a house**), GPS an **AID only**, **INDOOR FIRST**. ⛔ M/L/R ladders + A1-A9 **UNCHANGED** — only the VENUE was wrong. ✅ **CAMERA PRIMARY**; ⛔⛔ **NOT REPLACEABLE BY A LiDAR** (not primary, not excluded — RTAB-Map fuses both). 🔑 **PLANNING ≠ LOCALIZATION · VIO REPLACES ENCODERS, NOT GPS ⇒ publish the MAP-RELATIVE pose.** 🔴 **NEXT = A DIAGNOSIS, NOT A PURCHASE.**

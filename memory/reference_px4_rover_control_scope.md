@@ -105,3 +105,7 @@ before concluding the link or the FC is at fault.
 ⚠️ `tools/set_param.py` is **FLOAT-ONLY** · INT32 → `diag/set_param_int.py` · reboot → `fc_reboot.py`.
 🔑 **`NAV_DLL_ACT` 0→1 (Hold) BY THE OPERATOR 2026-11-04** (`COM_DL_LOSS_T` 10 s). Verified: QGC closed ⇒ ARMING REFUSED. Before: arming with no GCS was allowed (the GCS-connected arming check only runs when NAV_DLL_ACT≠0). ⚠️ SHARED WITH THE DRONE · ⚠️ a >10 s WFB dropout now ⇒ Hold mid-drive (raise `COM_DL_LOSS_T` if it nags, don't disable).
 🔴 **`NAV_RCL_ACT` reads 1 (Hold), NOT 6 — RC loss will NOT disarm.**
+
+
+## Index lines moved out of `MEMORY.md` at the 2026-11-15 compaction (verbatim, as they stood)
+- 🔧 **PX4 PARAMS — READ THE FC, NEVER TRUST A SNAPSHOT.** ⛔⛔ **NEVER WRITE ONE WITHOUT AN EXPLICIT YES.** 🔴 **`RO_DECEL_LIM`=5 since 09-14, `RO_ACCEL_LIM`=−1** (the "keep both at −1" rule is SUPERSEDED); they slew the MANUAL stick **and the collision reflex**. ⚠️ re-verify reflex standoff after any decel change. **→ `px4_rover_control_scope` for the ramp arithmetic, the scope map, AND the write/read tooling rules** (`NAV_RCL_ACT`=1 ⇒ RC loss will NOT disarm).

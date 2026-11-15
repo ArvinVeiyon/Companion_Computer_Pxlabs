@@ -2248,3 +2248,11 @@ motivated experiment, not a guess.
 ⚠️ Also note: absolute odom heading was a RED HERRING — the goal is defined along the current
 heading, so the rover-relative geometry is identical at 12° or 25°. **What matters is the SCENE**
 (obstacle ahead + which side is open). ⛔ Don't chase compass numbers again.
+
+
+## Index lines moved out of `MEMORY.md` at the 2026-11-15 compaction (verbatim, as they stood)
+- 🔴 **THE ROOM IS THE CONSTRAINT (~2 m² open floor)** ⇒ ⛔ **T2 CANNOT RUN IN *THIS ROOM*** — ✅✅ it PASSED IN THE CORRIDOR 09-16. ⚠️ footprint **0.73 × 0.450 m**; **0.560 was a SALES QUOTATION** copied by four docs. ⛔ `wheelbase` 0.430 is NOT the track; `RD_WHEEL_TRACK` 0.31 is CORRECT.
+- 🔴🔴🔴 **ARMED AUTONAV IS REFUSED BY `eph` vs `COM_POS_FS_EPH`=5 m, NOT by the mode/bridge/registration.** PX4 relaxes requirements DISARMED, enforces them ARMED. ⛔ **NEVER call S1/AutoNav "works" or "broken" without the `eph` at that moment.** ⏭ durable fix = LOCALIZATION. ⚠️ raising the threshold disables a real failsafe — operator call only.
+- ✅✅ **T3 IS FINISHED — operator, 10-24.** Closed at `ObstacleFootprint.scale` **32.0** (stands). ⏭⏭ **NEXT = THE 11-10 ORDER OF WORK (top of `todos.md`); relocalization 0/20 = DESK, IN PARALLEL.** ⚠️ the avoidance CHAIN is reusable, its odom-frame TUNING is not. ⛔ start nothing that assumes odometry is the POSITION SOURCE. → `deployment_architecture`
+- 🔑 **NAV2 RULES — THE FULL SET IS IN `todos.md` + `project_rover_autonav` 09-19/20, OPEN THEM BEFORE A RUN.** The three that cost the most: ⛔⛔ **ARMED RUNS USE `nav2_forward_flat.yaml`, never `nav2_forward.yaml`** (voxel = MAX-RATE SPIN) · ⛔⛔ **DWB READS `sim_time` + CRITIC `scale` AT INITIALISE — a live `param set` DOES NOTHING. YAML + RESTART** · ⛔⛔ **NEVER adjudicate a run from TELEMETRY — NO SIDE SENSING, a flank strike is INVISIBLE. EYES OR TAPE.** ⛔⛔ **NO PIVOTS FROM REST.** 🔴 **YAW UNRESOLVED**, ⛔⛔ `RO_YAW_RATE_I` STAYS 0.
+- 🔧 **10-29 SAFETY REVIEW: S1 NaN-gate + S8 read-only `collision.*` + S5 launch default→`_flat` — ✅ DEPLOYED `ad95d70`, verified.** ⏭ N6 kill-9 · N8 corridor gate · N9 standoff @0.35 → `todos.md` §2.

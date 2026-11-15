@@ -227,3 +227,10 @@ friction accelerates to the same back-EMF ceiling; the stick only changes how fa
 
 → full reasoning, numbers and the unresolved ~10× speed-scale conflict: [[project_rover_autonav]]
 2026-09-12.
+
+
+## Index lines moved out of `MEMORY.md` at the 2026-11-15 compaction (verbatim, as they stood)
+- 🔴🔴 **10-24 OPEN: `esc_status` 0 msgs/30 s while `vehicle_status_v1` FLOWED ⇒ ESC→FC *TELEMETRY* ONLY — RC DRIVING WORKS, so COMMANDS ARE FINE.** 🔑 **NAME THE DIRECTION BEFORE BLAMING "CAN".** ⇒ `esc_status` rulers BLIND; use `read_values.py`. → `esc_telemetry`
+- 🔑🔑 **"ESC 1/2" IN A PX4 MESSAGE NAMES A SIDE, NOT A WHEEL — and 3/4 CAN NEVER APPEAR.** `EC_FUNC1/3`=101=Motor1=**RIGHT** (addr 10+12) · `FUNC2/4`=102=Motor2=**LEFT** (addr 11+13) — correct for a diff drive, ⛔ don't "fix" it. ⇒ **PX4 CANNOT SAY WHICH WHEEL DIED, only which side.** → `esc_telemetry`
+- ✅✅ **ODOMETRY: `erpm_to_ms`=0.003900 ⛔ NEVER RE-OPEN THE SCALE.** 🔑🔑 **THE ERROR IS SPEED-DEPENDENT** (dropout under-reads slow, slip over-reads fast, crossover ~0.25 m/s) ⇒ "8.1% over" and "24% under" are ONE curve. 🔑 **QUOTE EVERY ODOM DISTANCE WITH ITS SPEED.** 🔴 `si_motor_poles` is a LINKED PAIR — "fixing" poles SILENTLY HALVES `/odom`. ✅✅ **ADDR 10=FR 11=FL 12=RR 13=RL — ALL FOUR VERIFIED 10-24, each spun ALONE.** → `esc_telemetry`
+- 🔑 **`esc_current` = the LOADED/UNLOADED ruler; NEGATIVE current proves the brake engaged.** ✅✅ **09-19 RETRACTION: "`/odom` DRIFTS AT STANDSTILL" IS FALSE** (0 m over 10 s disarmed, once `deadband_erpm` went 40→5). ⚠️ **unchecked ARMED.**
